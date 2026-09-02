@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dialogue — Landline V19</title>
+  <link rel="stylesheet" href="css/dialogue.css">
+</head>
+<body class="viewer">
+  <header class="viewer-bar">
+    <nav class="viewer-crumb" aria-label="Breadcrumb">
+      <a class="crumb-link" href="projects.html">Projects</a>
+      <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+      <a class="crumb-link" href="project-landline.html">Landline</a>
+      <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+      <span class="crumb-current">Landline V19</span>
+    </nav>
+    <div class="viewer-title">Landline V19</div>
+    <button class="pill viewer-share" type="button" data-share-open aria-haspopup="dialog" aria-controls="share-modal">Share</button>
+  </header>
+
+  <main class="viewer-stage">
+    <img class="landline-fullsize-img" src="assets/landline-fullsize.png" alt="Landline prototype">
+  </main>
+  <button class="viewer-restart" data-restart>↻ &nbsp; Restart <span class="key">R</span></button>
+
+  <div class="share-modal-layer" data-share-layer hidden>
+    <section class="share-modal" id="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
+      <button class="share-modal-close" type="button" aria-label="Close share dialog" data-share-close>×</button>
+      <h2 id="share-modal-title">Share this prototype</h2>
+
+      <div class="share-link-row">
+        <span class="share-link-label">proto.idealogue.studio/Landline/cxA73bqjK</span>
+        <button class="share-copy-button" type="button" data-share-copy>Copy</button>
+      </div>
+
+      <label class="share-project-access">
+        <span>Allow access to all prototypes in the project</span>
+        <input type="checkbox" data-share-project-access aria-label="Allow access to all prototypes in the project">
+      </label>
+    </section>
+  </div>
+
+  <script src="js/dialogue.js"></script>
+</body>
+</html>
