@@ -1,62 +1,42 @@
-# Dialogue prototype v1
+# Dialogue
 
-Static interaction prototype based on the Figma section `Dialogue App views` in `Idealogue WIP`.
+Dialogue is Idealogue's private catalogue and publishing tool for AI-assisted interface prototypes.
 
-## Start
-Open `index.html` in a browser. No build step or server is required.
+This repository currently contains the working static interaction prototype. It is the baseline for the production application; the production architecture has not yet been implemented.
 
-## Included flow
-- Sign in → Projects
-- Projects → Landline project
-- New Project modal
-- Profile modal
-- Landline V19 owner view
-- Share button (copies/opens the public Share view)
-- Restart button and `R` keyboard shortcut
+## Current prototype
+
+Open `index.html` directly in a browser. No build step is required.
+
+The current flow includes:
+- mock sign-in
+- Projects and project detail views
+- New Project and Profile modals
+- image upload previews
+- modal open/close motion and backdrop closing
+- Landline prototype owner view
+- Share modal with copy interaction
+- Restart interaction and `R` shortcut
 - Settings skeleton
-- Public Share view (HTML/CSS only)
+- HTML/CSS-only public Share shell
 
-## Notes
-- This is a UI/flow prototype, not the production architecture.
-- Inter Tight is loaded from Google Fonts and used as the default UI typeface.
-- The embedded Landline example is intentionally recreated locally as representative CSS artwork. In the real app this area becomes the isolated prototype iframe.
-- The public Share shell contains no JavaScript. The sample prototype shown inside it is CSS-only. When a future prototype requires JavaScript, Dialogue can gate it with the planned viewer warning/consent state.
-- The missing Share dialogue, prototype/project management UI and full Settings/LLM integration should follow the future Figma designs rather than being invented here.
+Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored in `assets/`.
 
+## Project documentation
 
-Asset update: Figma SVG exports are now stored locally in assets/ and used for the wordmark, navigation icons, project badges, heart, upload control, New badge, profile arrow, and prototype tile menus.
+- [`docs/PRODUCT.md`](docs/PRODUCT.md) — product purpose, users and planned capabilities
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — proposed production architecture and security model
+- [`docs/DESIGN.md`](docs/DESIGN.md) — Figma source and implementation conventions
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — branches, environments and development workflow
 
+## Branches
 
-## v2 interaction notes
-- Sign-in is intentionally a mock: focusing/clicking either field auto-fills demo values, and Sign in always opens Projects.
-- Parent breadcrumb items are real links on Project and Prototype views.
-- Button labels use flex centering and a normalized line-height to prevent vertical misalignment.
+- `main` — stable/tested baseline; eventually production
+- `develop` — staging integration branch
+- `feature/*` — individual implementation changes
 
+New work should normally branch from `develop` and return through a pull request.
 
-## Breadcrumb / tile polish
+## Important
 
-- Breadcrumb separator uses the exact Figma character: U+2192 RIGHTWARDS ARROW (`→`) in Inter Tight SemiBold.
-- Breadcrumb links remain un-underlined; hover/focus/active states use colour only.
-- Prototype tiles use the same hover shadow as project tiles.
-
-### v3 breadcrumb fidelity
-- Breadcrumb typography now uses true Inter Tight SemiBold (`font-weight: 600`) rather than the previous 650 approximation.
-- `font-synthesis: none` prevents the browser from manufacturing heavier faces.
-- Figma confirms the separator source character is U+2192. Because Google Fonts CSS subsets may omit that glyph and trigger a fallback font, the breadcrumb separator is rendered as a tiny inline vector so its shape stays consistent with the design.
-
-
-V4 updates:
-- Primary/button hover scale: 105%.
-- Project and prototype tile hover scale: 102% (with existing shadow).
-- Landline prototype thumbnail and full-size viewer now use supplied PNG exports from Figma.
-
-
-## v5 tile clipping fix
-- Prototype tile radius now belongs to a dedicated inner clipped surface rather than the transformed link itself.
-- Removed the nested bottom-corner radius from the white info panel; the outer clip now owns all four corners.
-- Added Safari/WebKit-friendly clipping and compositing guards to prevent 1px corner seams during transforms.
-- Hover shadow now uses a negative spread so it reads as a soft lift rather than a grey edge/stroke.
-
-
-## v6 change
-Prototype tile metadata is explicitly stacked: prototype title on the first line and edited date/time on the second line, while the meatball menu remains independently positioned on the right.
+Do not commit credentials, API keys, database secrets or environment files. Production secrets will be managed by the deployment platform/environment configuration.
