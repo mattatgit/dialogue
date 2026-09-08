@@ -39,26 +39,45 @@ The original static prototype remains the stable `develop` baseline until the fe
 
 Landline's current **web prototype is V22**.
 
-V22 should be treated as the first real prototype package used to test Dialogue's import/revision/viewer workflow. Do not assume V19 is the current Landline prototype merely because the original Dialogue mock UI contains a V19 owner page.
+The real `LANDLINE-prototype-v22.zip` has now been supplied and checked against Dialogue's local import/viewer assumptions. V22 should remain the first real dogfood prototype used to validate the import → revision → viewer workflow.
+
+Do not assume V19 is the current Landline prototype merely because the original Dialogue mock UI contains a V19 owner page.
 
 ## Verification completed so far
 
-The local server/import pipeline on the feature branch has been exercised with generated development ZIPs:
+The local server/import pipeline on the feature branch was first exercised with generated development ZIPs, including:
 
-- health/API server responds
-- an `index.html` ZIP imports as Landline V22
-- imported revision metadata is returned by the API
-- prototype files are served back successfully
-- duplicate V22 import returns a conflict rather than overwriting the revision
-- ZIP `../` path traversal is rejected
-- a ZIP with one wrapper directory and one nested `index.html` imports successfully
-- server and new browser scripts pass Node syntax checks
+- health/API server response
+- generated V22-style ZIP import
+- revision metadata returned by the API
+- imported prototype file serving
+- duplicate revision rejection
+- ZIP `../` path traversal rejection
+- one-wrapper-directory package support
+- Node syntax checks for the new server/browser scripts
 
-Not yet verified:
+The **real Landline V22 ZIP** has now also been inspected and tested against the active feature branch's assumptions:
 
-- the real Landline V22 package
-- a full browser visual pass of the new Import modal against the existing Dialogue UI
-- the real Landline V22 interaction behaviour inside the sandboxed iframe
+- package size is well below the 100 MB development upload limit
+- ZIP paths pass the current unsafe-path validation
+- there is one valid prototype `index.html`, inside a single wrapper folder (`LANDLINE-prototype-v22/index.html`)
+- all HTML `src` / `href` references resolve to files present in the package
+- the wrapper-folder structure is compatible with Dialogue's current entry-point and relative-asset serving model
+- the prototype was exercised with the same sandbox flags used by Dialogue's viewer (`allow-scripts allow-forms allow-modals allow-popups allow-downloads`)
+- no JavaScript runtime errors or missing image assets were observed in that sandbox test
+- Profile open/edit/avatar/apply flow worked
+- Add person flow worked, including adding a Landline ID into an empty dial slot
+- Volume keyboard interaction worked
+- PTT/VU animation logic ran inside the sandbox
+- Copy Landline ID reached the `Copied` state and closed the sheet as intended
+
+The supplied V22 ZIP contains normal macOS packaging metadata (`__MACOSX`, `.DS_Store` and AppleDouble `._*` files). The importer currently retains these files. They do not block the prototype, but cleanup/ignoring of this metadata is a small importer polish item for later.
+
+Still to verify before merging PR #1:
+
+- run the feature branch on Matt's Mac using the actual local Dialogue server and import the supplied V22 ZIP through the visible Import modal
+- do a visual pass of the temporary Import UI against the existing Dialogue design
+- confirm the real V22 package looks and behaves correctly in the complete Dialogue owner-view shell, not only in the equivalent sandbox compatibility test
 
 ## Local build requirements
 
@@ -128,6 +147,8 @@ Planned sequence:
 5. test LLM → Dialogue revision publishing
 6. only then choose/finalize production hosting/auth/storage
 
+The package-level compatibility portion of step 1 is now complete; the remaining step-1 work is the real local Dialogue UI/server pass on Matt's Mac.
+
 ## Product direction
 
 The current manual workflow remains a prototype of Dialogue itself:
@@ -162,6 +183,6 @@ When a new chat starts, `/context` should load `CONTEXT.md`, this file, the dura
 
 ## Next step
 
-Use the real **Landline V22** web-prototype ZIP with `feature/local-prototype-import`.
+Run `feature/local-prototype-import` on Matt's Mac and import the supplied **Landline V22** ZIP through the real Dialogue Import modal.
 
-If it imports and runs correctly, inspect the UI/interaction result and fix compatibility issues before merging PR #1 or adding more product features. The following milestone is a local API publishing test client, followed later by the first real LLM connection.
+If the full local UI/server pass is good, fix any visual compatibility issues, then complete/merge PR #1. The following milestone is a small local API publishing test client, followed later by the first real LLM connection.
