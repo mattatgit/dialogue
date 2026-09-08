@@ -1,0 +1,29 @@
+/* Temporary functional UI for the local prototype-import build.
+   Keep this separate from the Figma-derived Dialogue styles. */
+
+.import-prototype-layer.is-open{display:flex;animation:dialogue-import-backdrop-in 100ms ease-out both}
+.import-prototype-layer.is-closing{display:flex;animation:dialogue-import-backdrop-out 100ms ease-out both}
+.import-prototype-layer.is-open .import-prototype-modal{animation:dialogue-import-modal-in 100ms ease-out both}
+.import-prototype-layer.is-closing .import-prototype-modal{animation:dialogue-import-modal-out 100ms ease-out both}
+@keyframes dialogue-import-backdrop-in{from{opacity:0}to{opacity:1}}
+@keyframes dialogue-import-backdrop-out{from{opacity:1}to{opacity:0}}
+@keyframes dialogue-import-modal-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes dialogue-import-modal-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(16px)}}
+
+.import-prototype-modal h2{margin-bottom:28px}
+.import-prototype-modal .modal-section{margin-bottom:24px}
+.import-file-row{display:flex;align-items:center;gap:12px;min-height:40px}
+.import-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mid);font-size:12px}
+.import-status{min-height:18px;margin:-6px 0 18px;color:var(--mid);font-size:12px;line-height:18px}
+.import-status.is-error{color:#c83a35}
+.import-status.is-success{color:var(--green)}
+.import-submit[disabled],.import-file-button[disabled]{opacity:.45;cursor:default;transform:none!important}
+
+.prototype-frame-shell{width:min(370px,calc(100vw - 48px),calc((100vh - 96px) * .51247));aspect-ratio:370/722;display:block}
+.prototype-live-frame{display:block;width:100%;height:100%;border:0;background:#fff}
+.prototype-load-state{color:#9ea39e;font-size:12px;text-align:center;max-width:360px;line-height:18px}
+.prototype-load-state.is-error{color:#ff8d86}
+
+@media (prefers-reduced-motion:reduce){
+  .import-prototype-layer.is-open,.import-prototype-layer.is-closing,.import-prototype-layer.is-open .import-prototype-modal,.import-prototype-layer.is-closing .import-prototype-modal{animation:none}
+}
