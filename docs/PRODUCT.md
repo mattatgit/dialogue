@@ -19,9 +19,11 @@ The workflow being used to build Dialogue today is effectively a manual prototyp
 
 Dialogue is intended to remove the friction from that loop. In particular, it should reduce or eliminate manual screenshot handoffs, ambiguous references to UI elements, ZIP/file transfers, and loss of implementation context between conversations.
 
-## Initial users
+## Initial users and scale
 
 The first production release is for a very small internal Idealogue team. Public self-sign-up is not planned for the initial version.
+
+The expected real audience for this web version is primarily Matt, Saori and a small number of clients. There is no current requirement to future-proof this implementation for a large public SaaS audience.
 
 The product should be designer-first: a designer should be able to review, comment on, revise and publish prototypes without needing to operate developer tooling directly.
 
@@ -105,16 +107,17 @@ The public Share shell should remain HTML/CSS-only where practical. A prototype 
 
 Near-term:
 
-- authentication
-- projects
-- prototype publishing
-- prototype revisions
+- real project/prototype/revision persistence
+- manual prototype import
+- safe prototype package validation/storage
+- live imported prototype owner viewer
+- API publishing path that uses the same ingestion pipeline as manual import
+- first LLM connection/publishing experiment
+- authentication when the workflow moves beyond local development
 - thumbnails/screenshots
 - owner view
 - public sharing
 - project/prototype management
-- staging/production environments
-- LLM connection/publishing API
 
 Later:
 
@@ -127,10 +130,26 @@ Later:
 - JS warning/consent state for prototypes that require scripting
 - share-link expiry/password options
 
+## Current dogfood milestone
+
+The first real functional target is to use **Landline V22**, the current Landline web prototype, as a genuine imported Dialogue revision.
+
+Success for this milestone means:
+
+1. import the Landline V22 ZIP through Dialogue
+2. store it as a revision rather than mock/static content
+3. show V22 in the Landline project grid
+4. open and interact with the actual V22 prototype in Dialogue's owner viewer
+5. use the same underlying revision-ingestion path later from an API/LLM client
+
+The temporary Import UI used to prove this flow is not the final product design.
+
 ## Product-learning principle
 
 Friction encountered while building Dialogue is useful product evidence. Problems such as screenshot handoffs, ambiguous element references, ZIP transfers, cross-machine file syncing, lost chat context and difficulty comparing revisions should be treated as signals for features Dialogue can eventually solve.
 
 ## Current repository state
 
-The repository currently contains a static interaction prototype, not the production implementation. Product behavior and visual fidelity in that prototype should be preserved while the real application architecture is introduced incrementally.
+The stable repository baseline contains the static interaction prototype. Active functional work is being introduced incrementally on feature branches while preserving the existing Figma-derived visual/interaction behaviour.
+
+GitHub is the durable source of truth for Dialogue application code and project documentation. Imported runtime prototypes themselves should live in application storage rather than being treated as Dialogue source files.
