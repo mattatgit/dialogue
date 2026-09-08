@@ -180,10 +180,10 @@
       if (!response.ok) throw new Error(payload.error || 'Import failed.');
 
       setStatus(`${payload.revision?.title || 'Prototype'} imported.`, 'success');
-      await loadRevisions();
       form.reset();
       if (nameField) nameField.value = 'Landline';
       if (fileName) fileName.textContent = 'No ZIP selected';
+      await loadRevisions();
       window.setTimeout(closeModal, 650);
     } catch (error) {
       const offline = error instanceof TypeError && window.location.protocol === 'file:';
