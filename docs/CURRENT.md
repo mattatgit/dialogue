@@ -1,130 +1,167 @@
 # Dialogue — Current State
 
-This file is the short continuity record for active Dialogue work. It should be updated whenever a meaningful milestone, decision or next step changes.
+This is the concise continuity record for active Dialogue work. Update it whenever a meaningful milestone, decision, known issue or next step changes.
 
-## Current implementation
+## Current date/status
 
-The repository contains the latest static Dialogue interaction prototype originally developed through ChatGPT/Figma iteration and then moved into GitHub to eliminate ZIP handoffs.
+Current implementation work is on:
 
-Current prototype capabilities include:
+`feature/local-prototype-import`
 
-- mock sign-in
-- Projects and Landline project views
-- New Project modal
-- Profile modal
-- JPG/PNG badge/avatar upload previews
-- modal open/close motion with backdrop closing
-- Landline V19 owner view
-- Share modal
-- Copy → Copied! interaction with 3-second reset
-- Restart control and `R` keyboard shortcut
-- Settings skeleton
-- public HTML/CSS-only Share shell
-- Figma-exported SVG/PNG assets and Inter Tight UI typography
+based on `develop`.
 
-The repository is still a static prototype, not the production application.
+Dialogue is moving from a static Figma-derived interaction prototype to a deliberately lightweight local functional build. The goal is to prove the product workflow before setting up production services.
 
-## Repository workflow
+## Current functional build
 
-Repository: `mattatgit/dialogue`
+The feature branch now adds a local Node server around the existing static UI without migrating the UI to a framework.
 
-Branches:
+Current functional additions:
 
-- `main` — stable baseline; eventually production
-- `develop` — current staging/integration branch
-- `feature/*` — temporary implementation branches where useful
+- localhost-only Dialogue server
+- local persistent project/prototype/revision data in `.dialogue-data/db.json`
+- local filesystem storage for imported prototype packages
+- Landline project Import modal
+- ZIP upload/import endpoint
+- ZIP entry/path validation
+- `index.html` entry-point detection, including one wrapper folder
+- duplicate revision rejection
+- data-driven Landline revision tiles after the first real import
+- dynamic prototype owner page at `prototype.html?revision=...`
+- imported prototypes rendered in a sandboxed iframe
+- Restart reloads the imported prototype
+- small local Dialogue API shared by the UI/import pipeline
+- macOS launcher file: `Start Dialogue.command`
 
-GitHub is now the source of truth for files. ZIP exchange should no longer be part of the normal workflow.
+The original static prototype remains usable when its HTML files are opened directly. In static mode the old Landline V19/V18 mock cards remain as a fallback.
 
-## Working relationship
+## Landline dogfood target
 
-The intended collaboration model is designer-first:
+Landline's current **web prototype is V22**.
 
-- Matt designs in Figma, reviews builds and describes desired changes.
-- ChatGPT discusses product/UX/architecture and writes or modifies the code.
-- GitHub holds the durable implementation and project documentation.
-- Vercel staging will become the browser-visible review environment once the production app setup begins.
+V22 should be treated as the first real prototype package used to test Dialogue's import/revision/viewer workflow. Do not assume V19 is the current Landline prototype merely because the original Dialogue mock UI contains a V19 owner page.
 
-Codex is not required for this workflow. Normal Chat is suitable for design discussion and many implementation changes; Work can be used when a task benefits from longer multi-step execution or browser interaction.
+## Verification completed so far
 
-## Continuity strategy
+The local server/import pipeline has been exercised with generated development ZIPs:
 
-This file exists specifically to reduce dependence on chat history.
+- health/API server responds
+- an `index.html` ZIP imports as Landline V22
+- imported revision metadata is returned by the API
+- prototype files are served back successfully
+- duplicate V22 import returns a conflict rather than overwriting the revision
+- ZIP `../` path traversal is rejected
+- a ZIP with one wrapper directory and one nested `index.html` imports successfully
+- server and new browser scripts pass Node syntax checks
 
-When a conversation becomes too long or a new chat is started, the working context should be recoverable by reading:
+Not yet verified:
 
-1. `README.md`
-2. `docs/PRODUCT.md`
-3. `docs/ARCHITECTURE.md`
-4. `docs/DESIGN.md`
-5. `docs/DEVELOPMENT.md`
-6. this file (`docs/CURRENT.md`)
-7. the current `develop` branch source
+- the real Landline V22 package
+- a full browser visual pass of the new Import modal against the existing Dialogue UI
+- the real Landline V22 interaction behaviour inside the sandboxed iframe
 
-A useful new-chat instruction is:
+## Local build requirements
 
-> Continue working on Dialogue. Read the README and everything in `docs/`, especially `docs/CURRENT.md`, then inspect the current `develop` branch before making changes.
+No web-service accounts are required.
 
-Chat memory should not be treated as the primary project record.
+Current local requirements:
 
-## Important product direction
+- Node.js 22+
+- macOS `/usr/bin/unzip`
 
-The workflow currently used to build Dialogue is itself a manual prototype of what Dialogue is intended to become.
+Start with `Start Dialogue.command` or `npm start`, then open `http://127.0.0.1:4173`.
 
-Today the review loop often requires:
+See `docs/LOCAL_BUILD.md`.
 
-`Figma → build → screenshot/explanation → LLM change → new build → review`
+## Architecture direction
 
-The long-term Dialogue loop should be:
+### Current development architecture
 
-`Figma design + live prototype in Dialogue → anchored feedback → structured revision request → connected LLM → new prototype revision → compare again`
+For this product-validation stage:
 
-Dialogue should eventually let the designer compare Figma and live prototype views side-by-side and attach feedback directly to the relevant element.
+- existing HTML/CSS/JS Dialogue UI
+- small Node HTTP/API server
+- local JSON persistence
+- local prototype filesystem storage
+- sandboxed iframe viewer
+- no auth or hosted services yet
 
-Revision context may include:
+The local JSON/filesystem implementation is development scaffolding behind an API boundary, not a commitment to that persistence model for production.
 
-- Figma node ID
-- prototype/revision ID
-- DOM selector or element reference
-- coordinates
-- viewport dimensions
-- screenshot/render crop
-- surrounding project context
+### Current production preference
 
-This should remove much of the need for manual screenshots and explanations.
+After reviewing the actual expected scale with Idealogue's lead developer, the earlier Vercel + Supabase + R2 proposal is no longer the default recommendation. It remains a valid managed option, but is likely more infrastructure than this internal/small-client tool needs.
+
+The current lean production candidate is:
+
+- GitHub for Dialogue source
+- one small VPS
+- Docker/Coolify or equivalent low-ops deployment
+- Dialogue application/API
+- Postgres when a production database is needed
+- persistent filesystem storage for prototype packages initially
+- automated off-server backups
+- separate prototype origin for untrusted prototype HTML/CSS/JS
+
+Do not build production infrastructure until the local import/revision/LLM workflow has been proven unless a new requirement forces the decision earlier.
 
 ## LLM/API direction
 
-Dialogue should expose its own LLM-facing API/tool layer rather than being tightly coupled to ChatGPT.
+Dialogue owns the project/revision state and exposes its own LLM-agnostic API/tool layer.
 
-Potential core operations include:
+Potential eventual LLM tools remain conceptually:
 
 - `list_projects()`
-- `get_prototype()`
+- `get_prototype()` / revision context
 - `publish_prototype()`
-- `update_prototype()`
+- `publish_revision()` / update prototype by creating a revision
+- later: get/respond to structured review requests
 
-Later the API should support structured review/revision requests so an LLM can receive precise design/prototype context and publish a new revision back into Dialogue.
+The local Import UI is intentionally the first client of the same ingestion concept that future LLM publishing will use.
 
-Prototype updates should create new revisions rather than destructively overwriting previous versions. Feedback should ideally remain linked to the revision it produced.
+Planned sequence:
 
-## Current architecture direction
+1. prove human ZIP import with real Landline V22
+2. exercise the same publishing path from a small local API test client
+3. expose a development endpoint temporarily when ready
+4. connect an actual LLM/MCP client
+5. test LLM → Dialogue revision publishing
+6. only then choose/finalize production hosting/auth/storage
 
-Proposed production stack remains:
+## Product direction
 
-- GitHub — Dialogue application source control
-- Vercel Pro — app/API and staging/production deployment
-- Supabase — Postgres + authentication
-- Cloudflare R2 — prototype package/assets storage
+The current manual workflow remains a prototype of Dialogue itself:
 
-Generated prototypes should run on an isolated prototype origin, separate from Dialogue's authenticated app origin, and be displayed through a sandboxed viewer.
+`Figma → build → screenshot/explanation → LLM change → new build → review`
 
-Staging and production data/storage should remain separate.
+The intended Dialogue loop remains:
 
-## Next work
+`Figma design + live prototype → anchored feedback → structured revision request → connected LLM → new prototype revision → compare again`
 
-Continue design and implementation work from the GitHub repository rather than exchanging ZIPs.
+Revision context may later include Figma node IDs, prototype/revision IDs, DOM references, coordinates, viewport details, screenshot/render crops and surrounding project context.
 
-When the production transition begins, introduce the real application framework incrementally while preserving the current prototype's visual and interaction behaviour. A browser-accessible staging environment should then become the primary place for build review.
+## UI status
 
-The long-term Dialogue review/API workflow described above should remain a guiding product requirement while near-term core features are implemented.
+Figma remains the source of truth for designed UI.
+
+The new **Import prototype** modal on the feature branch is temporary functional UI built from existing Dialogue modal/form patterns so the workflow can be tested before Matt designs the final import/create experience. It should not be treated as a final Figma-approved component.
+
+Settings remains intentionally incomplete while the LLM connection model is still being proven.
+
+## Repository / continuity workflow
+
+Repository: `mattatgit/dialogue`
+
+- `main` — stable baseline; eventually production
+- `develop` — integration branch
+- `feature/*` — focused implementation branches
+
+GitHub is the source of truth for application files and durable project context. Imported runtime prototypes are not source files and belong outside Git.
+
+When a new chat starts, `/context` should load `CONTEXT.md`, this file, the durable docs and relevant current source rather than relying on chat memory.
+
+## Next step
+
+Use the real **Landline V22** web-prototype ZIP with the local functional build.
+
+If it imports and runs correctly, inspect the UI/interaction result and fix compatibility issues before adding more product features. The following milestone is a local API publishing test client, followed later by the first real LLM connection.
