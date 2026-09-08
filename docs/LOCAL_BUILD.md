@@ -74,6 +74,22 @@ The server binds to localhost only by default.
 
 The importer rejects duplicate prototype/revision combinations and obvious unsafe ZIP paths such as `../` traversal entries.
 
+## Real Landline V22 compatibility
+
+The supplied `LANDLINE-prototype-v22.zip` has now been checked against the active feature branch's importer/viewer design.
+
+It is compatible with the current package rules:
+
+- one wrapper directory: `LANDLINE-prototype-v22/`
+- one prototype entry point: `LANDLINE-prototype-v22/index.html`
+- all referenced HTML assets are present
+- no unsafe absolute or parent-directory ZIP paths
+- package size is well under the development upload limit
+
+The V22 prototype has also been exercised with the same iframe sandbox flags used by Dialogue. Its key interactions ran without JavaScript errors or missing image assets, including Profile, Add person, Volume, PTT/VU and Copy Landline ID.
+
+The ZIP contains macOS metadata (`__MACOSX`, `.DS_Store`, `._*`). Dialogue currently stores those harmless files too. Ignoring/cleaning them is a future importer polish item rather than a blocker.
+
 ## Current API
 
 The feature branch local server exposes the first internal Dialogue API surface:
@@ -111,16 +127,20 @@ Production should retain the previously agreed separate prototype origin, for ex
 - local JSON persistence is single-process development storage, not a production database
 - the ZIP extractor currently relies on macOS `/usr/bin/unzip`
 - production-grade ZIP bomb/symlink/content hardening is not complete
+- macOS ZIP metadata is not cleaned during import yet
 - the isolated production prototype origin is not yet implemented
 
 ## Next test
 
-Import the real Landline V22 web prototype package and verify:
+Run `feature/local-prototype-import` on Matt's Mac and import the supplied real Landline V22 ZIP through Dialogue's visible **Import prototype** modal.
 
-- package imports successfully
+Verify the full end-to-end local experience:
+
 - V22 appears in the Landline grid
-- the actual prototype renders and interacts correctly inside the owner viewer
+- opening V22 shows the actual prototype inside the Dialogue owner-view shell
+- Landline interactions feel correct in that complete viewer
 - Restart reloads the imported prototype
 - existing Dialogue UI remains visually intact
+- temporary Import UI is acceptable for product testing
 
 Once this works, the next technical milestone is to exercise the same publishing path from a small API test client before exposing Dialogue to an external LLM.
