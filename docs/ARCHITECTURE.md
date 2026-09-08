@@ -1,151 +1,210 @@
-# Dialogue — Proposed Architecture
+# Dialogue — Architecture
 
-This document records the current preferred production direction. It is a working architecture decision, not yet an implemented stack.
+This document records the current architecture direction. It distinguishes the **lightweight development architecture being built now** from the likely **production architecture later**.
 
-## Hosting and services
+The production decision is intentionally deferred until the core Dialogue workflow has been proven.
 
-Preferred initial stack:
+## Architectural principles that remain stable
 
-- GitHub — source control and pull-request workflow
-- Vercel Pro — Dialogue application/API hosting and preview/staging/production deployments
-- Supabase — managed Postgres database and authentication
-- Cloudflare R2 — storage for published prototype packages/assets
+Regardless of hosting/provider choices:
 
-## Environments
+- Dialogue owns project, prototype and revision state.
+- Prototypes and prototype revisions are separate concepts.
+- Updates create new revisions rather than destructively overwriting prior work.
+- Prototype publishing should converge on one validated ingestion pipeline whether the caller is a human UI or an LLM.
+- GitHub is the source of truth for the Dialogue application, not for runtime user prototype packages.
+- untrusted imported/generated prototype code must not share the trusted authenticated Dialogue browser origin in production.
+- the Dialogue LLM/API contract should remain provider-agnostic.
 
-Use isolated staging and production resources.
+## Current lightweight development architecture
 
-### Staging
+The current milestone runs locally on one Mac and requires no hosted services:
 
-- application: `staging-dialogue.idealogue.studio`
-- staging Supabase project/database
-- staging R2 bucket
-- prototype origin such as `p-staging.idealogue.studio`
+```text
+Browser
+  ↓
+Dialogue local Node server
+  ├── current HTML/CSS/JS UI
+  ├── local JSON data store
+  ├── local prototype package files
+  └── Dialogue HTTP API
+```
 
-### Production
+This deliberately avoids an early framework/database/hosting migration while the product behaviour is still being discovered.
 
-- application: `dialogue.idealogue.studio`
-- production Supabase project/database
-- production R2 bucket
-- prototype origin such as `p.idealogue.studio`
+### Local persistence
 
-Feature branches may also receive temporary Vercel preview deployments.
+Development metadata currently lives in `.dialogue-data/db.json` on the active functional branch.
 
-## Prototype isolation
+Imported prototype packages are extracted under `.dialogue-data/prototypes/`.
 
-Generated prototypes must not execute in the same trusted browser origin as the authenticated Dialogue application.
+This is development scaffolding only. Application code should continue to interact through a storage/data boundary so JSON/local-files can later be replaced without changing the product workflow.
 
-The Dialogue app may use React/TypeScript/JavaScript as appropriate. Published prototypes should be served from a separate origin and displayed in a sandboxed iframe or equivalent isolated viewer.
+### Local importer
 
-This prevents prototype JavaScript from gaining access to Dialogue authentication/session state.
+The active functional branch importer:
 
-## Public share shell
+1. accepts a ZIP package
+2. validates obvious unsafe paths
+3. requires an `index.html` entry point
+4. stores the complete extracted package under a new revision ID
+5. persists revision metadata
+6. exposes the revision through the Dialogue API/viewer
 
-The public Share shell should be kept HTML/CSS-only where practical. It may frame a prototype served from the isolated prototype origin.
+The local importer currently uses macOS `/usr/bin/unzip`. Production-grade archive hardening is intentionally deferred but must include stronger limits/checks before accepting arbitrary untrusted uploads.
 
-A future warning/consent state can gate prototypes that require JavaScript.
+## Prototype/revision data model direction
 
-## Authentication
-
-Use managed authentication rather than hard-coded credentials. Initial production access should be limited to approved Idealogue users with public registration disabled.
-
-Do not store passwords, password hashes, API keys or service credentials in this repository.
-
-## Data model direction
-
-Likely core entities:
+Core concepts remain:
 
 - users
 - projects
 - prototypes
-- prototype_revisions
-- share_links
+- prototype revisions
+- share links
 - LLM connections
 - Figma design references
-- comments / review annotations
+- comments/review annotations
 - revision requests
 
-Prototype metadata belongs in Postgres. Prototype package files belong in object storage.
+The local functional build currently implements only projects, prototypes and revisions.
 
-Review comments should retain enough structured context to be meaningful later, even after new revisions are created.
+A prototype is the stable object. Each imported or LLM-produced update becomes a revision with its own immutable package and metadata.
 
 ## Prototype publishing
 
-Publishing should accept a complete package, validate it and then make the revision live atomically.
+Publishing should be atomic at the revision level:
 
-A prototype update creates a new revision. Existing revisions remain available for rollback/history.
+- validate a complete package
+- create/store the new revision
+- only expose it as a successful revision once the package is valid
+- leave earlier revisions untouched
 
-A revision should also be able to reference the feedback or revision request that caused it, allowing Dialogue to preserve a trace from design comment → LLM request → resulting prototype revision.
+A revision should eventually be able to reference the feedback/revision request that caused it:
 
-Thumbnails should ideally be generated by rendering the actual published prototype and taking a screenshot rather than generating an illustrative image.
+`design comment → revision request → LLM work → resulting prototype revision`
+
+The same underlying publishing operation should be used by:
+
+- manual Import UI
+- local/test API clients
+- MCP/LLM adapters
+- later automated revision agents if added
+
+## Prototype isolation
+
+### Local development
+
+The lightweight build runs imported prototypes in a sandboxed iframe. Dialogue and prototype files are currently served by the same localhost server, so this is useful containment but not the final browser-origin security boundary.
+
+### Production requirement
+
+Generated/imported prototype JavaScript must execute on a separate origin from authenticated Dialogue, for example:
+
+- trusted app: `dialogue.idealogue.studio`
+- prototype runtime: `p.idealogue.studio`
+
+The viewer should continue using sandboxing as appropriate. This separation prevents prototype code from gaining access to Dialogue's trusted session/origin state.
+
+## Public Share shell
+
+The existing product direction remains to keep the public Share shell HTML/CSS-only where practical, while the prototype framed inside it may contain JavaScript.
+
+Public sharing is not part of the current lightweight local milestone.
+
+## LLM integration
+
+Dialogue should expose its own HTTP API/tool layer. ChatGPT or another LLM connects to Dialogue; Dialogue should not be designed around controlling a user's ChatGPT account.
+
+Initial tool concepts remain:
+
+- `list_projects()`
+- `get_prototype()` / get revision metadata and context
+- `publish_prototype()`
+- `publish_revision()`
+
+Later:
+
+- read Figma/design references
+- read review comments/revision requests
+- acknowledge/claim a revision request
+- publish a revision linked to its request
+
+MCP should be treated as an adapter on top of Dialogue's own API rather than the core data architecture. This keeps the system usable by other LLM providers/protocols later.
+
+## Development path to an LLM connection
+
+The current sequence is intentionally incremental:
+
+1. real Landline V22 ZIP imports through Dialogue's human UI
+2. the same revision-ingestion path is exercised by a local API test client
+3. when ready, the local API is temporarily exposed through a secure development HTTPS tunnel
+4. an LLM/MCP client is connected
+5. LLM-created revision publishing is tested end-to-end
+
+A temporary development token/auth layer should be added before exposing write endpoints to the internet. The final OAuth/connection UX can wait until the workflow is proven.
 
 ## Design/prototype review context
 
 Dialogue should eventually act as a context broker between the designer, Figma, the rendered prototype and the connected LLM.
 
-A review annotation may include structured data such as:
+A review annotation may include:
 
-- Figma file ID and node ID
+- Figma file/node IDs
 - project ID
 - prototype ID
 - prototype revision ID
 - DOM selector or stable element reference
-- x/y coordinates
+- coordinates
 - viewport width/height
 - screenshot/render crop
 - comment text
 - surrounding revision/project metadata
 
-Not every comment needs every field. The goal is to provide the connected LLM with enough precise context that the designer does not need to recreate that context manually with screenshots and long explanations.
-
-The side-by-side comparison surface should therefore be treated as more than a visual viewer: it is also the place where structured revision context is captured.
-
-## LLM integration
-
-Dialogue should expose its own API/tool layer. ChatGPT or another LLM connects to Dialogue; Dialogue should not attempt to control a user's ChatGPT account.
-
-The API should remain LLM-agnostic so another model provider can support the same workflow later.
-
-Initial operations may include concepts such as:
-
-- `list_projects()`
-- `get_prototype()` / get prototype and revision metadata
-- `publish_prototype()`
-- `update_prototype()` by creating a new revision
-
-Later operations may include:
-
-- get Figma/design references associated with a project or prototype
-- get review comments/revision requests
-- submit or acknowledge a revision request
-- publish a new revision linked to the request that caused it
-
-The exact API shape is not fixed yet, but the contract should support a workflow where Dialogue sends structured review context to an LLM and receives a complete new prototype revision in return.
+The side-by-side comparison surface is therefore both a visual viewer and a structured context-capture surface.
 
 ## Intended closed loop
 
-The long-term architecture should support this loop:
+Long term:
 
 1. Dialogue displays a Figma design beside a live prototype revision.
 2. The designer comments on a specific design/prototype element.
 3. Dialogue captures the comment plus structured context.
-4. Dialogue sends that revision request through its LLM-facing API/tool layer.
-5. The LLM reads any additional project/prototype context it needs.
-6. The LLM publishes a complete new prototype revision.
-7. Dialogue validates and stores that revision atomically.
-8. The new revision appears in the project for comparison and review.
-9. Earlier revisions remain available for history/rollback.
+4. Dialogue makes that revision request available through its LLM-facing layer.
+5. The LLM reads additional project/revision context as needed.
+6. The LLM publishes a complete new revision.
+7. Dialogue validates/stores the revision atomically.
+8. The new revision appears for comparison.
+9. earlier revisions remain available for history/rollback.
 
-This should minimize manual screenshot transfer, ZIP exchange and conversational context reconstruction.
+## Current production direction
 
-## Source control vs prototype storage
+The original managed proposal — Vercel + Supabase + Cloudflare R2 — remains technically valid, but after reviewing the expected real scale with Idealogue's lead developer it is no longer the default recommendation for this version.
 
-GitHub is the source of truth for the Dialogue application itself.
+Dialogue is expected primarily to serve Matt, Saori and a small number of clients. There is no requirement to future-proof this web application for thousands of users.
 
-Published user prototypes are runtime artifacts and should not depend on GitHub as their primary storage mechanism. Their metadata belongs in the database and their package files/assets belong in object storage.
+The current lean candidate is therefore:
 
-This distinction lets Dialogue's own application development use normal source control while prototype publishing remains fast, atomic and model-friendly.
+```text
+GitHub
+  ↓
+small VPS
+  ↓
+Docker / Coolify (or equivalent)
+  ├── Dialogue app/API
+  ├── Postgres
+  └── persistent prototype filesystem
 
-## Secrets
+nightly/off-server backups
+```
 
-Secrets should be environment-specific and managed through Vercel/Supabase/Cloudflare configuration. Never commit `.env` files or credentials.
+Important production details:
+
+- production and testing data should still be separated sufficiently to avoid accidental destructive testing
+- prototype runtime should use a separate origin
+- Postgres is preferred once production persistence/multi-user access is needed
+- local filesystem storage is proportionate to expected usage; storage calls should remain abstract enough to move to S3/R2 later if needed
+- automated off-server backups are mandatory if the database/files live on one VPS
+- Coolify is optional; the lead developer may prefer plain Docker Compose or another low-ops deployment method
+
+The final production choice should be revisited after the local import → revision → LLM loop has been dogfooded.
