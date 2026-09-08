@@ -8,6 +8,8 @@ Primary design file:
 
 Dialogue section/page references used during prototyping include the Dialogue App views and owner/project/settings/modal screens.
 
+Figma remains the source of truth for intended UI where a design exists.
+
 ## Typography
 
 Primary UI typeface: Inter Tight.
@@ -39,6 +41,28 @@ Current prototype behaviors that should be preserved unless designs change:
 - close buttons close the modal
 - reduced-motion preferences disable modal animation
 
+## Temporary functional UI
+
+The active `feature/local-prototype-import` branch introduces an **Import prototype** modal by reusing the existing Dialogue modal/form visual language.
+
+This is deliberately temporary functional UI so the real import/revision workflow can be tested before the final create/import interaction has been designed in Figma.
+
+Current temporary behaviour:
+
+- Landline page action changes from the placeholder Create action to **Import**
+- modal fields are Prototype name, Revision and Prototype package
+- package selection accepts ZIP files
+- default revision is V22 because Landline's current web prototype is V22
+- successful real imports replace the static fallback cards with data-driven revision tiles
+
+Do not treat this modal/layout/copy as final product design. When Matt designs the final import/create experience, the Figma design supersedes this temporary UI.
+
+## Imported prototype viewer
+
+The dynamic local owner viewer on the feature branch preserves the existing dark Dialogue owner shell and loads the actual imported prototype into its central stage instead of showing the static Landline PNG.
+
+The production viewer should retain the same design intent while providing the separate-origin security boundary described in `docs/ARCHITECTURE.md`.
+
 ## Assets
 
 Use supplied/exported Figma SVG and PNG assets where available rather than recreating them in CSS.
@@ -56,6 +80,8 @@ Current examples include:
 - Landline prototype thumbnail PNG
 - Landline full-size prototype PNG
 
+Imported revisions currently reuse the existing Landline thumbnail PNG. Automatic screenshots/thumbnails are a later functional milestone.
+
 ## Prototype tile clipping
 
 Rounded tile surfaces should keep radius/clipping on a dedicated inner surface, while scale/shadow transforms are applied to the outer wrapper. This avoids Safari/WebKit anti-aliasing seams and grey edge artifacts during scaling.
@@ -66,4 +92,6 @@ The prototype public Share shell is intentionally minimal and HTML/CSS-only. Do 
 
 ## Fidelity principle
 
-When implementation and screenshots differ, use Figma measurements/assets/typography as the primary visual reference. Avoid inventing missing product UI; wait for or request the relevant design where necessary.
+When implementation and screenshots differ, use Figma measurements/assets/typography as the primary visual reference.
+
+Avoid inventing missing product UI unless a temporary interaction is specifically needed to prove functionality. Any such temporary UI must be clearly documented as temporary, as with the current Import prototype modal.
