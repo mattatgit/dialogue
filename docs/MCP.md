@@ -24,6 +24,8 @@ The preceding local API publishing milestone created Landline V23. The MCP smoke
 
 The V24 test intentionally changed only a non-visible HTML comment, so the prototype remained visually/functionally equivalent. This proves the tool transport, revision reading and additive publishing path independently of model-authored visual changes.
 
+Matt has now created an **Idealogue ChatGPT Business workspace**. The first real model-authored test will therefore use ChatGPT Business custom MCP support rather than the previously considered OpenAI-API test harness.
+
 ## Local MCP server
 
 `mcp-server.mjs` is a stdio MCP server built with the MCP TypeScript SDK.
@@ -99,31 +101,29 @@ Landline V24
 
 This is closer to the real product behavior we want: the model changes only what is necessary, while Dialogue still stores an immutable complete revision that can run independently.
 
-## ChatGPT Plus and remote MCP
+## ChatGPT Business connection direction
 
-Matt's current ChatGPT subscription is **Plus**.
+Matt is keeping his Personal ChatGPT workspace separate and has created an **Idealogue Business workspace** for work projects including Dialogue and Landline.
 
-OpenAI product documentation checked in September 2026 says full custom MCP support with write/modify actions is currently available to ChatGPT Business and Enterprise/Edu workspaces. Plus is therefore not an appropriate path for the first direct ChatGPT UI → Dialogue `publish_revision` test.
+OpenAI product documentation checked in September 2026 says full custom MCP support, including write/modify actions, is available in beta to ChatGPT Business, Enterprise and Edu workspaces. This makes Business the preferred route for the first direct ChatGPT UI → Dialogue `publish_revision` test.
 
-This does not block the product-validation milestone. Dialogue's architecture is intentionally provider/client agnostic.
-
-The recommended next step is a small **local LLM harness** that:
+The intended development path is:
 
 ```text
-OpenAI API model
-   ↓ tool/function decisions
-local test harness
-   ↓ maps to Dialogue MCP tools
-Dialogue MCP adapter
+ChatGPT Business
+   ↓ custom MCP app / developer mode
+secure local/private MCP connection
+   ↓
+Dialogue MCP adapter on Matt's Mac
    ↓
 Dialogue application/API + revisions
 ```
 
-This preserves the exact MCP tool surface we already proved while avoiding any public tunnel and avoiding a ChatGPT plan upgrade simply for product validation.
+Dialogue's localhost web app should remain private. Use the supported secure connection/tunnel mechanism for the MCP server rather than exposing the local app directly to the public internet.
 
-OpenAI API usage is billed separately from ChatGPT Plus. The test therefore requires an API account with billing enabled and an API key. The credential must never be committed to Git; use local secret handling such as macOS Keychain or another local-only mechanism.
+The exact setup steps should be checked against current OpenAI documentation immediately before configuration because developer-mode/MCP UI can change during beta.
 
-A direct ChatGPT custom-MCP test can still be performed later with a supported Business/Enterprise/Edu workspace when validating the final ChatGPT product experience becomes useful.
+The OpenAI API route remains a fallback if needed for provider-agnostic testing, but there is no reason to introduce separate API billing/key management for the next test while the Business custom-MCP route is available.
 
 ## Security stance
 
@@ -136,16 +136,15 @@ The first MCP bridge is deliberately local and narrow:
 - editable paths are restricted to the selected revision directory
 - only known text extensions can be read/edited by the bridge
 - exact replacements must match once, reducing accidental broad edits
-- API credentials for the next model test must stay outside Git
 
-There is no need to expose Dialogue's localhost server directly to the public internet for the API-based model test.
+Remote ChatGPT access should use the supported secure MCP connection path rather than opening Dialogue's localhost server directly to the internet.
 
 ## Next milestone
 
-1. build a local OpenAI-API test harness that discovers/uses the existing Dialogue MCP tools
-2. provide a designer-friendly launcher and secure local API-key setup
-3. keep Dialogue and MCP local
-4. ask the real model to inspect the latest Landline revision (currently V24 on Matt's test Mac)
+1. recreate the Dialogue Project in the Idealogue Business workspace and connect the GitHub source-of-truth workflow
+2. enable/configure ChatGPT Business developer mode/custom MCP support
+3. connect the local Dialogue MCP server through the supported secure connection path
+4. ask ChatGPT to inspect the latest Landline revision (currently V24 on Matt's test Mac)
 5. ask it to make one small visible code change
 6. publish a new immutable Dialogue revision through `publish_revision`
 7. verify the new revision appears and runs correctly
