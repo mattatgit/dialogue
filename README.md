@@ -5,28 +5,40 @@ Dialogue is Idealogue's private catalogue, review and publishing tool for AI-ass
 The repository currently contains two layers of work:
 
 1. the Figma-derived static interaction prototype, which remains the visual/interaction baseline; and
-2. a lightweight local functional build that begins turning the prototype into a real application without requiring hosted services.
+2. a lightweight local functional build that is proving the real project → prototype → revision → LLM workflow before production infrastructure is chosen.
 
-## Current functional milestone
+## Current functional state
 
-The first functional milestone is intentionally small: import a real web prototype ZIP into the Landline project, store it locally as a revision, show it in the project grid, and run the imported prototype inside Dialogue's owner viewer.
+Three functional milestones are complete on `develop`:
 
-Landline's current web prototype is **V22**, and V22 is the first intended real test package.
+1. real prototype import/viewing;
+2. external HTTP/API revision publishing;
+3. local MCP read/edit/publish flow.
+
+Verified with Landline on Matt's Mac:
+
+- Landline V22 imported through the Dialogue UI and ran correctly;
+- an external API client published V23;
+- the local MCP bridge inspected V23 and published V24 as a new immutable derived revision;
+- V24 appeared and ran correctly.
+
+The next milestone is the first **real ChatGPT-authored visible revision** using the Idealogue ChatGPT Business workspace and Dialogue's custom MCP bridge.
 
 ## Run the lightweight local build
 
 Requirements:
 
-- macOS for the current development importer
+- macOS for the current development importer/tooling
 - Node.js 22 or newer
-- the standard `/usr/bin/unzip` command included with macOS
+- standard macOS `/usr/bin/unzip`
+- standard macOS `/usr/bin/zip` for derived MCP revisions
+- npm internet access when the MCP packages need to be installed
 
-There are currently no npm package dependencies and no web-service accounts are required.
+Start Dialogue by double-clicking `Start Dialogue.command`, or run:
 
-Either:
-
-- double-click `Start Dialogue.command`; or
-- run `npm start` from the repository folder.
+```text
+npm start
+```
 
 Then open:
 
@@ -34,13 +46,32 @@ Then open:
 
 Local application data and imported prototype files are stored in `.dialogue-data/`. That folder is deliberately excluded from Git.
 
-See [`docs/LOCAL_BUILD.md`](docs/LOCAL_BUILD.md) for the current local-build details and limitations.
+See `docs/LOCAL_BUILD.md` for current local-build details and limitations.
+
+## LLM / MCP development path
+
+Dialogue owns project/prototype/revision state and exposes a provider-agnostic tool layer. The current local MCP adapter is `mcp-server.mjs`.
+
+Current tools include:
+
+- `list_projects`
+- `list_revisions`
+- `get_revision`
+- `list_revision_files`
+- `read_revision_file`
+- `publish_revision`
+
+`publish_revision` creates a new revision from an immutable base, applies bounded text edits, reuses unchanged assets, packages the complete result and sends it through Dialogue's existing revision-ingestion API.
+
+Matt has created an Idealogue ChatGPT Business workspace. The next test is to connect ChatGPT Business to this local MCP bridge securely and ask the model to make one small visible change to the latest Landline revision.
+
+See `docs/MCP.md` and `docs/API.md`.
 
 ## Static design prototype
 
 The existing HTML files can still be opened directly in a browser without the local server. In that mode, Dialogue behaves as the original static interaction prototype and uses its mock Landline V19/V18 content.
 
-Current prototype UI/interaction coverage includes:
+Current static prototype UI/interaction coverage includes:
 
 - mock sign-in
 - Projects and project detail views
@@ -57,24 +88,26 @@ Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored
 
 ## Project documentation
 
-- [`CONTEXT.md`](CONTEXT.md) — `/context` loading instructions
-- [`docs/CURRENT.md`](docs/CURRENT.md) — concise active state and next step
-- [`docs/PRODUCT.md`](docs/PRODUCT.md) — product purpose and planned capabilities
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current development and production architecture direction
-- [`docs/DESIGN.md`](docs/DESIGN.md) — Figma source and UI conventions
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — branches and development workflow
-- [`docs/LOCAL_BUILD.md`](docs/LOCAL_BUILD.md) — lightweight local functional build
+- `CONTEXT.md` — `/context` loading instructions
+- `docs/CURRENT.md` — concise active state and next step
+- `docs/PRODUCT.md` — product purpose and planned capabilities
+- `docs/ARCHITECTURE.md` — current development and production architecture direction
+- `docs/DESIGN.md` — Figma source and UI conventions
+- `docs/DEVELOPMENT.md` — branches and development workflow
+- `docs/LOCAL_BUILD.md` — lightweight local functional build
+- `docs/API.md` — local application/API publishing contract
+- `docs/MCP.md` — MCP tool layer and LLM connection direction
 
 ## Branches
 
 - `main` — stable/tested baseline; eventually production
-- `develop` — integration branch
+- `develop` — current integration branch and standard `/context` source
 - `feature/*` — focused implementation work
 
-New work normally branches from `develop` and returns through a pull request.
+New work normally branches from `develop`, is tested, and returns through a pull request.
 
 ## Important
 
-GitHub is the source of truth for the Dialogue application source and project documentation. Imported user prototypes are runtime artifacts and should not be committed to this repository.
+GitHub is the source of truth for the Dialogue application source and durable project documentation. Imported user prototypes are runtime artifacts and should not be committed to this repository.
 
-Do not commit credentials, API keys, database secrets, environment files, or `.dialogue-data/`.
+Do not commit credentials, API keys, database secrets, environment files, `.dialogue-data/`, generated `node_modules/` or runtime logs.
