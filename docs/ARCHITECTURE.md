@@ -2,7 +2,7 @@
 
 This document records the current architecture direction. It distinguishes the **lightweight development architecture being built now** from the likely **production architecture later**.
 
-The production decision is intentionally deferred until the core Dialogue workflow has been proven.
+The production decision is intentionally deferred until the core Dialogue workflow has been proven with a real model-authored revision.
 
 ## Architectural principles that remain stable
 
@@ -18,7 +18,7 @@ Regardless of hosting/provider choices:
 
 ## Current lightweight development architecture
 
-The current milestone runs locally on one Mac and requires no hosted services:
+The current milestone runs locally on one Mac and requires no production hosting services:
 
 ```text
 Browser
@@ -28,6 +28,11 @@ Dialogue local Node server
   ├── local JSON data store
   ├── local prototype package files
   └── Dialogue HTTP API
+
+Dialogue MCP stdio adapter
+  ├── reads project/revision context
+  ├── reads bounded text files
+  └── derives/publishes revisions through the HTTP API
 ```
 
 This deliberately avoids an early framework/database/hosting migration while the product behaviour is still being discovered.
@@ -91,6 +96,8 @@ The same underlying publishing operation should be used by:
 - MCP/LLM adapters
 - later automated revision agents if added
 
+This convergence is already partly proven locally: manual V22 import, external API V23 publishing and MCP-derived V24 publishing all end at the same revision-ingestion path.
+
 ## Prototype isolation
 
 ### Local development
@@ -114,35 +121,51 @@ Public sharing is not part of the current lightweight local milestone.
 
 ## LLM integration
 
-Dialogue should expose its own HTTP API/tool layer. ChatGPT or another LLM connects to Dialogue; Dialogue should not be designed around controlling a user's ChatGPT account.
+Dialogue exposes its own application API/tool layer. ChatGPT or another LLM connects to Dialogue; Dialogue should not be designed around controlling a user's ChatGPT account.
 
-Initial tool concepts remain:
+The local MCP adapter currently proves these operations:
 
 - `list_projects()`
-- `get_prototype()` / get revision metadata and context
-- `publish_prototype()`
-- `publish_revision()`
+- `list_revisions(project_slug)`
+- `get_revision(revision_id)`
+- `list_revision_files(revision_id)`
+- `read_revision_file(revision_id, path)`
+- `publish_revision(...)`
 
-Later:
+`publish_revision` derives a complete new revision from an immutable base, reuses unchanged assets and sends the result back through Dialogue's existing HTTP ingestion route.
 
-- read Figma/design references
-- read review comments/revision requests
-- acknowledge/claim a revision request
-- publish a revision linked to its request
+Later tools may include:
 
-MCP should be treated as an adapter on top of Dialogue's own API rather than the core data architecture. This keeps the system usable by other LLM providers/protocols later.
+- Figma/design-reference reads
+- review comment/revision-request reads
+- claim/acknowledge revision request
+- publish revision linked to its request
 
-## Development path to an LLM connection
+MCP is an adapter on top of Dialogue's application/revision model rather than the core data architecture. This keeps the system usable by other LLM providers/protocols later.
 
-The current sequence is intentionally incremental:
+### Current development-only MCP storage coupling
 
-1. real Landline V22 ZIP imports through Dialogue's human UI
-2. the same revision-ingestion path is exercised by a local API test client
-3. when ready, the local API is temporarily exposed through a secure development HTTPS tunnel
-4. an LLM/MCP client is connected
-5. LLM-created revision publishing is tested end-to-end
+The lightweight HTTP API does not yet expose revision-file list/read operations, so the local MCP adapter currently reads those files directly from `.dialogue-data/`.
 
-A temporary development token/auth layer should be added before exposing write endpoints to the internet. The final OAuth/connection UX can wait until the workflow is proven.
+This is acceptable for product validation only. Before production, revision-file access should move behind Dialogue application/API operations so the MCP adapter has no privileged knowledge of storage layout.
+
+## Development path to a real LLM connection
+
+Completed:
+
+1. real Landline V22 ZIP imported through Dialogue's human UI and run successfully
+2. same ingestion path exercised by an external API client, creating V23
+3. local MCP adapter proved project/revision/file reads plus additive `publish_revision`, creating V24
+
+Current next step:
+
+4. use the Idealogue ChatGPT Business workspace's supported custom MCP developer flow
+5. connect ChatGPT securely to the local/private Dialogue MCP server without exposing the localhost app directly
+6. ask the real model to inspect V24 and make one small visible change
+7. publish that change as a new immutable Dialogue revision
+8. use observed friction to refine API/tool/context schemas
+
+Only after this loop is useful should production hosting/database/auth/storage decisions be finalized.
 
 ## Design/prototype review context
 
@@ -207,4 +230,4 @@ Important production details:
 - automated off-server backups are mandatory if the database/files live on one VPS
 - Coolify is optional; the lead developer may prefer plain Docker Compose or another low-ops deployment method
 
-The final production choice should be revisited after the local import → revision → LLM loop has been dogfooded.
+The final production choice should be revisited after the local import → revision → real-LLM loop has been dogfooded.
