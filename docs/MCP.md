@@ -16,15 +16,17 @@ Dialogue application/API + revision model
 
 Dialogue should remain model-provider agnostic. The current bridge is development scaffolding for learning what context and revision operations an LLM actually needs.
 
-## Active branch
+## Status
 
-`feature/mcp-llm-bridge`
+The MCP bridge baseline was completed and merged into `develop` via PR #3.
 
-This branch follows the successful local API publishing milestone, where an external Node client published Landline V23 through Dialogue's HTTP API and V23 appeared and ran correctly.
+The preceding local API publishing milestone created Landline V23. The MCP smoke test then successfully inspected the latest Landline revision and published **Landline V24** as a new derived immutable revision. V24 appeared in Dialogue and ran correctly.
+
+The V24 test intentionally changed only a non-visible HTML comment, so the prototype remained visually/functionally equivalent. This proves the tool transport, revision reading and additive publishing path independently of model-authored visual changes.
 
 ## Local MCP server
 
-`mcp-server.mjs` is a stdio MCP server built with the stable MCP TypeScript SDK v2.
+`mcp-server.mjs` is a stdio MCP server built with the MCP TypeScript SDK.
 
 Current tools:
 
@@ -48,7 +50,7 @@ The tool currently supports:
 - at most 25 edits per publish call
 - maximum 2 MB per editable text file
 
-These constraints are intentionally conservative for the first LLM test.
+These constraints are intentionally conservative for the first real LLM test.
 
 ## Development-only storage access
 
@@ -60,34 +62,22 @@ Publishing still returns through Dialogue's normal import API, so the authoritat
 
 Before production, local filesystem reads should become proper Dialogue application/API operations. The eventual MCP adapter should not need privileged knowledge of storage layout.
 
-## Local smoke test
+## Verified local smoke test
 
 `Test MCP Bridge.command` is the designer-friendly local test.
 
-Prerequisites:
+The verified test sequence was:
 
-- `Start Dialogue.command` is already running
-- Landline has at least one imported revision (currently V23 on Matt's test Mac)
-- internet access is available the first time so npm can install the MCP SDK packages
+1. connect to Dialogue's MCP server over stdio
+2. discover the Dialogue MCP tools
+3. read the Landline project and latest revision
+4. list its files
+5. read its entry-point HTML
+6. call `publish_revision`
+7. create the next numeric revision with only a non-visual HTML comment added
+8. open the Landline project and verify the new revision
 
-First run installs the pinned development packages without generating a package lock:
-
-- `@modelcontextprotocol/server` 2.0.0
-- `@modelcontextprotocol/client` 2.0.0
-- `zod` 4.6.2
-
-The smoke test then:
-
-1. connects to Dialogue's MCP server over stdio
-2. verifies tool discovery
-3. reads the Landline project and latest revision
-4. lists its files
-5. reads its entry-point HTML
-6. calls `publish_revision`
-7. creates the next numeric revision with only a non-visual HTML comment added
-8. opens the Landline project for visual verification
-
-If V23 is currently newest, the first successful run should create V24.
+Result: V23 was used as the base and V24 was created successfully. V24 appeared in the project and ran correctly.
 
 ## Why derived revisions instead of sending a whole ZIP from the LLM
 
@@ -111,16 +101,11 @@ This is closer to the real product behavior we want: the model changes only what
 
 ## Remote ChatGPT connection
 
-ChatGPT cannot connect directly to a localhost MCP server. OpenAI's current supported path for a local/private MCP server is Secure MCP Tunnel, which makes a local MCP server reachable to supported OpenAI products without exposing the server publicly.
+ChatGPT cannot connect directly to a localhost MCP server. The intended development approach is to use a secure connection/tunnel appropriate to the ChatGPT plan/workspace being tested rather than exposing Dialogue's localhost server publicly.
 
-The official OpenAI tunnel client can launch a local stdio MCP command, which matches Dialogue's current `mcp-server.mjs` design.
+The exact remote connection path should be confirmed immediately before the real LLM test because ChatGPT custom MCP capabilities can differ by plan/workspace and product capabilities can change.
 
-Important current ChatGPT availability constraint, verified September 2026:
-
-- full MCP including write/modify actions is currently available to ChatGPT Business and Enterprise/Edu workspaces
-- ChatGPT Pro can build/use custom MCP apps in developer mode, but custom MCP access is currently limited to read/fetch permissions rather than full write actions
-
-This means the local MCP smoke test can proceed regardless of ChatGPT plan. Before the first real ChatGPT → Dialogue write test, confirm which ChatGPT plan/workspace will be used. If full write MCP is not available there, another MCP-capable client or an API-hosted test can be used to prove the provider-agnostic workflow without changing Dialogue's architecture.
+If the selected ChatGPT workspace cannot perform the required MCP write action, another MCP-capable client or an API-hosted test can be used without changing Dialogue's provider-agnostic architecture.
 
 ## Security stance
 
@@ -134,14 +119,15 @@ The first MCP bridge is deliberately local and narrow:
 - only known text extensions can be read/edited by the bridge
 - exact replacements must match once, reducing accidental broad edits
 
-Remote access should use the supported secure tunnel path rather than opening Dialogue's local server directly to the internet.
+Remote access should use an appropriate secure connection path rather than opening Dialogue's local server directly to the internet.
 
 ## Next milestone
 
-1. run `Test MCP Bridge.command` on Matt's Mac
-2. verify the MCP-created revision appears and runs correctly
-3. merge the MCP bridge baseline if successful
-4. confirm the ChatGPT plan/workspace available for testing write actions
-5. configure Secure MCP Tunnel or the appropriate MCP client connection
-6. ask a real LLM to inspect the latest Landline revision, make one small visible code change, and publish a new Dialogue revision
-7. inspect what context/tool changes are needed before doing any production infrastructure work
+1. confirm which ChatGPT plan/workspace will be used
+2. verify the current supported secure connection method for that workspace
+3. connect a real LLM to Dialogue's MCP tools
+4. ask the model to inspect the latest Landline revision (currently V24 on Matt's test Mac)
+5. ask it to make one small visible code change
+6. publish a new immutable Dialogue revision through `publish_revision`
+7. verify the new revision appears and runs correctly
+8. inspect what additional context/tool schema is needed before any production infrastructure work
