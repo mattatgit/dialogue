@@ -4,7 +4,7 @@ This file defines the standard context-loading workflow for ChatGPT conversation
 
 ## Shortcut
 
-When the user sends `/context`, load the current project context from this repository before continuing.
+When the user's entire message is `Load project context`, load the current project context from this repository before continuing.
 
 Do not ask the user to restate project history that is already recorded here.
 
@@ -19,7 +19,7 @@ Do not ask the user to restate project history that is already recorded here.
    - `docs/DEVELOPMENT.md`
    - `docs/LOCAL_BUILD.md` when local functional work is active
    - `docs/API.md` when API/LLM integration work is active
-   - `docs/MCP.md` from the active feature branch when MCP/LLM bridge work is active
+   - `docs/MCP.md` when MCP/LLM bridge work is active
 4. Inspect the current `develop` branch and any active feature branch named in `docs/CURRENT.md` or otherwise relevant to the next task.
 5. Check recent commits/PR state when necessary to understand changes made after the documentation was last updated.
 
@@ -32,7 +32,7 @@ Do not ask the user to restate project history that is already recorded here.
 - Runtime imported prototypes/data are not Dialogue source files and should not be committed unless explicitly being added as test fixtures.
 - Do not rely on chat memory as the primary project record.
 - Do not invent missing project history. If repository documentation does not support something, say so.
-- Do not modify files merely because `/context` was invoked. Context loading is read-only unless the user also asks for a change.
+- Do not modify files merely because `Load project context` was invoked. Context loading is read-only unless the user also asks for a change.
 
 ## Response after loading
 
