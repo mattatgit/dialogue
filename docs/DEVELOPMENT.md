@@ -17,7 +17,7 @@ The immediate goal is still not a production framework/database/hosting migratio
 ## Branch strategy
 
 - `main` — stable/tested baseline; eventually production
-- `develop` — integration branch and normal `/context` source
+- `develop` — integration branch and normal context-loading source
 - `feature/*` — focused implementation changes
 
 New work should normally branch from `develop`, be tested, then return through a pull request.
@@ -30,7 +30,7 @@ The intended collaboration remains:
 - ChatGPT discusses product/UX/architecture and writes/updates code
 - GitHub is the durable source of truth
 - `.md` project docs are updated with meaningful implementation/architecture/UI decisions
-- `/context` reconstructs state from the repo rather than chat memory
+- `Load project context` reconstructs state from the repo rather than chat memory
 - project/chat containers are conveniences, not the authoritative project record
 
 Codex is not required for this workflow.
