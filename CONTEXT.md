@@ -18,7 +18,8 @@ Do not ask the user to restate project history that is already recorded here.
    - `docs/DESIGN.md`
    - `docs/DEVELOPMENT.md`
    - `docs/LOCAL_BUILD.md` when local functional work is active
-4. Inspect the current `develop` branch and any active feature branch relevant to the next task.
+   - `docs/API.md` when API/LLM publishing work is active
+4. Inspect the current `develop` branch and any active feature branch named in `docs/CURRENT.md` that is relevant to the next task.
 5. Check recent commits/PR state when necessary to understand changes made after the documentation was last updated.
 
 ## Ground rules
@@ -29,7 +30,7 @@ Do not ask the user to restate project history that is already recorded here.
 - Other durable docs should be updated when their subject changes; do not put every long-term decision only in `CURRENT.md`.
 - Runtime imported prototypes/data are not Dialogue source files and should not be committed unless explicitly being added as test fixtures.
 - Do not rely on chat memory as the primary project record.
-- Do not invent missing project history. If repository documentation does not support something, say so.
+- Do not invent missing project history. If the repository documentation does not support something, say so.
 - Do not modify files merely because `/context` was invoked. Context loading is read-only unless the user also asks for a change.
 
 ## Response after loading
