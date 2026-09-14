@@ -77,7 +77,7 @@ Publishing should be atomic: validate the complete package, then make that revis
 
 ## Revisions
 
-Internally, prototypes and revisions should be separate concepts. LLM updates should create a new revision rather than destructively replacing the previous version.
+Internally, prototypes and revisions are separate concepts. LLM updates should create a new revision rather than destructively replacing the previous version.
 
 This supports:
 
@@ -87,15 +87,17 @@ This supports:
 - traceability from feedback to resulting revision
 - retaining the design/comment context that caused a change
 
-The product should be able to represent a progression such as V18 → V19 → V20 without losing earlier working versions.
+The lightweight local build has already proven this model with Landline V22 → V23 → V24 while leaving earlier revisions intact.
 
 ## LLM relationship
 
-Dialogue should not be a ChatGPT-specific product. Dialogue should expose an LLM-facing API/tool layer that capable models can connect to.
+Dialogue should not be a ChatGPT-specific product. Dialogue exposes an LLM-facing API/tool layer that capable models can connect to.
 
-ChatGPT may be the initial integration, but the product model should remain provider-agnostic so another LLM can participate in the same workflow later.
+ChatGPT is the initial integration target, but the product model remains provider-agnostic so another LLM can participate in the same workflow later.
 
-The connected LLM should be able to discover Dialogue projects, read relevant prototype/revision context, publish new prototypes and create new revisions from requested changes.
+The connected LLM should be able to discover Dialogue projects, read relevant prototype/revision context, inspect the files needed for a requested change, and publish a new immutable revision.
+
+The current local MCP bridge already proves those basic operations. The next product-learning milestone is whether a real ChatGPT model can use them effectively to make a useful visible change.
 
 ## Sharing
 
@@ -103,21 +105,39 @@ Public share URLs should be unguessable capability-style links using cryptograph
 
 The public Share shell should remain HTML/CSS-only where practical. A prototype itself may contain JavaScript when required.
 
-## Planned capabilities
+## Proven lightweight milestones
 
-Near-term:
+Completed locally with Landline:
 
-- real project/prototype/revision persistence
+- real project/prototype/revision persistence for the current dogfood project
 - manual prototype import
-- safe prototype package validation/storage
-- live imported prototype owner viewer
-- API publishing path that uses the same ingestion pipeline as manual import
-- first LLM connection/publishing experiment
-- authentication when the workflow moves beyond local development
+- prototype package validation/storage
+- live imported-prototype owner viewer
+- API publishing using the same ingestion path as manual import
+- local MCP project/revision/file inspection
+- additive `publish_revision` deriving a new complete revision from an immutable base
+
+Verified sequence:
+
+1. imported real Landline V22 through Dialogue;
+2. external API client published V23;
+3. local MCP client inspected V23 and published V24;
+4. all revisions appeared in Dialogue and ran correctly.
+
+The V24 change was intentionally non-visible so the infrastructure/tool loop could be proven independently of model-authored design decisions.
+
+## Near-term capabilities
+
+Next:
+
+- first real ChatGPT Business custom-MCP connection
+- first model-authored visible revision
+- refine MCP/API context schemas based on that test
 - thumbnails/screenshots
-- owner view
+- stronger revision management UI
+- authentication when the workflow moves beyond local development
 - public sharing
-- project/prototype management
+- broader project/prototype management
 
 Later:
 
@@ -132,24 +152,28 @@ Later:
 
 ## Current dogfood milestone
 
-The first real functional target is to use **Landline V22**, the current Landline web prototype, as a genuine imported Dialogue revision.
+The current milestone is the first **real model-authored visible revision**.
 
-Success for this milestone means:
+Success means:
 
-1. import the Landline V22 ZIP through Dialogue
-2. store it as a revision rather than mock/static content
-3. show V22 in the Landline project grid
-4. open and interact with the actual V22 prototype in Dialogue's owner viewer
-5. use the same underlying revision-ingestion path later from an API/LLM client
+1. connect the Idealogue ChatGPT Business workspace to Dialogue's local MCP bridge through the supported secure developer path;
+2. let ChatGPT discover the Landline project and latest revision (currently V24 on Matt's test Mac);
+3. let the model inspect the relevant files;
+4. ask for one small visible HTML/CSS/JS change;
+5. publish the result as a new immutable revision through `publish_revision`;
+6. verify the new revision appears and runs in Dialogue;
+7. record what additional structured context/tool behavior was needed.
 
-The temporary Import UI used to prove this flow is not the final product design.
+The temporary Import UI and current development launchers are not final product design.
 
 ## Product-learning principle
 
 Friction encountered while building Dialogue is useful product evidence. Problems such as screenshot handoffs, ambiguous element references, ZIP transfers, cross-machine file syncing, lost chat context and difficulty comparing revisions should be treated as signals for features Dialogue can eventually solve.
 
+The same applies to LLM integration: if the real model struggles to identify the right file/element/change, improve Dialogue's context model rather than compensating with ad-hoc manual instructions forever.
+
 ## Current repository state
 
-The stable repository baseline contains the static interaction prototype. Active functional work is being introduced incrementally on feature branches while preserving the existing Figma-derived visual/interaction behaviour.
+`develop` contains the lightweight functional import/API/MCP build plus the durable project documentation. New focused work should normally branch from `develop` and return through a tested pull request.
 
-GitHub is the durable source of truth for Dialogue application code and project documentation. Imported runtime prototypes themselves should live in application storage rather than being treated as Dialogue source files.
+GitHub is the durable source of truth for Dialogue application code and project documentation. Imported runtime prototypes themselves live in application storage rather than being treated as Dialogue source files.
