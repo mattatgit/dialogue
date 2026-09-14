@@ -45,7 +45,7 @@ Using the V22 ZIP again for this test is intentional. The goal is to prove the p
 
 The Node client has been syntax-checked and exercised against a mock Dialogue HTTP server; it correctly discovered V22, selected V23, uploaded the ZIP body and handled the returned revision/viewer metadata.
 
-See `docs/API.md` on the active feature branch for the current contract and LLM direction.
+See `docs/API.md` for the current contract and LLM direction.
 
 ## Current local requirements
 

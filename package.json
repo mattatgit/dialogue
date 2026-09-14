@@ -5,7 +5,8 @@
   "description": "Lightweight local functional build of Dialogue",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "publish:test": "node scripts/publish-revision.js"
   },
   "engines": {
     "node": ">=22"
