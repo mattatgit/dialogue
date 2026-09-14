@@ -23,6 +23,8 @@ The local MCP transport/revision model is therefore proven.
 
 Matt has now created an **Idealogue ChatGPT Business workspace** while keeping his Personal workspace separate. Dialogue will be recreated as a Project in the Business workspace rather than merging the Personal workspace. GitHub remains the durable source of truth for project continuity.
 
+The standard fresh-chat context phrase is now **`Load project context`** rather than `/context`, to avoid collision with ChatGPT's own slash-command UI.
+
 The next milestone is the first **real ChatGPT-authored visible revision** using the Business workspace's custom MCP support.
 
 ## Verified local functional build
@@ -125,7 +127,7 @@ Preferred LLM editing flow:
 
 Matt has created an Idealogue ChatGPT Business workspace specifically so the first real Dialogue integration can use ChatGPT's custom MCP support with write/modify actions.
 
-The Personal workspace will remain separate. The Dialogue Project itself is not being migrated; instead, a new Dialogue Project will be created in the Business workspace and will reconstruct project state from this repository through the existing `/context` workflow.
+The Personal workspace will remain separate. The Dialogue Project itself is not being migrated; instead, a new Dialogue Project will be created in the Business workspace and will reconstruct project state from this repository when Matt sends `Load project context`.
 
 Preferred next test path:
 
@@ -172,7 +174,7 @@ The API/MCP launchers are development tooling, not product UI.
 Repository: `mattatgit/dialogue`
 
 - `main` — stable baseline; eventually production
-- `develop` — current integration branch and standard `/context` source
+- `develop` — current integration branch and standard context-loading source
 - `feature/*` — focused implementation work
 
 PR #3 (`feature/mcp-llm-bridge`) has been merged into `develop` after successful V24 verification.
