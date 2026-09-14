@@ -88,7 +88,7 @@ Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored
 
 ## Project documentation
 
-- `CONTEXT.md` — `/context` loading instructions
+- `CONTEXT.md` — `Load project context` loading instructions
 - `docs/CURRENT.md` — concise active state and next step
 - `docs/PRODUCT.md` — product purpose and planned capabilities
 - `docs/ARCHITECTURE.md` — current development and production architecture direction
@@ -101,7 +101,7 @@ Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored
 ## Branches
 
 - `main` — stable/tested baseline; eventually production
-- `develop` — current integration branch and standard `/context` source
+- `develop` — current integration branch and standard context-loading source
 - `feature/*` — focused implementation work
 
 New work normally branches from `develop`, is tested, and returns through a pull request.
