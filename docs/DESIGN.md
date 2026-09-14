@@ -43,25 +43,34 @@ Current prototype behaviors that should be preserved unless designs change:
 
 ## Temporary functional UI
 
-The `feature/local-prototype-import` branch introduces an **Import prototype** modal by reusing the existing Dialogue modal/form visual language.
+The lightweight functional build includes an **Import prototype** modal created by reusing the existing Dialogue modal/form visual language.
 
-This is deliberately temporary functional UI so the real import/revision workflow can be tested before the final create/import interaction has been designed in Figma.
+This remains deliberately temporary functional UI so the real import/revision workflow can be tested before the final create/import interaction is designed in Figma.
 
 Current temporary behaviour:
 
-- Landline page action changes from the placeholder Create action to **Import**
+- Landline page action uses **Import**
 - modal fields are Prototype name, Revision and Prototype package
 - package selection accepts ZIP files
-- default revision is V22 because Landline's current web prototype is V22
 - successful real imports replace the static fallback cards with data-driven revision tiles
 
-Do not treat this modal/layout/copy as final product design. When Matt designs the final import/create experience, the Figma design supersedes this temporary UI.
+The real Landline V22 package has been imported successfully through this UI. External API publishing then created V23, and the local MCP bridge created V24. The functional success of those flows does **not** make the current Import modal or developer launchers final product UI.
+
+When Matt designs the final create/import/revision experience, the Figma design supersedes this temporary UI.
 
 ## Imported prototype viewer
 
 The dynamic local owner viewer preserves the existing dark Dialogue owner shell and loads the actual imported prototype into its central stage instead of showing the static Landline PNG.
 
+The current viewer has been verified with real Landline V22/V23/V24 runtime content.
+
 The production viewer should retain the same design intent while providing the separate-origin security boundary described in `docs/ARCHITECTURE.md`.
+
+## LLM/MCP development UI
+
+`Start Dialogue.command`, `Publish API Test.command` and `Test MCP Bridge.command` are development/testing launchers only. They are not product-interface decisions and should not influence future Settings/Connections design.
+
+Likewise, the first ChatGPT Business MCP connection should initially be treated as infrastructure/product validation. Final in-product connection management belongs in a designed Dialogue Settings/Connections experience after the workflow is understood.
 
 ## Assets
 
