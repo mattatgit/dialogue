@@ -43,7 +43,7 @@ Current implementation:
 - `mcp-server.mjs` — local stdio MCP server
 - `scripts/test-mcp.mjs` — automated MCP client smoke test
 - `Test MCP Bridge.command` — designer-friendly one-click local test
-- `docs/MCP.md` — current MCP/LLM design and constraints
+- `docs/MCP.md` — current MCP/LLM design and constraints (on the active feature branch)
 
 Current MCP tools:
 
@@ -74,7 +74,7 @@ The base revision is never overwritten. The first smoke test deliberately adds o
 
 Development-only limitation: file listing/reading currently accesses `.dialogue-data/` directly because the lightweight HTTP API does not yet expose revision-file read endpoints. Publishing still goes through Dialogue's normal API. Before production this storage knowledge should move behind Dialogue application/API operations.
 
-See `docs/MCP.md` and `docs/API.md`.
+See `docs/API.md` and the active branch's `docs/MCP.md`.
 
 ## Current local requirements
 
@@ -128,7 +128,7 @@ Do not add destructive delete tools at this stage.
 
 A remote LLM cannot reach a localhost-only server directly. The current intended OpenAI development path is Secure MCP Tunnel rather than exposing Dialogue's local server publicly.
 
-Current OpenAI product constraints verified in September 2026 are recorded in `docs/MCP.md`. In particular, ChatGPT plan/workspace capabilities affect whether a custom MCP connection can perform write actions, so the exact remote test path should be chosen only after Matt confirms which ChatGPT plan/workspace will be used.
+Current OpenAI product constraints verified in September 2026 are recorded in the active branch's `docs/MCP.md`. In particular, ChatGPT plan/workspace capabilities affect whether a custom MCP connection can perform write actions, so the exact remote test path should be chosen only after Matt confirms which ChatGPT plan/workspace will be used.
 
 This plan detail does not block the local MCP smoke test.
 
