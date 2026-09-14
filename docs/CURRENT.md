@@ -4,19 +4,28 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Current status
 
-The lightweight local import/viewer milestone was merged into `develop` via PR #1.
+Three lightweight functional milestones are now complete and merged into `develop`:
 
-The local API publishing milestone was then proven on Matt's Mac and merged into `develop` via PR #2. A non-UI HTTP client successfully published **Landline V23** through Dialogue's existing revision-ingestion API; V23 appeared in the Landline project and ran correctly in the owner viewer.
+1. PR #1 — local prototype import/viewer
+2. PR #2 — external HTTP/API revision publishing
+3. PR #3 — local MCP / LLM bridge baseline
 
-The active implementation branch is now:
+Verified sequence on Matt's Mac:
 
-`feature/mcp-llm-bridge`
+- real Landline V22 imported through the Dialogue UI and ran correctly
+- external non-UI HTTP client published Landline V23; V23 appeared and ran correctly
+- local MCP client inspected the latest Landline revision and its files, then called `publish_revision`
+- `publish_revision` created **Landline V24** as a new derived immutable revision
+- V24 appeared in the Landline project and ran correctly
+- V24 was intentionally visually/functionally equivalent to V23 because the MCP smoke test changed only a non-visible HTML comment
 
-The current goal is to prove the tool/adapter layer required for a real LLM to inspect a Dialogue revision, make a small code change and publish a new immutable revision before any production-stack work begins.
+The local MCP transport/revision model is therefore considered proven.
+
+The next milestone is the first **real LLM-authored visible revision**.
 
 ## Verified local functional build
 
-The merged local build currently provides:
+`develop` now provides:
 
 - localhost-only Node server
 - local project/prototype/revision persistence in `.dialogue-data/db.json`
@@ -28,22 +37,14 @@ The merged local build currently provides:
 - dynamic owner viewer with sandboxed prototype iframe
 - Restart / `R` reload support
 - internal Dialogue HTTP API shared by browser import and external publishing
-- `Start Dialogue.command` launcher that starts Dialogue and opens the browser
+- `Start Dialogue.command`
 - `scripts/publish-revision.js` external HTTP publishing client
-- `Publish API Test.command` one-click API test launcher
+- `Publish API Test.command`
+- local stdio MCP adapter in `mcp-server.mjs`
+- automated MCP smoke client in `scripts/test-mcp.mjs`
+- one-click `Test MCP Bridge.command`
 
-The real `LANDLINE-prototype-v22.zip` was successfully imported through the UI. The API test then used the same package to publish V23, proving that an external non-UI client can create a new Dialogue revision without bypassing the normal ingestion path.
-
-## Active MCP / LLM bridge work
-
-`feature/mcp-llm-bridge` adds the first development MCP adapter.
-
-Current implementation:
-
-- `mcp-server.mjs` — local stdio MCP server
-- `scripts/test-mcp.mjs` — automated MCP client smoke test
-- `Test MCP Bridge.command` — designer-friendly one-click local test
-- `docs/MCP.md` — current MCP/LLM design and constraints (on the active feature branch)
+## MCP / LLM bridge
 
 Current MCP tools:
 
@@ -54,42 +55,38 @@ Current MCP tools:
 - `read_revision_file(revision_id, path)`
 - `publish_revision(...)`
 
-The key new behavior is **derived revision publishing**. Rather than requiring an LLM to resend every unchanged image/font/binary asset, `publish_revision` clones an immutable base revision locally, applies bounded text-file changes, packages the complete derived prototype, then publishes that package back through Dialogue's existing HTTP import API.
+`publish_revision` derives a new revision from an immutable base, applies bounded text-file edits, reuses unchanged assets, packages the complete derived prototype, and publishes it back through Dialogue's existing HTTP ingestion path.
 
 Conceptually:
 
 ```text
-Landline V23
-   ↓ derive from immutable base
+existing Dialogue revision
+   ↓ inspect/read through MCP
 small HTML/CSS/JS change
    ↓
-complete package
+derive complete new package
    ↓
 Dialogue revision ingestion API
    ↓
-Landline V24
+new immutable revision
 ```
 
-The base revision is never overwritten. The first smoke test deliberately adds only a non-visual HTML comment so the transport/tool behavior can be verified independently of visual code generation.
+The base revision is never overwritten. No destructive delete tool exists at this stage.
 
-Development-only limitation: file listing/reading currently accesses `.dialogue-data/` directly because the lightweight HTTP API does not yet expose revision-file read endpoints. Publishing still goes through Dialogue's normal API. Before production this storage knowledge should move behind Dialogue application/API operations.
+Development-only limitation: revision file listing/reading currently accesses `.dialogue-data/` directly because the lightweight HTTP API does not yet expose those operations. Publishing still goes through Dialogue's authoritative HTTP revision-ingestion path. Before production, file access should move behind Dialogue application/API operations.
 
-See `docs/API.md` and the active branch's `docs/MCP.md`.
+See `docs/API.md` and `docs/MCP.md`.
 
 ## Current local requirements
 
-No production web services are required.
+No production web services are required for the local build.
 
 - Node.js 22+
 - macOS `/usr/bin/unzip`
 - macOS `/usr/bin/zip`
-- npm internet access on the first MCP test run to install pinned development MCP packages
+- npm packages required by the MCP development adapter
 
 Normal Dialogue start: `Start Dialogue.command`.
-
-MCP smoke test: keep Dialogue running, then double-click `Test MCP Bridge.command`. On its first run it installs the local MCP development packages automatically and then runs the test.
-
-If V23 is currently the highest numeric Landline revision on the Mac, a successful first MCP smoke test should create **V24**. V24 should look identical because the only intentional prototype change is an HTML comment.
 
 ## Architecture direction
 
@@ -103,9 +100,9 @@ The current local architecture remains product-validation scaffolding:
 - local MCP adapter
 - no real auth or production hosting yet
 
-The local persistence and direct MCP filesystem reads are not commitments to the eventual production stack.
+Do not productionize infrastructure yet unless the real LLM test exposes a requirement that forces it.
 
-The current lean production candidate remains one small self-hosted deployment (likely VPS + Docker/Coolify), Postgres when needed, persistent prototype storage, off-server backups and a separate prototype origin. Do not build that infrastructure yet unless a requirement forces it.
+The current lean production candidate remains a small self-hosted deployment (likely VPS + Docker/Coolify), Postgres when needed, persistent prototype storage, automated off-server backups and a separate prototype origin for untrusted prototype code.
 
 ## LLM/API direction
 
@@ -113,38 +110,25 @@ Dialogue owns project/revision state. ChatGPT or another LLM should connect to D
 
 Human import, local HTTP publishing and LLM publishing should converge on the same additive revision-ingestion model.
 
-For LLM editing, the current preferred interaction is:
+Preferred LLM editing flow:
 
-1. list project/revisions
+1. list projects/revisions
 2. select a base revision
 3. inspect its file tree
 4. read only the text files needed for the requested change
 5. publish a **new** derived revision with bounded text edits
 6. review the new revision in Dialogue
 
-Do not add destructive delete tools at this stage.
-
-## Remote LLM connection direction
-
-A remote LLM cannot reach a localhost-only server directly. The current intended OpenAI development path is Secure MCP Tunnel rather than exposing Dialogue's local server publicly.
-
-Current OpenAI product constraints verified in September 2026 are recorded in the active branch's `docs/MCP.md`. In particular, ChatGPT plan/workspace capabilities affect whether a custom MCP connection can perform write actions, so the exact remote test path should be chosen only after Matt confirms which ChatGPT plan/workspace will be used.
-
-This plan detail does not block the local MCP smoke test.
-
 ## Next milestone
 
-1. fetch/switch to `feature/mcp-llm-bridge` on Matt's Mac
-2. keep `Start Dialogue.command` running
-3. double-click `Test MCP Bridge.command`
-4. allow the first-run npm package installation to complete
-5. verify the MCP client discovers/uses Dialogue tools and publishes the next Landline revision (expected V24 if V23 is latest)
-6. open the new revision and confirm it runs and remains visually unchanged
-7. if successful, merge the MCP bridge baseline
-8. confirm the ChatGPT plan/workspace available for the real remote LLM test
-9. configure the appropriate secure MCP connection
-10. ask a real LLM to inspect Landline, make one small visible change and publish a new Dialogue revision
-11. use what that test teaches us to refine context/tool schemas before production infrastructure
+1. confirm which ChatGPT plan/workspace will be used for the first real remote LLM test
+2. choose/configure the appropriate secure MCP connection path for that workspace
+3. keep Dialogue local; do not expose the localhost app directly to the public internet unless a later requirement forces it
+4. ask a real LLM to inspect the latest Landline revision (currently V24 on Matt's test Mac)
+5. ask it to make one small visible change
+6. have it publish a new immutable revision through `publish_revision`
+7. verify the resulting revision appears and runs in Dialogue
+8. use the result to refine tool schemas/context before any production infrastructure work
 
 The key product question is now whether an actual LLM can get enough context through Dialogue's tools to make a useful targeted change and publish a safe additive revision.
 
@@ -162,15 +146,16 @@ Figma remains the source of truth for designed UI.
 
 The current Import UI is temporary functional UI suitable for product validation. Settings remains intentionally incomplete while the LLM connection model is being proven.
 
-The MCP smoke-test launcher is development tooling, not product UI.
+The API/MCP launchers are development tooling, not product UI.
 
 ## Repository / continuity workflow
 
 Repository: `mattatgit/dialogue`
 
 - `main` — stable baseline; eventually production
-- `develop` — integration branch and standard `/context` source
-- `feature/mcp-llm-bridge` — current active LLM integration milestone
-- other `feature/*` branches — focused implementation work
+- `develop` — current integration branch and standard `/context` source
+- `feature/*` — focused implementation work
+
+PR #3 (`feature/mcp-llm-bridge`) has been merged into `develop` after successful V24 verification.
 
 GitHub is the source of truth for Dialogue implementation files and durable project context. Runtime imported prototypes/data remain outside Git.
