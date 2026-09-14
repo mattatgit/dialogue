@@ -27,8 +27,7 @@ async function callJson(client, name, args = {}) {
 
 const transport = new StdioClientTransport({
   command: process.execPath,
-  args: [SERVER_PATH],
-  cwd: ROOT
+  args: [SERVER_PATH]
 });
 
 const client = new Client(
