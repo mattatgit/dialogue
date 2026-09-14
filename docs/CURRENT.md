@@ -119,12 +119,32 @@ Preferred LLM editing flow:
 5. publish a **new** derived revision with bounded text edits
 6. review the new revision in Dialogue
 
+## ChatGPT plan / first real LLM test path
+
+Matt confirmed the current ChatGPT subscription is **Plus**.
+
+As of September 2026, OpenAI's current product documentation says full custom MCP support with write/modify actions is limited to ChatGPT Business and Enterprise/Edu workspaces. Plus therefore cannot be used for the direct ChatGPT UI → custom Dialogue MCP `publish_revision` test.
+
+Do **not** upgrade the ChatGPT plan just to prove the product workflow yet.
+
+Preferred next test path:
+
+- keep Dialogue and its MCP bridge local
+- build a small local LLM test harness that uses the OpenAI API as the model client and maps model tool calls to Dialogue's existing MCP tools
+- keep the same `publish_revision` operation and immutable revision model
+- store any API credential outside Git (prefer macOS Keychain/local secret handling)
+- use a one-click designer-friendly launcher rather than requiring Terminal work
+
+OpenAI API billing is separate from the ChatGPT Plus subscription, so this path will require enabling API billing and creating an API key. It does not require production hosting or a ChatGPT plan upgrade.
+
+Alternative later test: a ChatGPT Business workspace can be used to test the direct ChatGPT custom-MCP experience once that specific product experience becomes worth validating.
+
 ## Next milestone
 
-1. confirm which ChatGPT plan/workspace will be used for the first real remote LLM test
-2. choose/configure the appropriate secure MCP connection path for that workspace
-3. keep Dialogue local; do not expose the localhost app directly to the public internet unless a later requirement forces it
-4. ask a real LLM to inspect the latest Landline revision (currently V24 on Matt's test Mac)
+1. build the local OpenAI-API LLM test harness around the existing Dialogue MCP tools
+2. keep Dialogue local; no public tunnel or production hosting is required for this test
+3. provide a non-Terminal setup/launcher and secure local API-key handling
+4. use the real LLM to inspect the latest Landline revision (currently V24 on Matt's test Mac)
 5. ask it to make one small visible change
 6. have it publish a new immutable revision through `publish_revision`
 7. verify the resulting revision appears and runs in Dialogue
