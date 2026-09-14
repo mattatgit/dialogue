@@ -43,7 +43,7 @@ Current prototype behaviors that should be preserved unless designs change:
 
 ## Temporary functional UI
 
-The active `feature/local-prototype-import` branch introduces an **Import prototype** modal by reusing the existing Dialogue modal/form visual language.
+The `feature/local-prototype-import` branch introduces an **Import prototype** modal by reusing the existing Dialogue modal/form visual language.
 
 This is deliberately temporary functional UI so the real import/revision workflow can be tested before the final create/import interaction has been designed in Figma.
 
@@ -59,7 +59,7 @@ Do not treat this modal/layout/copy as final product design. When Matt designs t
 
 ## Imported prototype viewer
 
-The dynamic local owner viewer on the feature branch preserves the existing dark Dialogue owner shell and loads the actual imported prototype into its central stage instead of showing the static Landline PNG.
+The dynamic local owner viewer preserves the existing dark Dialogue owner shell and loads the actual imported prototype into its central stage instead of showing the static Landline PNG.
 
 The production viewer should retain the same design intent while providing the separate-origin security boundary described in `docs/ARCHITECTURE.md`.
 

@@ -31,24 +31,18 @@ Runtime data lives under:
   tmp/
 ```
 
-`.dialogue-data/` is ignored by Git on the active functional branch.
+`.dialogue-data/` is ignored by Git.
 
 The JSON store is deliberate development scaffolding, not the final database decision. The application/API boundary should make it possible to replace it later with SQLite or Postgres without changing the product workflow.
 
-## Active implementation
+## Start
 
-The implementation currently lives on:
-
-`feature/local-prototype-import`
-
-with draft PR #1 targeting `develop`.
-
-Requirements for the current branch build:
+Requirements:
 
 - Node.js 22+
 - macOS `/usr/bin/unzip`
 
-On that branch, start by double-clicking `Start Dialogue.command`, or with:
+Start by double-clicking `Start Dialogue.command`, or with:
 
 ```text
 npm start
@@ -76,7 +70,7 @@ The importer rejects duplicate prototype/revision combinations and obvious unsaf
 
 ## Real Landline V22 compatibility
 
-The supplied `LANDLINE-prototype-v22.zip` has now been checked against the active feature branch's importer/viewer design.
+The supplied `LANDLINE-prototype-v22.zip` has been checked against this importer/viewer design.
 
 It is compatible with the current package rules:
 
@@ -92,7 +86,7 @@ The ZIP contains macOS metadata (`__MACOSX`, `.DS_Store`, `._*`). Dialogue curre
 
 ## Current API
 
-The feature branch local server exposes the first internal Dialogue API surface:
+The local server exposes the first internal Dialogue API surface:
 
 - `GET /api/health`
 - `GET /api/projects`
@@ -132,7 +126,7 @@ Production should retain the previously agreed separate prototype origin, for ex
 
 ## Next test
 
-Run `feature/local-prototype-import` on Matt's Mac and import the supplied real Landline V22 ZIP through Dialogue's visible **Import prototype** modal.
+Run the feature branch on Matt's Mac and import the supplied real Landline V22 ZIP through Dialogue's visible **Import prototype** modal.
 
 Verify the full end-to-end local experience:
 

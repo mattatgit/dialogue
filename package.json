@@ -1,0 +1,13 @@
+{
+  "name": "dialogue-local-functional-build",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lightweight local functional build of Dialogue",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

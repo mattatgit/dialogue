@@ -2,101 +2,53 @@
 
 This is the concise continuity record for active Dialogue work. Update it whenever a meaningful milestone, decision, known issue or next step changes.
 
-## Current date/status
+## Current status
 
-Current implementation work is on:
+The first lightweight functional milestone is complete on `feature/local-prototype-import`, with PR #1 targeting `develop`.
 
-`feature/local-prototype-import`
+Dialogue has moved beyond a static interaction prototype: the local build now supports importing, storing, listing and running a real prototype revision while preserving the existing Dialogue UI.
 
-with **draft PR #1** targeting `develop`.
+## Verified local functional build
 
-Dialogue is moving from a static Figma-derived interaction prototype to a deliberately lightweight local functional build. The goal is to prove the product workflow before setting up production services.
+The local build currently provides:
 
-## Current functional build
-
-The active feature branch adds a local Node server around the existing static UI without migrating the UI to a framework.
-
-Current functional additions on that branch:
-
-- localhost-only Dialogue server
-- local persistent project/prototype/revision data in `.dialogue-data/db.json`
+- localhost-only Node server
+- local project/prototype/revision persistence in `.dialogue-data/db.json`
 - local filesystem storage for imported prototype packages
 - Landline project Import modal
 - ZIP upload/import endpoint
-- ZIP entry/path validation
-- `index.html` entry-point detection, including one wrapper folder
-- duplicate revision rejection
-- data-driven Landline revision tiles after the first real import
-- dynamic prototype owner page at `prototype.html?revision=...`
-- imported prototypes rendered in a sandboxed iframe
-- Restart reloads the imported prototype
-- small local Dialogue API shared by the UI/import pipeline
-- macOS launcher file: `Start Dialogue.command`
-
-The original static prototype remains the stable `develop` baseline until the feature is verified and merged. When its HTML files are opened directly, the old Landline V19/V18 mock cards remain as a fallback.
-
-## Landline dogfood target
-
-Landline's current **web prototype is V22**.
-
-The real `LANDLINE-prototype-v22.zip` has now been supplied and checked against Dialogue's local import/viewer assumptions. V22 should remain the first real dogfood prototype used to validate the import → revision → viewer workflow.
-
-Do not assume V19 is the current Landline prototype merely because the original Dialogue mock UI contains a V19 owner page.
-
-## Verification completed so far
-
-The local server/import pipeline on the feature branch was first exercised with generated development ZIPs, including:
-
-- health/API server response
-- generated V22-style ZIP import
-- revision metadata returned by the API
-- imported prototype file serving
-- duplicate revision rejection
-- ZIP `../` path traversal rejection
+- ZIP path/entry-point validation
 - one-wrapper-directory package support
-- Node syntax checks for the new server/browser scripts
+- duplicate revision rejection
+- data-driven Landline revision cards
+- dynamic owner viewer at `prototype.html?revision=...`
+- imported prototypes rendered in a sandboxed iframe
+- Restart / `R` reload support
+- small internal Dialogue API used by the Import UI
+- `Start Dialogue.command` launcher that checks Node, starts Dialogue and opens the browser automatically
 
-The **real Landline V22 ZIP** has now also been inspected and tested against the active feature branch's assumptions:
+The real `LANDLINE-prototype-v22.zip` has been imported and run successfully through the complete local Dialogue UI/server flow on Matt's Mac.
 
-- package size is well below the 100 MB development upload limit
-- ZIP paths pass the current unsafe-path validation
-- there is one valid prototype `index.html`, inside a single wrapper folder (`LANDLINE-prototype-v22/index.html`)
-- all HTML `src` / `href` references resolve to files present in the package
-- the wrapper-folder structure is compatible with Dialogue's current entry-point and relative-asset serving model
-- the prototype was exercised with the same sandbox flags used by Dialogue's viewer (`allow-scripts allow-forms allow-modals allow-popups allow-downloads`)
-- no JavaScript runtime errors or missing image assets were observed in that sandbox test
-- Profile open/edit/avatar/apply flow worked
-- Add person flow worked, including adding a Landline ID into an empty dial slot
-- Volume keyboard interaction worked
-- PTT/VU animation logic ran inside the sandbox
-- Copy Landline ID reached the `Copied` state and closed the sheet as intended
+The end-to-end local pass is therefore considered successful: Dialogue starts locally, the visible Import flow works, Landline V22 imports as a real revision, appears in the project and runs in the Dialogue owner-view shell.
 
-The supplied V22 ZIP contains normal macOS packaging metadata (`__MACOSX`, `.DS_Store` and AppleDouble `._*` files). The importer currently retains these files. They do not block the prototype, but cleanup/ignoring of this metadata is a small importer polish item for later.
+Earlier package/sandbox checks also verified the V22 Profile, Add person, Volume, PTT/VU and Copy Landline ID interactions without JavaScript errors or missing referenced assets.
 
-Still to verify before merging PR #1:
+The supplied V22 ZIP includes harmless macOS metadata (`__MACOSX`, `.DS_Store`, `._*`). Ignoring that metadata remains optional importer polish rather than a blocker.
 
-- run the feature branch on Matt's Mac using the actual local Dialogue server and import the supplied V22 ZIP through the visible Import modal
-- do a visual pass of the temporary Import UI against the existing Dialogue design
-- confirm the real V22 package looks and behaves correctly in the complete Dialogue owner-view shell, not only in the equivalent sandbox compatibility test
-
-## Local build requirements
+## Current local requirements
 
 No web-service accounts are required.
-
-Current local requirements on the feature branch:
 
 - Node.js 22+
 - macOS `/usr/bin/unzip`
 
-Start with `Start Dialogue.command` or `npm start`, then open `http://127.0.0.1:4173`.
+Start with `Start Dialogue.command`, which opens `http://127.0.0.1:4173` automatically while the local server window remains open.
 
-See `docs/LOCAL_BUILD.md`.
+See `docs/LOCAL_BUILD.md` for the development build details.
 
 ## Architecture direction
 
-### Current development architecture
-
-For this product-validation stage:
+The current local architecture is intentionally lightweight product-validation scaffolding:
 
 - existing HTML/CSS/JS Dialogue UI
 - small Node HTTP/API server
@@ -105,57 +57,58 @@ For this product-validation stage:
 - sandboxed iframe viewer
 - no auth or hosted services yet
 
-The local JSON/filesystem implementation is development scaffolding behind an API boundary, not a commitment to that persistence model for production.
+The JSON/filesystem implementation sits behind an API boundary and is not a commitment to the eventual production persistence model.
 
-### Current production preference
-
-After reviewing the actual expected scale with Idealogue's lead developer, the earlier Vercel + Supabase + R2 proposal is no longer the default recommendation. It remains a valid managed option, but is likely more infrastructure than this internal/small-client tool needs.
-
-The current lean production candidate is:
+The current lean production candidate remains:
 
 - GitHub for Dialogue source
 - one small VPS
 - Docker/Coolify or equivalent low-ops deployment
 - Dialogue application/API
 - Postgres when a production database is needed
-- persistent filesystem storage for prototype packages initially
+- persistent filesystem prototype storage initially
 - automated off-server backups
 - separate prototype origin for untrusted prototype HTML/CSS/JS
 
-Do not build production infrastructure until the local import/revision/LLM workflow has been proven unless a new requirement forces the decision earlier.
+Do not build production infrastructure yet unless a new requirement forces the decision. The next priority is proving the LLM publishing loop.
 
 ## LLM/API direction
 
-Dialogue owns the project/revision state and exposes its own LLM-agnostic API/tool layer.
+Dialogue should own project/revision state and expose an LLM-agnostic API/tool layer. ChatGPT or another model connects to Dialogue; Dialogue should not initially be built around one provider's outbound model API.
 
-Potential eventual LLM tools remain conceptually:
+The intended first LLM-facing concepts are:
 
 - `list_projects()`
 - `get_prototype()` / revision context
+- `get_revision()`
 - `publish_prototype()`
-- `publish_revision()` / update prototype by creating a revision
-- later: get/respond to structured review requests
+- `publish_revision()`
 
-The local Import UI is intentionally the first client of the same ingestion concept that future LLM publishing will use.
+Later tools can expose structured review/revision requests and Figma context.
 
-Planned sequence:
+Human ZIP import and future LLM publishing should share the same revision-ingestion pipeline.
 
-1. prove human ZIP import with real Landline V22
-2. exercise the same publishing path from a small local API test client
-3. expose a development endpoint temporarily when ready
-4. connect an actual LLM/MCP client
-5. test LLM → Dialogue revision publishing
-6. only then choose/finalize production hosting/auth/storage
+## Next milestone
 
-The package-level compatibility portion of step 1 is now complete; the remaining step-1 work is the real local Dialogue UI/server pass on Matt's Mac.
+The human import/revision/viewer loop is now proven. Proceed in this order:
+
+1. merge the local prototype-import milestone into `develop`
+2. build a small local API publishing test client
+3. prove API → Dialogue revision publishing (for example, create Landline V23 through the API and see it appear/run in Dialogue)
+4. expose a temporary development endpoint when needed
+5. add a minimal MCP/tool layer
+6. connect a real LLM and prove one complete LLM → Dialogue revision cycle
+7. only then finalize production hosting/auth/database/storage
+
+The key product test is not simply whether an LLM can call Dialogue, but whether it can read enough project/revision context and publish a complete new revision through the same ingestion model without destructive overwrite.
 
 ## Product direction
 
-The current manual workflow remains a prototype of Dialogue itself:
+The current manual workflow is itself a prototype of Dialogue:
 
 `Figma → build → screenshot/explanation → LLM change → new build → review`
 
-The intended Dialogue loop remains:
+The intended long-term loop remains:
 
 `Figma design + live prototype → anchored feedback → structured revision request → connected LLM → new prototype revision → compare again`
 
@@ -165,24 +118,18 @@ Revision context may later include Figma node IDs, prototype/revision IDs, DOM r
 
 Figma remains the source of truth for designed UI.
 
-The new **Import prototype** modal on the feature branch is temporary functional UI built from existing Dialogue modal/form patterns so the workflow can be tested before Matt designs the final import/create experience. It should not be treated as a final Figma-approved component.
+The current **Import prototype** modal is temporary functional UI built from existing Dialogue patterns. It is adequate for product validation but should not be treated as a final Figma-approved component.
 
-Settings remains intentionally incomplete while the LLM connection model is still being proven.
+Settings remains intentionally incomplete while the LLM connection model is being proven.
 
 ## Repository / continuity workflow
 
 Repository: `mattatgit/dialogue`
 
 - `main` — stable baseline; eventually production
-- `develop` — integration branch
+- `develop` — integration branch and standard `/context` source
 - `feature/*` — focused implementation branches
 
-GitHub is the source of truth for application files and durable project context. Imported runtime prototypes are not source files and belong outside Git.
+GitHub is the source of truth for Dialogue implementation files and durable project context. Imported runtime prototypes/data are not application source and stay outside Git.
 
-When a new chat starts, `/context` should load `CONTEXT.md`, this file, the durable docs and relevant current/active-branch source rather than relying on chat memory.
-
-## Next step
-
-Run `feature/local-prototype-import` on Matt's Mac and import the supplied **Landline V22** ZIP through the real Dialogue Import modal.
-
-If the full local UI/server pass is good, fix any visual compatibility issues, then complete/merge PR #1. The following milestone is a small local API publishing test client, followed later by the first real LLM connection.
+When a new chat starts, `/context` should load `CONTEXT.md`, this file, the durable docs and any active branch named here rather than relying on chat memory.

@@ -34,7 +34,7 @@ This deliberately avoids an early framework/database/hosting migration while the
 
 ### Local persistence
 
-Development metadata currently lives in `.dialogue-data/db.json` on the active functional branch.
+Development metadata currently lives in `.dialogue-data/db.json`.
 
 Imported prototype packages are extracted under `.dialogue-data/prototypes/`.
 
@@ -42,7 +42,7 @@ This is development scaffolding only. Application code should continue to intera
 
 ### Local importer
 
-The active functional branch importer:
+The current importer:
 
 1. accepts a ZIP package
 2. validates obvious unsafe paths
@@ -67,7 +67,7 @@ Core concepts remain:
 - comments/review annotations
 - revision requests
 
-The local functional build currently implements only projects, prototypes and revisions.
+The local JSON build currently implements only projects, prototypes and revisions.
 
 A prototype is the stable object. Each imported or LLM-produced update becomes a revision with its own immutable package and metadata.
 

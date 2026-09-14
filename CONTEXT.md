@@ -18,7 +18,7 @@ Do not ask the user to restate project history that is already recorded here.
    - `docs/DESIGN.md`
    - `docs/DEVELOPMENT.md`
    - `docs/LOCAL_BUILD.md` when local functional work is active
-4. Inspect the current `develop` branch and any active feature branch named in `docs/CURRENT.md` that is relevant to the next task.
+4. Inspect the current `develop` branch and any active feature branch relevant to the next task.
 5. Check recent commits/PR state when necessary to understand changes made after the documentation was last updated.
 
 ## Ground rules

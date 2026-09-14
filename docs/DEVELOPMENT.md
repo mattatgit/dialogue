@@ -8,8 +8,6 @@ Active functional work is currently on:
 
 `feature/local-prototype-import`
 
-with draft PR #1 targeting `develop`.
-
 The immediate goal is not a production framework migration. It is to make the existing UI genuinely useful enough to import, store and run real Landline prototype revisions locally.
 
 ## Branch strategy
@@ -34,14 +32,14 @@ Codex is not required for this workflow.
 
 ## Lightweight local build
 
-The active functional branch adds a zero-npm-dependency Node server around the existing UI.
+The current functional branch adds a zero-npm-dependency Node server around the existing UI.
 
 Requirements:
 
 - Node.js 22+
 - macOS `/usr/bin/unzip`
 
-On that branch, start by double-clicking `Start Dialogue.command` or run:
+Start by double-clicking `Start Dialogue.command` or run:
 
 ```text
 npm start
@@ -79,7 +77,7 @@ The current Import prototype modal is such temporary UI.
 
 ## Test checklist for local prototype import
 
-Before merging PR #1 into `develop`:
+Before merging the current feature into `develop`:
 
 - server starts on localhost
 - static Dialogue pages still load
@@ -100,13 +98,12 @@ Before merging PR #1 into `develop`:
 
 1. prove real Landline V22 import/viewing
 2. resolve any prototype compatibility/sandbox issues
-3. merge PR #1 when the functional slice is sound
-4. make the local data/API model slightly more general if the real workflow requires it
-5. exercise revision publishing from a small API test client
-6. add development authentication/token protection before internet exposure
-7. temporarily expose the development API and test an actual LLM/MCP connection
-8. dogfood the LLM → Dialogue revision loop
-9. only then finalize production hosting/database/storage/auth choices
+3. make the local data/API model slightly more general if the real workflow requires it
+4. exercise revision publishing from a small API test client
+5. add development authentication/token protection before internet exposure
+6. temporarily expose the development API and test an actual LLM/MCP connection
+7. dogfood the LLM → Dialogue revision loop
+8. only then finalize production hosting/database/storage/auth choices
 
 ## Production deployment direction
 
