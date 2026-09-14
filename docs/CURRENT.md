@@ -4,7 +4,7 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Current status
 
-Three lightweight functional milestones are now complete and merged into `develop`:
+Three lightweight functional milestones are complete and merged into `develop`:
 
 1. PR #1 — local prototype import/viewer
 2. PR #2 — external HTTP/API revision publishing
@@ -19,9 +19,11 @@ Verified sequence on Matt's Mac:
 - V24 appeared in the Landline project and ran correctly
 - V24 was intentionally visually/functionally equivalent to V23 because the MCP smoke test changed only a non-visible HTML comment
 
-The local MCP transport/revision model is therefore considered proven.
+The local MCP transport/revision model is therefore proven.
 
-The next milestone is the first **real LLM-authored visible revision**.
+Matt has now created an **Idealogue ChatGPT Business workspace** while keeping his Personal workspace separate. Dialogue will be recreated as a Project in the Business workspace rather than merging the Personal workspace. GitHub remains the durable source of truth for project continuity.
+
+The next milestone is the first **real ChatGPT-authored visible revision** using the Business workspace's custom MCP support.
 
 ## Verified local functional build
 
@@ -119,38 +121,35 @@ Preferred LLM editing flow:
 5. publish a **new** derived revision with bounded text edits
 6. review the new revision in Dialogue
 
-## ChatGPT plan / first real LLM test path
+## ChatGPT Business / first real LLM test path
 
-Matt confirmed the current ChatGPT subscription is **Plus**.
+Matt has created an Idealogue ChatGPT Business workspace specifically so the first real Dialogue integration can use ChatGPT's custom MCP support with write/modify actions.
 
-As of September 2026, OpenAI's current product documentation says full custom MCP support with write/modify actions is limited to ChatGPT Business and Enterprise/Edu workspaces. Plus therefore cannot be used for the direct ChatGPT UI → custom Dialogue MCP `publish_revision` test.
-
-Do **not** upgrade the ChatGPT plan just to prove the product workflow yet.
+The Personal workspace will remain separate. The Dialogue Project itself is not being migrated; instead, a new Dialogue Project will be created in the Business workspace and will reconstruct project state from this repository through the existing `/context` workflow.
 
 Preferred next test path:
 
-- keep Dialogue and its MCP bridge local
-- build a small local LLM test harness that uses the OpenAI API as the model client and maps model tool calls to Dialogue's existing MCP tools
-- keep the same `publish_revision` operation and immutable revision model
-- store any API credential outside Git (prefer macOS Keychain/local secret handling)
-- use a one-click designer-friendly launcher rather than requiring Terminal work
+- keep Dialogue and its local MCP bridge on Matt's Mac
+- configure ChatGPT Business developer mode / custom MCP connection using the supported secure local/private MCP connection path
+- do not expose Dialogue's localhost web app directly to the public internet
+- ask ChatGPT to inspect the latest Landline revision through the MCP tools
+- ask it to make one small visible change and publish a new immutable revision through `publish_revision`
 
-OpenAI API billing is separate from the ChatGPT Plus subscription, so this path will require enabling API billing and creating an API key. It does not require production hosting or a ChatGPT plan upgrade.
-
-Alternative later test: a ChatGPT Business workspace can be used to test the direct ChatGPT custom-MCP experience once that specific product experience becomes worth validating.
+The OpenAI API billing/key route remains a valid fallback for provider-agnostic testing, but it is no longer the preferred path now that the Business workspace is available.
 
 ## Next milestone
 
-1. build the local OpenAI-API LLM test harness around the existing Dialogue MCP tools
-2. keep Dialogue local; no public tunnel or production hosting is required for this test
-3. provide a non-Terminal setup/launcher and secure local API-key handling
-4. use the real LLM to inspect the latest Landline revision (currently V24 on Matt's test Mac)
-5. ask it to make one small visible change
-6. have it publish a new immutable revision through `publish_revision`
-7. verify the resulting revision appears and runs in Dialogue
-8. use the result to refine tool schemas/context before any production infrastructure work
+1. recreate the Dialogue Project in the Idealogue Business workspace with the minimal repository/context instructions
+2. confirm GitHub access is available from that workspace
+3. enable/configure the supported ChatGPT Business custom MCP developer workflow
+4. connect ChatGPT Business to the local Dialogue MCP bridge securely
+5. use the real model to inspect the latest Landline revision (currently V24 on Matt's test Mac)
+6. ask it to make one small visible change
+7. have it publish a new immutable revision through `publish_revision`
+8. verify the resulting revision appears and runs in Dialogue
+9. use the result to refine tool schemas/context before any production infrastructure work
 
-The key product question is now whether an actual LLM can get enough context through Dialogue's tools to make a useful targeted change and publish a safe additive revision.
+The key product question is now whether an actual ChatGPT model can get enough context through Dialogue's tools to make a useful targeted change and publish a safe additive revision.
 
 ## Product direction
 
