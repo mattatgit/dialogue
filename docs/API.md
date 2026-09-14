@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Dialogue should expose a stable, LLM-agnostic application API. The browser UI, local test clients and future MCP/LLM adapters should all use the same underlying project/prototype/revision model rather than separate publishing implementations.
+Dialogue exposes a stable, LLM-agnostic application API. The browser UI, local test clients and MCP/LLM adapters should all converge on the same project/prototype/revision model rather than creating separate publishing implementations.
 
-This document records the current local API surface and the next publishing milestone.
+This document records the current lightweight local API surface, the verified publishing milestone, and how the MCP layer currently sits on top of it.
 
 ## Current local API
 
@@ -18,36 +18,30 @@ The lightweight local server currently exposes:
 
 The import route accepts a complete prototype ZIP package as the request body and optional query parameters such as prototype name and revision version.
 
-The browser Import UI already uses this route. This is important because future API/LLM publishing should converge on the same ingestion path rather than bypassing it.
+The browser Import UI uses this route. External publishing also returns through this same ingestion path so human import and machine publishing share the authoritative revision-creation behavior.
 
-## Local API publishing test client
+## Verified external API publishing milestone
 
-Active implementation branch:
+The API publishing client is now merged into `develop`:
 
-`feature/local-api-publishing`
-
-The branch adds:
-
-- `scripts/publish-revision.js` — a small Node client that talks to Dialogue only through HTTP
-- `Publish API Test.command` — a one-click macOS wrapper that asks for a ZIP package and publishes it through the API
+- `scripts/publish-revision.js` — small Node client that talks to Dialogue only through HTTP
+- `Publish API Test.command` — one-click macOS wrapper for choosing a ZIP and publishing it through the API
 - automatic next numeric revision selection when a version is not supplied
 
-The expected first test is:
+Verified on Matt's Mac:
 
-1. keep `Start Dialogue.command` running
-2. double-click `Publish API Test.command`
-3. choose the existing Landline V22 ZIP
-4. the client reads the current Landline revisions through the API
-5. because V22 already exists, it chooses V23
-6. it posts the ZIP through the Dialogue import API
-7. Dialogue creates a new V23 revision
-8. the Landline project page opens so the new revision can be verified
+1. Dialogue already contained imported Landline V22;
+2. the external client read current revisions through the API;
+3. it selected V23;
+4. it posted the V22 package through the Dialogue import route;
+5. Dialogue created Landline V23;
+6. V23 appeared in the Landline project and ran correctly.
 
-Using the V22 package again is intentional for this milestone: the goal is to prove that a non-UI client can publish a complete new Dialogue revision through the API. The contents do not need to differ yet.
+Using the V22 package again was intentional: that milestone proved external revision transport/ingestion, not code generation.
 
 ## Command-line client contract
 
-The test client can also be called directly:
+The development client can be called directly:
 
 ```text
 node scripts/publish-revision.js <prototype.zip>
@@ -62,50 +56,63 @@ Optional flags:
 
 This is development tooling, not intended designer-facing product UI.
 
-## Why this milestone comes before MCP
+## MCP layer built after the API proof
 
-Before exposing Dialogue to a remote LLM, we want to prove that the API itself can support the publishing operation independently of the browser Import UI.
+The API milestone was completed before MCP so the LLM adapter would not invent a second storage/revision path.
 
-If this works, the next adapter only needs to translate an LLM tool call into the same application operation rather than inventing a second storage/revision path.
-
-## Planned first LLM-facing tools
-
-The likely minimal tool layer is:
+The local MCP adapter now exposes:
 
 - `list_projects()`
-- `get_prototype()` / revision context
-- `get_revision()`
-- `publish_prototype()`
-- `publish_revision()`
+- `list_revisions(project_slug)`
+- `get_revision(revision_id)`
+- `list_revision_files(revision_id)`
+- `read_revision_file(revision_id, path)`
+- `publish_revision(...)`
 
-The exact schemas are not fixed yet. They should be shaped by the local API publishing test and the first real LLM connection.
+The local MCP smoke test successfully used these operations to inspect Landline V23 and publish V24 as a new immutable derived revision.
+
+`publish_revision` clones/derives from the selected base revision, modifies only bounded text files, reuses unchanged assets, then sends a complete derived package back through `POST /api/projects/:project/import`.
+
+This means the authoritative write path remains the Dialogue HTTP ingestion API even when the caller is MCP.
+
+See `docs/MCP.md`.
+
+## Current development-only gap
+
+Revision file listing/reading is not yet exposed through the HTTP API. The MCP adapter currently reads those files directly from local `.dialogue-data/` storage.
+
+That is acceptable for the local proof-of-concept but should not survive into production. The eventual Dialogue application/API should expose proper revision-file read/list operations so the MCP adapter does not need privileged knowledge of storage layout.
 
 ## Connection model
 
-Initial direction:
+Current architecture:
 
 ```text
 ChatGPT / other LLM
         ↓
 MCP or equivalent adapter
         ↓
-Dialogue API
-        ↓
-Dialogue project/prototype/revision state
+Dialogue application/API + revision model
 ```
 
-Dialogue should not initially depend on making outbound OpenAI/Anthropic model calls itself. The LLM is a replaceable client of Dialogue.
+Dialogue should not be designed around making provider-specific outbound model calls as its core architecture. The LLM remains a replaceable client of Dialogue.
+
+For the next test, Matt has created an Idealogue ChatGPT Business workspace so ChatGPT's custom MCP support can be used directly.
 
 ## Development security
 
-The current server remains localhost-only. No remote LLM can reach it yet.
+The Dialogue local web server remains localhost-only.
 
-When the local API contract is proven, a temporary HTTPS development endpoint/tunnel can be introduced for the first external LLM test. Authentication for that test can start with a narrow development token before any final OAuth/connection system is designed.
+The current MCP server uses stdio and should be connected through the supported secure local/private MCP mechanism for ChatGPT Business rather than by exposing Dialogue's localhost application directly to the public internet.
 
-Production should still use a separate origin for untrusted prototype code.
+No destructive delete tool exists. `publish_revision` creates a new immutable revision rather than mutating its base.
 
-## Next decision after API test
+Production should use a separate browser origin for untrusted prototype code.
 
-If API → Dialogue revision publishing works correctly, proceed to a minimal MCP/tool adapter and temporary remote development access.
+## Next API evolution after the real LLM test
 
-If the API publishing test exposes awkwardness in how packages, revisions or project context are represented, adjust the application API first. Do not lock the production stack or MCP schema until this loop is understood.
+Do not expand the API spec pre-emptively.
+
+First connect a real ChatGPT Business model to the existing MCP surface, ask it to inspect V24 and publish one small visible derived revision, then use observed friction to decide which API/tool additions are actually needed.
+
+Likely candidates include proper HTTP revision-file read/list operations and richer structured revision context, but they should be driven by the real model test rather than guessed in advance.
