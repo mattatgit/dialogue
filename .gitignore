@@ -7,3 +7,5 @@ node_modules/
 .dialogue-data/
 *.log
 .direnv/
+nixos.qcow2
+result

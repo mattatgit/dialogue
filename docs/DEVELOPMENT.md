@@ -30,6 +30,20 @@ OPEN=0 dev       # don't launch a browser
 
 `npm start` (see below) still works inside the devshell for a plain server without reload.
 
+### Hosted build: NixOS module and demo VM
+
+Nix files live under `nix/`: `package.nix` (the app + `bin/dialogue-server`), `module.nix` (NixOS module), `vm.nix` (demo VM), `devshell.nix`.
+
+`nixosModules.default` provides `services.dialogue`: a systemd service (`DynamicUser`, data in `/var/lib/dialogue` via `DIALOGUE_DATA`, Node bound to `127.0.0.1:<port>`) and, with `services.dialogue.nginx.enable`, an nginx virtual host proxying to it. No authentication yet.
+
+```sh
+nix run .#vm    # headless VM with the module + nginx; app at http://127.0.0.1:8483
+```
+
+The VM's disk image `nixos.qcow2` is written to the current directory and is ignored by Git. Quit with `Ctrl-a x` (QEMU) or `poweroff` at the root prompt.
+
+`DIALOGUE_DATA` overrides the data directory for both `server.js` and `mcp-server.mjs`; default remains `.dialogue-data/` next to the code.
+
 ## Branch strategy
 
 - `main` — stable/tested baseline; eventually production

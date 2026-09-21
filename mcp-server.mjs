@@ -14,7 +14,7 @@ import * as z from 'zod/v4';
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const DATA_ROOT = path.resolve(ROOT, '.dialogue-data');
+const DATA_ROOT = path.resolve(process.env.DIALOGUE_DATA || path.join(ROOT, '.dialogue-data'));
 const DIALOGUE_BASE = process.env.DIALOGUE_BASE_URL || 'http://127.0.0.1:4173';
 const ZIP_BIN = process.env.DIALOGUE_ZIP || '/usr/bin/zip';
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;

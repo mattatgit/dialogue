@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 const ROOT = __dirname;
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4173);
-const DATA_ROOT = path.join(ROOT, '.dialogue-data');
+const DATA_ROOT = path.resolve(process.env.DIALOGUE_DATA || path.join(ROOT, '.dialogue-data'));
 const DB_PATH = path.join(DATA_ROOT, 'db.json');
 const TMP_ROOT = path.join(DATA_ROOT, 'tmp');
 const PROTOTYPE_ROOT = path.join(DATA_ROOT, 'prototypes');
@@ -506,7 +506,7 @@ ensureData()
     const server = http.createServer(requestHandler);
     server.listen(PORT, HOST, () => {
       console.log(`Dialogue local functional build: http://${HOST}:${PORT}`);
-      console.log('Data is stored locally in .dialogue-data/ and is not committed to Git.');
+      console.log(`Data is stored locally in ${DATA_ROOT} and is not committed to Git.`);
     });
   })
   .catch((error) => {
