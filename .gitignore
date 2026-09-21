@@ -6,3 +6,4 @@ node_modules/
 .DS_Store
 .dialogue-data/
 *.log
+.direnv/

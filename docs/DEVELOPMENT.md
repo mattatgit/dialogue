@@ -14,6 +14,22 @@ The current product-development goal is the first **real ChatGPT-authored visibl
 
 The immediate goal is still not a production framework/database/hosting migration. Production infrastructure remains deferred until the real LLM revision loop has been dogfooded.
 
+## Local development (Nix)
+
+The repo ships a Nix flake devshell providing Node.js, `unzip`/`zip` (wired to `DIALOGUE_UNZIP`/`DIALOGUE_ZIP`) and a live-reloading `dev` command.
+
+With [direnv](https://direnv.net) installed, `direnv allow` once in the repo root; the shell then loads automatically. Without direnv, use `nix develop`.
+
+```sh
+dev              # app at http://127.0.0.1:8080, opens it in your browser
+PORT=3000 dev    # alternative port
+OPEN=0 dev       # don't launch a browser
+```
+
+`dev` runs `node --watch server.js` on 4173 and puts browser-sync in front of it on `PORT`: edits to HTML/CSS/JS/assets reload open tabs (CSS is injected in place); edits to `server.js` restart the server, then reload. Both listeners are bound to localhost only.
+
+`npm start` (see below) still works inside the devshell for a plain server without reload.
+
 ## Branch strategy
 
 - `main` — stable/tested baseline; eventually production
