@@ -32,6 +32,23 @@ The next milestone is no longer “first connection”. It is **repeatable onboa
 
 The standard fresh-chat context phrase remains **`Load project context`**.
 
+## Local data safeguard hardening — 2026-09-22
+
+During the combined-launcher smoke test on Matt's Mac, Dialogue returned the default Landline project with zero revisions. Investigation showed that the existing `.dialogue-data/` directory dated from September 14, while `db.json` had been recreated at 13:38 on September 22 and most prior revision directories were no longer present. The exact external deletion/cleanup source was not established. The committed Dialogue setup/start launchers do not delete `.dialogue-data/`, and Git does not track that directory.
+
+Recovery of the old local revisions is not required because the latest prototype ZIPs are retained outside Dialogue and this remains disposable early-stage test data.
+
+Safeguards now added on `develop`:
+
+- back up existing metadata to `.dialogue-data/db.json.bak` before metadata replacement;
+- write a reserved `.dialogue-revision.json` manifest into each newly imported/published revision directory;
+- refuse startup if `db.json` is missing while prototype storage still contains content, instead of silently creating an empty database;
+- refuse startup for unreadable/corrupt `db.json`;
+- log genuine first-run data-store creation with path/timestamp;
+- hide/exclude the reserved revision manifest from prototype serving and MCP prototype file operations/derived ZIPs.
+
+These safeguards improve detection and metadata recoverability but do not protect against deletion of the entire Git-ignored `.dialogue-data/` directory. Prototype source ZIPs remain the practical external fallback during this development phase.
+
 ## Saori's Intel iMac setup — 2026-09-22
 
 Matt reports that Dialogue is running on Saori's Intel iMac, **Landline V23.17** has been imported, and the prototype works correctly. This is user-confirmed local application/import/viewer success; it does not yet verify the ChatGPT tunnel or a model-authored revision on that machine. Restart persistence and the exact macOS version have not been reported in this setup conversation.
