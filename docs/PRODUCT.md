@@ -19,9 +19,11 @@ The workflow being used to build Dialogue today is effectively a manual prototyp
 
 Dialogue is intended to remove the friction from that loop. In particular, it should reduce or eliminate manual screenshot handoffs, ambiguous references to UI elements, ZIP/file transfers, and loss of implementation context between conversations.
 
-## Initial users
+## Initial users and scale
 
 The first production release is for a very small internal Idealogue team. Public self-sign-up is not planned for the initial version.
+
+The expected real audience for this web version is primarily Matt, Saori and a small number of clients. There is no current requirement to future-proof this implementation for a large public SaaS audience.
 
 The product should be designer-first: a designer should be able to review, comment on, revise and publish prototypes without needing to operate developer tooling directly.
 
@@ -75,7 +77,7 @@ Publishing should be atomic: validate the complete package, then make that revis
 
 ## Revisions
 
-Internally, prototypes and revisions should be separate concepts. LLM updates should create a new revision rather than destructively replacing the previous version.
+Internally, prototypes and revisions are separate concepts. LLM updates should create a new revision rather than destructively replacing the previous version.
 
 This supports:
 
@@ -85,15 +87,17 @@ This supports:
 - traceability from feedback to resulting revision
 - retaining the design/comment context that caused a change
 
-The product should be able to represent a progression such as V18 → V19 → V20 without losing earlier working versions.
+The lightweight local build has already proven this model with Landline V22 → V23 → V24 → V25 while leaving earlier revisions intact.
 
 ## LLM relationship
 
-Dialogue should not be a ChatGPT-specific product. Dialogue should expose an LLM-facing API/tool layer that capable models can connect to.
+Dialogue should not be a ChatGPT-specific product. Dialogue exposes an LLM-facing API/tool layer that capable models can connect to.
 
-ChatGPT may be the initial integration, but the product model should remain provider-agnostic so another LLM can participate in the same workflow later.
+ChatGPT is the initial integration target, but the product model remains provider-agnostic so another LLM can participate in the same workflow later.
 
-The connected LLM should be able to discover Dialogue projects, read relevant prototype/revision context, publish new prototypes and create new revisions from requested changes.
+The connected LLM should be able to discover Dialogue projects, read relevant prototype/revision context, inspect the files needed for a requested change, and publish a new immutable revision.
+
+The local MCP bridge and Secure MCP Tunnel have now proven those basic operations with a real ChatGPT model: ChatGPT inspected Landline V24 and published V25 with the requested visible heading change.
 
 ## Sharing
 
@@ -101,20 +105,40 @@ Public share URLs should be unguessable capability-style links using cryptograph
 
 The public Share shell should remain HTML/CSS-only where practical. A prototype itself may contain JavaScript when required.
 
-## Planned capabilities
+## Proven lightweight milestones
 
-Near-term:
+Completed locally with Landline:
 
-- authentication
-- projects
-- prototype publishing
-- prototype revisions
+- real project/prototype/revision persistence for the current dogfood project
+- manual prototype import
+- prototype package validation/storage
+- live imported-prototype owner viewer
+- API publishing using the same ingestion path as manual import
+- local MCP project/revision/file inspection
+- additive `publish_revision` deriving a new complete revision from an immutable base
+
+Verified sequence:
+
+1. imported real Landline V22 through Dialogue;
+2. external API client published V23;
+3. local MCP client inspected V23 and published V24;
+4. ChatGPT Business connected through Secure MCP Tunnel, inspected V24 and published V25;
+5. V25 changed only the requested main heading, appeared in Dialogue and ran correctly.
+
+V24 was intentionally non-visible to prove the infrastructure/tool loop. V25 then proved the real model-authored visible write path.
+
+## Near-term capabilities
+
+Next:
+
+- validate the one-time setup and combined launcher flow
+- establish Saori's distinct supported ChatGPT connection
+- refine MCP/API context schemas through additional real revision requests
 - thumbnails/screenshots
-- owner view
+- stronger revision management UI
+- authentication when the workflow moves beyond local development
 - public sharing
-- project/prototype management
-- staging/production environments
-- LLM connection/publishing API
+- broader project/prototype management
 
 Later:
 
@@ -127,10 +151,26 @@ Later:
 - JS warning/consent state for prototypes that require scripting
 - share-link expiry/password options
 
+## Current dogfood milestone
+
+The first **real model-authored visible revision** is complete.
+
+ChatGPT Business connected to Dialogue's local MCP bridge through Secure MCP Tunnel, discovered Landline V24, inspected the relevant revision context and published V25 with the requested heading change. Dialogue displayed the result correctly and preserved V24.
+
+The next dogfood milestone is repeatability and richer context: make setup easy for another designer, then run more realistic UI revision requests and improve Dialogue's tools/context whenever the model needs avoidable manual explanation.
+
+The temporary Import UI and current development launchers are not final product design.
+
 ## Product-learning principle
 
 Friction encountered while building Dialogue is useful product evidence. Problems such as screenshot handoffs, ambiguous element references, ZIP transfers, cross-machine file syncing, lost chat context and difficulty comparing revisions should be treated as signals for features Dialogue can eventually solve.
 
+The same applies to LLM integration: if the real model struggles to identify the right file/element/change, improve Dialogue's context model rather than compensating with ad-hoc manual instructions forever.
+
 ## Current repository state
 
-The repository currently contains a static interaction prototype, not the production implementation. Product behavior and visual fidelity in that prototype should be preserved while the real application architecture is introduced incrementally.
+The lightweight functional import/API/MCP build and the first successful real ChatGPT write path are being promoted to `main` as the new stable baseline.
+
+After that promotion, new focused work should normally use short-lived `feature/*` branches from `main` and return through tested pull requests. The long-lived `develop` integration branch will be retired.
+
+GitHub is the durable source of truth for Dialogue application code and project documentation. Imported runtime prototypes themselves live in application storage rather than being treated as Dialogue source files.

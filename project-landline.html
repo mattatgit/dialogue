@@ -1,3 +1,69 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dialogue — Landline</title><link rel="stylesheet" href="css/dialogue.css"></head><body>
-<div class="app-shell"><aside class="sidebar"><div class="brand"><div class="brand-mark"><i></i><i></i><i></i><i></i></div></div><nav class="side-nav"><a class="side-link active" href="projects.html"><span class="nav-icon"><img src="assets/sidebar-projects.svg" alt=""></span>Projects</a><a class="side-link" href="settings.html"><span class="nav-icon"><img src="assets/sidebar-settings.svg" alt=""></span>Settings</a></nav><a class="profile-link" href="projects.html#profile"><span class="profile-inner"><span class="avatar">SA</span><span class="profile-copy"><strong>Saori</strong><span>Editor</span></span><span class="chev"><img src="assets/profile-arrow.svg" alt=""></span></span></a></aside>
-<main class="main"><header class="page-head"><h1 class="page-title breadcrumbs"><a class="crumb-link" href="projects.html">Projects</a><svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg><span class="crumb-current">Landline</span></h1><button class="pill" data-llm-create>Create</button></header><section class="grid"><a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><img class="new-badge-img" src="assets/badge-new.svg" alt="New"><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V19</span><span class="proto-time">Edited 2:35pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a><a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V18</span><span class="proto-time">Edited 2:18pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a></section></main></div><script src="js/dialogue.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dialogue — Landline</title>
+  <link rel="stylesheet" href="css/dialogue.css">
+  <link rel="stylesheet" href="css/local-functional.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark"><i></i><i></i><i></i><i></i></div></div>
+      <nav class="side-nav">
+        <a class="side-link active" href="projects.html"><span class="nav-icon"><img src="assets/sidebar-projects.svg" alt=""></span>Projects</a>
+        <a class="side-link" href="settings.html"><span class="nav-icon"><img src="assets/sidebar-settings.svg" alt=""></span>Settings</a>
+      </nav>
+      <a class="profile-link" href="projects.html#profile"><span class="profile-inner"><span class="avatar">SA</span><span class="profile-copy"><strong>Saori</strong><span>Editor</span></span><span class="chev"><img src="assets/profile-arrow.svg" alt=""></span></span></a>
+    </aside>
+
+    <main class="main">
+      <header class="page-head">
+        <h1 class="page-title breadcrumbs">
+          <a class="crumb-link" href="projects.html">Projects</a>
+          <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+          <span class="crumb-current">Landline</span>
+        </h1>
+        <button class="pill" type="button" data-import-open>Import</button>
+      </header>
+
+      <section class="grid" data-prototype-grid>
+        <!-- Static fallback remains visible when this prototype is opened without the local server. -->
+        <a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><img class="new-badge-img" src="assets/badge-new.svg" alt="New"><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V19</span><span class="proto-time">Edited 2:35pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a>
+        <a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V18</span><span class="proto-time">Edited 2:18pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-layer import-prototype-layer" data-import-layer aria-hidden="true">
+    <section class="modal import-prototype-modal" role="dialog" aria-modal="true" aria-labelledby="import-prototype-title">
+      <button class="modal-close" type="button" aria-label="Close import dialog" data-import-close>×</button>
+      <h2 id="import-prototype-title">Import prototype</h2>
+      <form data-import-form>
+        <div class="modal-section">
+          <div class="modal-label">Prototype name</div>
+          <input class="form-field" type="text" name="prototypeName" value="Landline" autocomplete="off">
+        </div>
+        <div class="modal-section">
+          <div class="modal-label">Revision</div>
+          <input class="form-field" type="text" name="version" value="V22" autocomplete="off">
+        </div>
+        <div class="modal-section">
+          <div class="modal-label">Prototype package</div>
+          <input class="hidden-file-input" type="file" accept=".zip,application/zip" data-import-file>
+          <div class="import-file-row">
+            <button class="pill secondary import-file-button" type="button" data-import-file-trigger>Choose ZIP</button>
+            <span class="import-file-name" data-import-file-name>No ZIP selected</span>
+          </div>
+        </div>
+        <div class="import-status" data-import-status aria-live="polite"></div>
+        <button class="apply import-submit" type="submit">Import</button>
+      </form>
+    </section>
+  </div>
+
+  <script src="js/dialogue.js"></script>
+  <script src="js/local-import.js"></script>
+</body>
+</html>
