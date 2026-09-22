@@ -71,6 +71,7 @@ Core concepts remain:
 - Figma design references
 - comments/review annotations
 - revision requests
+- revision-request activity/events
 
 The local JSON build currently implements only projects, prototypes and revisions.
 
@@ -143,6 +144,50 @@ Later tools may include:
 
 MCP is an adapter on top of Dialogue's application/revision model rather than the core data architecture. This keeps the system usable by other LLM providers/protocols later.
 
+### Provider-neutral feedback/activity contract
+
+The prototype review surface should support anchored revision feedback without requiring Dialogue to become a full multi-provider chat client.
+
+Dialogue should own a small provider-neutral request/activity model. Provider-specific adapters may translate OpenAI, Anthropic, Kimi, Qwen or other responses into this model, but the UI should not render arbitrary raw provider payloads directly.
+
+A revision request should be able to retain:
+
+- user feedback text;
+- project/prototype/revision identifiers;
+- anchored DOM/visual/Figma context;
+- request lifecycle status;
+- observable tool/action events;
+- optional explicit assistant messages;
+- optional provider-supplied reasoning summaries;
+- resulting revision ID;
+- error/retry information.
+
+Conceptual event types:
+
+```text
+request_created
+tool_called
+tool_result
+assistant_message      # optional
+reasoning_summary      # optional
+revision_published
+error
+```
+
+The durable cross-provider contract is based on **observable actions and explicit provider-visible output**, not raw private chain-of-thought. Dialogue should not require every provider to expose equivalent reasoning or conversation data.
+
+This keeps the architecture aligned with the existing direction:
+
+```text
+provider chat / agent
+   ↓ adapter (MCP or another supported protocol)
+Dialogue revision-request + activity model
+   ↓
+prototype revision workflow
+```
+
+If later product testing shows value in richer visible assistant prose, the provider adapter can populate optional `assistant_message`/`reasoning_summary` events without changing Dialogue's core revision-request model.
+
 ### Current development-only MCP storage coupling
 
 The lightweight HTTP API does not yet expose revision-file list/read operations, so the local MCP adapter currently reads those files directly from `.dialogue-data/`.
@@ -192,12 +237,12 @@ Long term:
 
 1. Dialogue displays a Figma design beside a live prototype revision.
 2. The designer comments on a specific design/prototype element.
-3. Dialogue captures the comment plus structured context.
+3. Dialogue captures the comment plus structured context and creates a revision request.
 4. Dialogue makes that revision request available through its LLM-facing layer.
-5. The LLM reads additional project/revision context as needed.
+5. The LLM reads additional project/revision context as needed while Dialogue records provider-neutral activity events.
 6. The LLM publishes a complete new revision.
-7. Dialogue validates/stores the revision atomically.
-8. The new revision appears for comparison.
+7. Dialogue validates/stores the revision atomically and links it to the request.
+8. The new revision appears for comparison alongside the useful request/activity history.
 9. earlier revisions remain available for history/rollback.
 
 ## Current production direction
