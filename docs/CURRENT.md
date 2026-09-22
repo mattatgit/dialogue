@@ -31,11 +31,29 @@ The next milestone is the first **real ChatGPT-authored visible revision** using
 
 Matt reports that Dialogue is running on Saori's Intel iMac, **Landline V23.17** has been imported, and the prototype works correctly. This is user-confirmed local application/import/viewer success; it does not yet verify the ChatGPT tunnel or a model-authored revision on that machine. Restart persistence and the exact macOS version have not been reported in this setup conversation.
 
-The immediate next step is Stage 2: install the MCP dependencies in Saori's existing Dialogue clone, verify/install the tunnel client, configure a distinct secure ChatGPT connection for her Mac, then perform a read-only check against V23.17 before any publishing.
+Stage 2 is currently blocked at the fresh Homebrew installation, not at Dialogue import/viewing. The immediate next step is to select and verify an appropriate tunnel installation/deployment route before resuming the connection setup. Do not repeat the earlier Homebrew installer instructions on this Intel Mac. After a working route is established, confirm the MCP dependencies, configure a distinct secure ChatGPT connection, and perform a read-only check against V23.17 before any publishing.
 
 Use a separate Terminal window for installation commands while the local app is running. Give explicit Finder/Terminal steps rather than assuming command-line familiarity. Stop the existing app-only server before starting the combined launcher; do not run two Dialogue servers on port 4173.
 
 Her runtime data is local to her Mac. Cloning/pulling the repository does not synchronize Matt's revision library, and Matt's V24 must not be assumed to be Saori's latest revision.
+
+### Confirmed Homebrew installation blocker
+
+Matt reports that the official shell installer refused the Intel iMac with an Apple-Silicon-only message. On 2026-09-22, the live `Homebrew/install` repository was checked: `install.sh` explicitly aborts on macOS when `uname -m` is not `arm64`, with `Homebrew on macOS is only supported on Apple Silicon processors!`. This is a hard block in the current fresh-install script, not merely a warning that can be acknowledged and ignored. The previous chat guidance suggesting that a sufficiently recent macOS version would make that installer suitable for an Intel Mac was incorrect.
+
+Homebrew's support-tier documentation distinguishes existing Intel installations (Tier 3, unsupported) from the fresh-install path; do not infer fresh-install compatibility from the presence of Intel prefixes or older binaries in documentation.
+
+OpenAI's current `openai/homebrew-tools` formula still references a `darwin-amd64` tunnel-client artifact. That establishes that an Intel artifact is listed, not that installation or operation has been verified on Saori's iMac. OpenAI's `tunnel-client` README currently identifies Homebrew as the supported macOS installation route, states that direct-download release ZIPs are not notarized and can be blocked by Gatekeeper, and advises against bypassing that check. Do not present direct download, an old Homebrew installer, or another package manager as a tested drop-in fix.
+
+Keep the working local Dialogue installation and imported V23.17 intact. A replacement Mac has been mentioned as a possibility, but no purchase or architecture change has been decided. An alternative client build/installation or a shared supported host would require separate engineering and validation; shared authenticated browser access is not implemented in this local build. Do not expose the unauthenticated localhost app publicly to work around this installer failure.
+
+Sources checked on 2026-09-22:
+
+- https://github.com/Homebrew/install/blob/main/install.sh
+- https://docs.brew.sh/Installation
+- https://docs.brew.sh/Support-Tiers
+- https://github.com/openai/homebrew-tools/blob/main/Formula/tunnel-client.rb
+- https://github.com/openai/tunnel-client#install-with-homebrew
 
 ### ChatGPT launchers now present in source
 
