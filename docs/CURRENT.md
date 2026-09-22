@@ -27,6 +27,25 @@ The standard fresh-chat context phrase is now **`Load project context`** rather 
 
 The next milestone is the first **real ChatGPT-authored visible revision** using the Business workspace's custom MCP support.
 
+## Saori's Intel iMac setup — 2026-09-22
+
+Matt reports that Dialogue is running on Saori's Intel iMac, **Landline V23.17** has been imported, and the prototype works correctly. This is user-confirmed local application/import/viewer success; it does not yet verify the ChatGPT tunnel or a model-authored revision on that machine. Restart persistence and the exact macOS version have not been reported in this setup conversation.
+
+The immediate next step is Stage 2: install the MCP dependencies in Saori's existing Dialogue clone, verify/install the tunnel client, configure a distinct secure ChatGPT connection for her Mac, then perform a read-only check against V23.17 before any publishing.
+
+Use a separate Terminal window for installation commands while the local app is running. Give explicit Finder/Terminal steps rather than assuming command-line familiarity. Stop the existing app-only server before starting the combined launcher; do not run two Dialogue servers on port 4173.
+
+Her runtime data is local to her Mac. Cloning/pulling the repository does not synchronize Matt's revision library, and Matt's V24 must not be assumed to be Saori's latest revision.
+
+### ChatGPT launchers now present in source
+
+Commit `37a57107d70c246200d6f8b16c324a0eafefbae9` (2026-09-21) added:
+
+- `Setup Dialogue for ChatGPT.command` — creates the `dialogue` tunnel profile and saves the runtime API key in the current macOS user's Keychain.
+- `Start Dialogue with ChatGPT.command` — starts the app and tunnel, checks readiness, opens Dialogue, and cleans up its child processes on Control-C.
+
+The launchers do not install npm dependencies or Homebrew/tunnel-client automatically. Their presence in `develop` is not evidence of a completed real ChatGPT connection or Intel tunnel verification. Keep runtime keys out of chat, Git and shared files; provision a distinct connection for Saori rather than copying Matt's key/profile.
+
 ## Verified local functional build
 
 `develop` now provides:
@@ -145,7 +164,7 @@ The OpenAI API billing/key route remains a valid fallback for provider-agnostic 
 2. confirm GitHub access is available from that workspace
 3. enable/configure the supported ChatGPT Business custom MCP developer workflow
 4. connect ChatGPT Business to the local Dialogue MCP bridge securely
-5. use the real model to inspect the latest Landline revision (currently V24 on Matt's test Mac)
+5. use the real model to inspect the latest Landline revision (currently V24 on Matt's test Mac; V23.17 is the user-confirmed import on Saori's iMac)
 6. ask it to make one small visible change
 7. have it publish a new immutable revision through `publish_revision`
 8. verify the resulting revision appears and runs in Dialogue
