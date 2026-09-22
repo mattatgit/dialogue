@@ -99,6 +99,46 @@ The connected LLM should be able to discover Dialogue projects, read relevant pr
 
 The local MCP bridge and Secure MCP Tunnel have now proven those basic operations with a real ChatGPT model: ChatGPT inspected Landline V24 and published V25 with the requested visible heading change.
 
+## Feedback and LLM activity surface
+
+Dialogue should let a designer give feedback to the connected LLM directly from the prototype Share/review surface, ideally anchored to the relevant prototype element or visual location.
+
+The product should **not** try to reproduce the connected provider's full chat client. Dialogue's job is to capture precise revision intent and context, make that request available to the LLM, and show the useful work/result back to the designer.
+
+A compact Feedback/Activity panel should therefore focus on:
+
+- the user's feedback/request;
+- the prototype revision and anchored visual/DOM context attached to it;
+- request status (for example queued, in progress, complete, failed);
+- meaningful LLM/tool activity such as files read, files changed and revision publishing;
+- a concise visible assistant response or work summary when the connected provider supplies one;
+- an optional provider-supplied reasoning summary when available;
+- the resulting Dialogue revision and any error/retry state.
+
+Dialogue should render a **provider-neutral activity model**, not arbitrary raw OpenAI/Anthropic/Kimi/Qwen response payloads. The core product should continue to work when a provider does not expose an assistant narrative or reasoning summary.
+
+Conceptually, the event stream may include:
+
+```text
+revision_request
+  user_feedback
+  attached_context
+  status
+
+events
+  request_created
+  tool_called
+  tool_result
+  assistant_message      (optional)
+  reasoning_summary      (optional)
+  revision_published
+  error
+```
+
+Raw private chain-of-thought/reasoning is **not** a Dialogue product requirement. Provider-visible reasoning summaries can be displayed when available, but the durable cross-provider experience should be based on observable actions, explicit messages and revision outcomes.
+
+This boundary is important: Dialogue remains a prototype review/revision system that connects to LLMs, rather than becoming a general-purpose multi-provider chat application responsible for reproducing every provider's conversation UI and response format.
+
 ## Sharing
 
 Public share URLs should be unguessable capability-style links using cryptographically strong random tokens. Links should be revocable. Expiry/password controls can be added later.
@@ -147,6 +187,7 @@ Later:
 - comment context sent back to the LLM as update prompts
 - comment anchors such as Figma node ID, prototype selector, coordinates, viewport and screenshot crop
 - direct revision requests from Dialogue to a connected LLM
+- provider-neutral Feedback/Activity panel showing request context, useful tool activity, explicit assistant messages/summaries and resulting revisions
 - feedback/revision traceability
 - JS warning/consent state for prototypes that require scripting
 - share-link expiry/password options
@@ -169,7 +210,7 @@ The same applies to LLM integration: if the real model struggles to identify the
 
 ## Current repository state
 
-The lightweight functional import/API/MCP build and the first successful real ChatGPT write path are being promoted to `main` as the new stable baseline.
+The lightweight functional import/API/MCP build, first successful real ChatGPT write path and launcher/persistence safeguards are now on `main` as the stable baseline.
 
 After that promotion, new focused work should normally use short-lived `feature/*` branches from `main` and return through tested pull requests. The long-lived `develop` integration branch will be retired.
 
