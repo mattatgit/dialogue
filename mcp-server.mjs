@@ -19,6 +19,7 @@ const DIALOGUE_BASE = process.env.DIALOGUE_BASE_URL || 'http://127.0.0.1:4173';
 const ZIP_BIN = process.env.DIALOGUE_ZIP || '/usr/bin/zip';
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_TOOL_EDITS = 25;
+const REVISION_MANIFEST_NAME = '.dialogue-revision.json';
 
 const TEXT_EXTENSIONS = new Set([
   '.html',
@@ -99,7 +100,11 @@ function normaliseRelativePath(relativePath) {
   if (!segments.length || segments.some((segment) => segment === '..')) {
     throw new Error('Prototype file path may not leave the revision directory.');
   }
-  return segments.join('/');
+  const safePath = segments.join('/');
+  if (safePath === REVISION_MANIFEST_NAME) {
+    throw new Error('Dialogue revision metadata is reserved and may not be read or edited through the prototype-file tools.');
+  }
+  return safePath;
 }
 
 function resolveRevisionFile(baseDir, relativePath) {
@@ -119,7 +124,12 @@ function isEditableTextPath(relativePath) {
 async function walkRevisionFiles(baseDir, current = baseDir, results = []) {
   const entries = await fsp.readdir(current, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name === '__MACOSX' || entry.name === '.DS_Store' || entry.name.startsWith('._')) continue;
+    if (
+      entry.name === '__MACOSX' ||
+      entry.name === '.DS_Store' ||
+      entry.name === REVISION_MANIFEST_NAME ||
+      entry.name.startsWith('._')
+    ) continue;
     if (entry.isSymbolicLink()) continue;
     const absolute = path.join(current, entry.name);
     if (entry.isDirectory()) {
@@ -235,7 +245,20 @@ async function publishDerivedRevision({ baseRevisionId, version, replacements = 
     try {
       await execFileAsync(
         ZIP_BIN,
-        ['-qr', zipPath, '.', '-x', '__MACOSX/*', '*/__MACOSX/*', '.DS_Store', '*/.DS_Store', '._*', '*/._*'],
+        [
+          '-qr',
+          zipPath,
+          '.',
+          '-x',
+          '__MACOSX/*',
+          '*/__MACOSX/*',
+          '.DS_Store',
+          '*/.DS_Store',
+          '._*',
+          '*/._*',
+          REVISION_MANIFEST_NAME,
+          `*/${REVISION_MANIFEST_NAME}`
+        ],
         { cwd: workDir, maxBuffer: 8 * 1024 * 1024 }
       );
     } catch (error) {
