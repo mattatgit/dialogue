@@ -13,8 +13,10 @@ const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4173);
 const DATA_ROOT = path.join(ROOT, '.dialogue-data');
 const DB_PATH = path.join(DATA_ROOT, 'db.json');
+const DB_BACKUP_PATH = path.join(DATA_ROOT, 'db.json.bak');
 const TMP_ROOT = path.join(DATA_ROOT, 'tmp');
 const PROTOTYPE_ROOT = path.join(DATA_ROOT, 'prototypes');
+const REVISION_MANIFEST_NAME = '.dialogue-revision.json';
 const UNZIP_BIN = process.env.DIALOGUE_UNZIP || '/usr/bin/unzip';
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
@@ -64,6 +66,16 @@ function initialData() {
   };
 }
 
+async function directoryHasMeaningfulEntries(directory) {
+  try {
+    const entries = await fsp.readdir(directory);
+    return entries.some((entry) => entry !== '.DS_Store');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 async function ensureData() {
   await Promise.all([
     fsp.mkdir(DATA_ROOT, { recursive: true }),
@@ -71,10 +83,34 @@ async function ensureData() {
     fsp.mkdir(PROTOTYPE_ROOT, { recursive: true })
   ]);
 
+  let databaseExists = true;
   try {
     await fsp.access(DB_PATH, fs.constants.F_OK);
   } catch {
-    await saveData(initialData());
+    databaseExists = false;
+  }
+
+  if (!databaseExists) {
+    if (await directoryHasMeaningfulEntries(PROTOTYPE_ROOT)) {
+      throw new Error(
+        `Dialogue metadata is missing at ${DB_PATH}, but stored prototype content still exists under ${PROTOTYPE_ROOT}. ` +
+        `Refusing to create a blank database. Restore ${DB_PATH} or ${DB_BACKUP_PATH}, or explicitly move/remove the existing prototype storage before starting Dialogue.`
+      );
+    }
+
+    const createdAt = new Date().toISOString();
+    console.warn(`[Dialogue] Initializing a new local data store at ${DATA_ROOT} (${createdAt}).`);
+    await saveData(initialData(), { backupExisting: false });
+    return;
+  }
+
+  try {
+    JSON.parse(await fsp.readFile(DB_PATH, 'utf8'));
+  } catch {
+    throw new Error(
+      `Dialogue metadata at ${DB_PATH} is unreadable. Refusing to continue. ` +
+      `Inspect or restore the backup at ${DB_BACKUP_PATH} before starting Dialogue again.`
+    );
   }
 }
 
@@ -84,11 +120,47 @@ async function loadData() {
   return JSON.parse(raw);
 }
 
-async function saveData(data) {
+async function saveData(data, { backupExisting = true } = {}) {
   await fsp.mkdir(DATA_ROOT, { recursive: true });
+
+  if (backupExisting) {
+    try {
+      await fsp.copyFile(DB_PATH, DB_BACKUP_PATH);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+
   const tempPath = `${DB_PATH}.tmp`;
   await fsp.writeFile(tempPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
   await fsp.rename(tempPath, DB_PATH);
+}
+
+async function writeRevisionManifest(finalDir, project, prototype, revision) {
+  const manifest = {
+    schemaVersion: 1,
+    project: {
+      id: project.id,
+      slug: project.slug,
+      name: project.name,
+      description: project.description || '',
+      createdAt: project.createdAt
+    },
+    prototype: {
+      id: prototype.id,
+      projectId: prototype.projectId,
+      slug: prototype.slug,
+      name: prototype.name,
+      createdAt: prototype.createdAt
+    },
+    revision
+  };
+
+  await fsp.writeFile(
+    path.join(finalDir, REVISION_MANIFEST_NAME),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    'utf8'
+  );
 }
 
 function sendJson(res, status, payload) {
@@ -313,6 +385,7 @@ async function importPrototype(req, res, projectSlug, url) {
       fileCount: entries.filter((entry) => !entry.endsWith('/')).length
     };
 
+    await writeRevisionManifest(finalDir, project, prototype, revision);
     data.revisions.push(revision);
     await saveData(data);
     sendJson(res, 201, { revision: joinedRevision(data, revision) });
@@ -332,6 +405,10 @@ async function servePrototypeFile(res, revisionId, requestedRelativePath) {
   const baseDir = path.resolve(DATA_ROOT, revision.storageKey);
   let relativePath = requestedRelativePath || revision.entryPoint;
   relativePath = decodeURIComponent(relativePath).replace(/\\/g, '/');
+
+  if (relativePath === REVISION_MANIFEST_NAME) {
+    throw new HttpError(404, 'Prototype file not found.');
+  }
 
   if (relativePath.split('/').some((segment) => segment === '..')) {
     throw new HttpError(403, 'Unsafe prototype path.');
