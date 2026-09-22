@@ -87,7 +87,7 @@ This supports:
 - traceability from feedback to resulting revision
 - retaining the design/comment context that caused a change
 
-The lightweight local build has already proven this model with Landline V22 → V23 → V24 while leaving earlier revisions intact.
+The lightweight local build has already proven this model with Landline V22 → V23 → V24 → V25 while leaving earlier revisions intact.
 
 ## LLM relationship
 
@@ -97,7 +97,7 @@ ChatGPT is the initial integration target, but the product model remains provide
 
 The connected LLM should be able to discover Dialogue projects, read relevant prototype/revision context, inspect the files needed for a requested change, and publish a new immutable revision.
 
-The current local MCP bridge already proves those basic operations. The next product-learning milestone is whether a real ChatGPT model can use them effectively to make a useful visible change.
+The local MCP bridge and Secure MCP Tunnel have now proven those basic operations with a real ChatGPT model: ChatGPT inspected Landline V24 and published V25 with the requested visible heading change.
 
 ## Sharing
 
@@ -122,17 +122,18 @@ Verified sequence:
 1. imported real Landline V22 through Dialogue;
 2. external API client published V23;
 3. local MCP client inspected V23 and published V24;
-4. all revisions appeared in Dialogue and ran correctly.
+4. ChatGPT Business connected through Secure MCP Tunnel, inspected V24 and published V25;
+5. V25 changed only the requested main heading, appeared in Dialogue and ran correctly.
 
-The V24 change was intentionally non-visible so the infrastructure/tool loop could be proven independently of model-authored design decisions.
+V24 was intentionally non-visible to prove the infrastructure/tool loop. V25 then proved the real model-authored visible write path.
 
 ## Near-term capabilities
 
 Next:
 
-- first real ChatGPT Business custom-MCP connection
-- first model-authored visible revision
-- refine MCP/API context schemas based on that test
+- validate the one-time setup and combined launcher flow
+- establish Saori's distinct supported ChatGPT connection
+- refine MCP/API context schemas through additional real revision requests
 - thumbnails/screenshots
 - stronger revision management UI
 - authentication when the workflow moves beyond local development
@@ -152,17 +153,11 @@ Later:
 
 ## Current dogfood milestone
 
-The current milestone is the first **real model-authored visible revision**.
+The first **real model-authored visible revision** is complete.
 
-Success means:
+ChatGPT Business connected to Dialogue's local MCP bridge through Secure MCP Tunnel, discovered Landline V24, inspected the relevant revision context and published V25 with the requested heading change. Dialogue displayed the result correctly and preserved V24.
 
-1. connect the Idealogue ChatGPT Business workspace to Dialogue's local MCP bridge through the supported secure developer path;
-2. let ChatGPT discover the Landline project and latest revision (currently V24 on Matt's test Mac);
-3. let the model inspect the relevant files;
-4. ask for one small visible HTML/CSS/JS change;
-5. publish the result as a new immutable revision through `publish_revision`;
-6. verify the new revision appears and runs in Dialogue;
-7. record what additional structured context/tool behavior was needed.
+The next dogfood milestone is repeatability and richer context: make setup easy for another designer, then run more realistic UI revision requests and improve Dialogue's tools/context whenever the model needs avoidable manual explanation.
 
 The temporary Import UI and current development launchers are not final product design.
 
@@ -174,6 +169,8 @@ The same applies to LLM integration: if the real model struggles to identify the
 
 ## Current repository state
 
-`develop` contains the lightweight functional import/API/MCP build plus the durable project documentation. New focused work should normally branch from `develop` and return through a tested pull request.
+The lightweight functional import/API/MCP build and the first successful real ChatGPT write path are being promoted to `main` as the new stable baseline.
+
+After that promotion, new focused work should normally use short-lived `feature/*` branches from `main` and return through tested pull requests. The long-lived `develop` integration branch will be retired.
 
 GitHub is the durable source of truth for Dialogue application code and project documentation. Imported runtime prototypes themselves live in application storage rather than being treated as Dialogue source files.

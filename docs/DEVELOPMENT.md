@@ -2,25 +2,27 @@
 
 ## Current state
 
-`develop` now contains the working lightweight local functional build plus durable project documentation.
+The lightweight local build has now completed its first real end-to-end ChatGPT-authored revision.
 
 Completed milestones:
 
 - local real-prototype import/viewer
 - external HTTP/API revision publishing
 - local MCP read/edit/publish bridge
+- Secure MCP Tunnel connection from ChatGPT Business to the local Dialogue MCP server
+- real model-authored visible revision: Landline V25
 
-The current product-development goal is the first **real ChatGPT-authored visible revision** through the Idealogue ChatGPT Business workspace and Dialogue's existing MCP tool layer.
+The current product-development goal is to make the working connection repeatable for Matt and Saori, then dogfood more meaningful revision requests and refine Dialogue's tool/context model from observed friction.
 
-The immediate goal is still not a production framework/database/hosting migration. Production infrastructure remains deferred until the real LLM revision loop has been dogfooded.
+The immediate goal is still not a production framework/database/hosting migration. Production infrastructure remains deferred until the revision loop and multi-person development setup have been exercised further.
 
 ## Branch strategy
 
-- `main` — stable/tested baseline; eventually production
-- `develop` — integration branch and normal context-loading source
-- `feature/*` — focused implementation changes
+- `main` — stable/tested baseline and normal starting point for new work
+- `feature/*` — short-lived focused implementation branches created from `main`
+- `develop` — temporary historical integration branch; retire it after the current baseline promotion
 
-New work should normally branch from `develop`, be tested, then return through a pull request.
+After the current promotion is complete, new work should normally branch from `main`, be tested/reviewed in a pull request, then merge back to `main`.
 
 ## Designer-first working model
 
@@ -69,9 +71,11 @@ The following sequence has been completed on Matt's Mac:
 3. published V23 through the standalone HTTP/API test client;
 4. discovered/read Dialogue state through the local MCP adapter;
 5. derived V24 from V23 and published it through `publish_revision`;
-6. verified V24 appeared and ran correctly.
+6. connected ChatGPT Business to Dialogue through Secure MCP Tunnel;
+7. had ChatGPT inspect V24 and publish V25 with the requested visible heading change;
+8. verified V25 appeared in Dialogue, ran correctly, and left V24 untouched.
 
-V24 intentionally differed only by a non-visible HTML comment. The point of that milestone was to prove transport/context/revision publishing before asking a real model to make a visible change.
+V24 intentionally differed only by a non-visible HTML comment. V25 is the first real ChatGPT-authored visible revision and proves the end-to-end write path.
 
 ## Current MCP development workflow
 
@@ -93,15 +97,23 @@ Current tool set:
 
 Do not add destructive delete tools at this stage. New model-authored changes should derive from an immutable base revision and create a new revision.
 
-## ChatGPT Business test workflow
+## ChatGPT Business workflow
 
-Matt has created an Idealogue ChatGPT Business workspace while keeping his Personal workspace separate.
+Matt's Idealogue ChatGPT Business workspace has now successfully connected to the local Dialogue MCP server through OpenAI Secure MCP Tunnel.
 
-The next test should use the Business workspace's custom MCP support rather than introducing separate OpenAI API billing/key management unless a fallback is needed.
+The working setup uses:
 
-Before configuring the remote/client connection, re-check current OpenAI developer-mode/MCP documentation because the feature is in beta and UI/permissions may change.
+- a distinct Secure MCP Tunnel
+- a restricted Runtime API key with Tunnels Read + Use
+- a local `dialogue` tunnel-client profile
+- direct Node launch of `mcp-server.mjs`
+- a draft/Dev Dialogue app in ChatGPT
 
-Keep Dialogue's local web app bound to localhost. Use the supported secure local/private MCP connection path rather than exposing the Dialogue app itself directly to the public internet.
+The repository includes `Setup Dialogue for ChatGPT.command` and `Start Dialogue with ChatGPT.command` to remove manual YAML editing and repeated environment setup. The setup command stores the Runtime API key in macOS Keychain.
+
+Keep Dialogue's local web app bound to localhost. Do not expose the Dialogue app itself directly to the public internet.
+
+Saori should use her own tunnel/profile/runtime key rather than sharing Matt's active tunnel ID.
 
 ## Repository hygiene
 
@@ -144,14 +156,13 @@ When touching import/API/MCP/revision behavior, preserve:
 
 ## Near-term build sequence
 
-1. recreate the Dialogue Project in the Idealogue Business workspace using repository-backed context instructions
-2. configure ChatGPT Business developer mode/custom MCP connection
-3. connect securely to the existing local Dialogue MCP server
-4. ask a real model to inspect V24, make one small visible change and publish the next revision
-5. verify the result in Dialogue
-6. refine tool/context schemas based on what the real model needed or got wrong
-7. dogfood the LLM → Dialogue revision loop
-8. only then finalize production hosting/database/storage/auth choices
+1. validate the new setup/start launchers on Matt's Mac from a clean startup;
+2. establish a supported tunnel-client installation route for Saori's Intel iMac or move her setup to supported hardware;
+3. give Saori a distinct tunnel/profile/runtime key and verify a read-only Dialogue connection;
+4. dogfood additional real ChatGPT → Dialogue revision requests beyond the single-heading V25 test;
+5. refine tool/context schemas based on what the real model needed or got wrong;
+6. improve revision-management/thumbnails/review ergonomics where the dogfood loop exposes friction;
+7. only then finalize production hosting/database/storage/auth choices.
 
 ## Production deployment direction
 

@@ -2,7 +2,7 @@
 
 This document records the current architecture direction. It distinguishes the **lightweight development architecture being built now** from the likely **production architecture later**.
 
-The production decision is intentionally deferred until the core Dialogue workflow has been proven with a real model-authored revision.
+The core Dialogue workflow has now been proven with a real model-authored revision. Production infrastructure is still intentionally deferred until the loop has been dogfooded further and the multi-person setup is repeatable.
 
 ## Architectural principles that remain stable
 
@@ -96,7 +96,7 @@ The same underlying publishing operation should be used by:
 - MCP/LLM adapters
 - later automated revision agents if added
 
-This convergence is already partly proven locally: manual V22 import, external API V23 publishing and MCP-derived V24 publishing all end at the same revision-ingestion path.
+This convergence is now proven across manual import, external API publishing, local MCP publishing and a real ChatGPT-authored revision: V22 → V23 → V24 → V25 all end at the same revision-ingestion path.
 
 ## Prototype isolation
 
@@ -156,16 +156,16 @@ Completed:
 1. real Landline V22 ZIP imported through Dialogue's human UI and run successfully
 2. same ingestion path exercised by an external API client, creating V23
 3. local MCP adapter proved project/revision/file reads plus additive `publish_revision`, creating V24
+4. OpenAI Secure MCP Tunnel connected the local stdio MCP server to a draft Dialogue app in ChatGPT Business
+5. ChatGPT inspected V24 and published V25 with one requested visible heading change
+6. V25 appeared and ran correctly while V24 remained immutable
 
 Current next step:
 
-4. use the Idealogue ChatGPT Business workspace's supported custom MCP developer flow
-5. connect ChatGPT securely to the local/private Dialogue MCP server without exposing the localhost app directly
-6. ask the real model to inspect V24 and make one small visible change
-7. publish that change as a new immutable Dialogue revision
-8. use observed friction to refine API/tool/context schemas
-
-Only after this loop is useful should production hosting/database/auth/storage decisions be finalized.
+7. validate the one-time setup and combined launcher flow from a clean startup
+8. establish Saori's distinct supported tunnel/client setup
+9. dogfood more realistic revision requests and refine tool/context schemas from observed friction
+10. revisit production hosting/database/auth/storage only when the repeated workflow justifies it
 
 ## Design/prototype review context
 

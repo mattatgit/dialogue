@@ -20,7 +20,7 @@ Do not ask the user to restate project history that is already recorded here.
    - `docs/LOCAL_BUILD.md` when local functional work is active
    - `docs/API.md` when API/LLM integration work is active
    - `docs/MCP.md` when MCP/LLM bridge work is active
-4. Inspect the current `develop` branch and any active feature branch named in `docs/CURRENT.md` or otherwise relevant to the next task.
+4. Inspect the current stable `main` branch and any active feature branch named in `docs/CURRENT.md` or otherwise relevant to the next task. If the baseline-promotion PR from `develop` is still open, inspect that PR/branch as the pending release candidate.
 5. Check recent commits/PR state when necessary to understand changes made after the documentation was last updated.
 
 ## Ground rules
