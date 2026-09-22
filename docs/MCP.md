@@ -18,13 +18,13 @@ Dialogue should remain model-provider agnostic. The current bridge is developmen
 
 ## Status
 
-The MCP bridge baseline was completed and merged into `develop` via PR #3.
+The MCP bridge baseline was completed via PR #3 and is now part of the tested `main` baseline after PR #5.
 
 The preceding local API publishing milestone created Landline V23. The MCP smoke test then successfully inspected the latest Landline revision and published **Landline V24** as a new derived immutable revision. V24 appeared in Dialogue and ran correctly.
 
 The V24 test intentionally changed only a non-visible HTML comment, so the prototype remained visually/functionally equivalent. This proves the tool transport, revision reading and additive publishing path independently of model-authored visual changes.
 
-Matt has now created an **Idealogue ChatGPT Business workspace**. The first real model-authored test will therefore use ChatGPT Business custom MCP support rather than the previously considered OpenAI-API test harness.
+Matt's **Idealogue ChatGPT Business workspace** is connected successfully to Dialogue through the custom MCP app + Secure MCP Tunnel path. The first real model-authored visible write was completed with Landline V25.
 
 ## Local MCP server
 
@@ -125,6 +125,25 @@ The exact setup steps should be checked against current OpenAI documentation imm
 
 The OpenAI API route remains a fallback if needed for provider-agnostic testing, but there is no reason to introduce separate API billing/key management for the next test while the Business custom-MCP route is available.
 
+## Revision requests and activity
+
+The planned prototype feedback UI should not depend on reproducing the provider's complete chat transcript or reasoning UI.
+
+Dialogue should expose revision requests and capture a provider-neutral activity history around them. MCP or another provider adapter may contribute events such as:
+
+- request acknowledged/claimed;
+- project/revision context read;
+- prototype files read;
+- files changed;
+- explicit assistant message or work summary when available;
+- provider-supplied reasoning summary when available;
+- revision published;
+- error/retry state.
+
+Dialogue should normalize those events into its own schema before rendering them. Raw provider payloads and raw private chain-of-thought are not part of the core Dialogue contract.
+
+This lets the same Feedback/Activity panel work across ChatGPT, Claude, Kimi, Qwen or another connected LLM even when their conversation/reasoning APIs differ.
+
 ## Security stance
 
 The first MCP bridge is deliberately local and narrow:
@@ -141,11 +160,9 @@ Remote ChatGPT access should use the supported secure MCP connection path rather
 
 ## Next milestone
 
-1. recreate the Dialogue Project in the Idealogue Business workspace and connect the GitHub source-of-truth workflow
-2. enable/configure ChatGPT Business developer mode/custom MCP support
-3. connect the local Dialogue MCP server through the supported secure connection path
-4. ask ChatGPT to inspect the latest Landline revision (currently V24 on Matt's test Mac)
-5. ask it to make one small visible code change
-6. publish a new immutable Dialogue revision through `publish_revision`
-7. verify the new revision appears and runs correctly
-8. inspect what additional context/tool schema is needed before any production infrastructure work
+1. design the Dialogue-side revision-request/activity schema
+2. add MCP/API operations for reading/claiming revision requests and linking a resulting revision to its request
+3. prototype anchored feedback from the prototype Share/review surface
+4. surface provider-neutral activity in Dialogue without depending on provider-specific full chat output
+5. dogfood the loop with more realistic model-authored UI revisions
+6. refine the schema only where real use exposes missing context
