@@ -28,7 +28,9 @@ Two macOS launchers are now in source:
 - `Setup Dialogue for ChatGPT.command` — one-time tunnel profile + Keychain setup
 - `Start Dialogue with ChatGPT.command` — starts Dialogue and the tunnel together and waits for readiness
 
-The next milestone is no longer “first connection”. It is **repeatable onboarding + deeper dogfooding**: validate the one-click setup/start path, establish Saori's distinct connection, then use more realistic revision requests to refine Dialogue's context/tools.
+The one-click combined launcher has now passed its post-reset smoke test. After re-importing Landline V23.18, Dialogue persisted the revision across restart, created its revision manifest and metadata backup, and ChatGPT read the same revision successfully through the Dialogue Dev app.
+
+The next milestone is **repeatable onboarding + deeper dogfooding**: establish Saori's distinct connection, then use more realistic revision requests to refine Dialogue's context/tools.
 
 The standard fresh-chat context phrase remains **`Load project context`**.
 
@@ -199,12 +201,26 @@ The OpenAI API billing/key route remains a valid provider-agnostic fallback, but
 
 ## Next milestone
 
-1. validate `Setup Dialogue for ChatGPT.command` and `Start Dialogue with ChatGPT.command` on Matt's Mac from a clean startup
+1. promote the now-smoke-tested integration baseline to `main` via PR #5
 2. establish a supported tunnel-client route for Saori's Intel iMac or move her setup to supported hardware
 3. provision Saori with a distinct tunnel/runtime key/profile and verify read-only access to her local Landline revision set
 4. run additional real model-authored revisions beyond the one-heading V25 test
 5. refine MCP/API context schemas and tool ergonomics from observed friction
-6. promote the proven integration baseline to `main` and use short-lived feature branches from `main` thereafter
+6. use short-lived feature branches from `main` for subsequent work
+
+### Combined launcher smoke test — passed
+
+On 2026-09-22 Matt re-imported Landline **V23.18** after the disposable local test-data reset. Revision ID: `0b24d81a-5add-4312-b13d-05f786529a0a`.
+
+Verified:
+
+- the revision survived a Dialogue restart;
+- `.dialogue-revision.json` exists in the revision directory;
+- both `db.json` and `db.json.bak` exist;
+- `Start Dialogue with ChatGPT.command` brought the app/tunnel path back online;
+- ChatGPT listed Landline and returned V23.18 with the matching revision ID and 28 files.
+
+This closes the manual smoke-test gate for PR #5.
 
 ## Product direction
 
