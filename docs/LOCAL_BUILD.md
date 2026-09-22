@@ -6,7 +6,7 @@ This build exists to prove Dialogue's core product workflow before committing to
 
 No production web-service accounts are required for the local application itself.
 
-The current dogfood project is Landline. The local runtime history on Matt's test Mac has progressed from imported V22 to API-published V23 to MCP-derived V24.
+The current dogfood project is Landline. Matt's first local runtime history progressed from imported V22 to API-published V23 to MCP-derived V24 and the first real ChatGPT-authored visible V25 revision.
 
 ## Current architecture
 
@@ -33,11 +33,30 @@ Runtime data lives under:
 ```text
 .dialogue-data/
   db.json
+  db.json.bak
   prototypes/
+    <project>/<prototype>/<revision-id>/
+      .dialogue-revision.json
+      ...prototype files...
   tmp/
 ```
 
 `.dialogue-data/` is ignored by Git.
+
+## Local data safeguards
+
+The lightweight build now treats unexpected metadata loss as an error rather than silently looking like an empty installation.
+
+Safeguards:
+
+- before replacing an existing `db.json`, Dialogue copies the previous metadata to `db.json.bak`;
+- every newly imported/published revision receives a reserved `.dialogue-revision.json` manifest containing its project/prototype/revision metadata;
+- if `db.json` is missing while prototype storage still contains content, Dialogue refuses to create a blank database and reports the paths to inspect/restore;
+- unreadable/corrupt `db.json` also stops startup rather than being silently replaced;
+- genuine first-run initialization is logged with the local data path and timestamp;
+- the reserved revision manifest is hidden from prototype serving and MCP file-edit/list operations, and is excluded when MCP packages a derived revision.
+
+These are development safeguards, not backups against deletion of the entire `.dialogue-data/` directory. The folder remains local and Git-ignored, so important prototype source ZIPs should still be retained separately during this phase.
 
 The JSON store is deliberate development scaffolding, not the final database decision. The application/API boundary should make it possible to replace it later with Postgres or another persistent store without changing the product workflow.
 
@@ -152,20 +171,17 @@ Production should retain a separate prototype execution origin, for example:
 - macOS ZIP metadata is not cleaned during import
 - production separate-origin prototype hosting is not implemented
 - MCP file reads currently use direct local storage knowledge
-- the real ChatGPT Business → Dialogue MCP connection has not yet been configured/tested
+- local runtime data remains disposable development state; deleting the entire Git-ignored `.dialogue-data/` directory also deletes its local metadata backup/manifests
 
 ## Next test
 
-The local app/import/API/MCP layers are now proven through V24.
+The local app/import/API/MCP layers and the real ChatGPT connection are now proven through the first model-authored visible V25 revision.
 
 Next:
 
-1. keep the local Dialogue app and MCP adapter unchanged where possible;
-2. configure the Idealogue ChatGPT Business workspace for the supported custom MCP developer flow;
-3. connect ChatGPT Business to the local/private Dialogue MCP server securely;
-4. ask the real model to inspect V24;
-5. make one small visible HTML/CSS/JS change;
-6. publish the next immutable revision through `publish_revision`;
-7. verify it appears and runs in Dialogue.
+1. re-import the current Landline prototype after the September 22 local test-data reset;
+2. validate the combined Dialogue + ChatGPT launcher against the restored local revision;
+3. establish Saori's distinct supported tunnel/client setup;
+4. dogfood more realistic revision requests and refine the context/tool schema from observed friction.
 
-The purpose is to learn what additional context/tool schema a real model needs before any production infrastructure work begins.
+The purpose remains to learn from the real revision loop before production infrastructure work begins.
