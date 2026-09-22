@@ -90,7 +90,7 @@ The launchers do not install npm dependencies or Homebrew/tunnel-client automati
 
 ## Verified local functional build
 
-`develop` now provides:
+`main` now provides:
 
 - localhost-only Node server
 - local project/prototype/revision persistence in `.dialogue-data/db.json`
@@ -201,12 +201,12 @@ The OpenAI API billing/key route remains a valid provider-agnostic fallback, but
 
 ## Next milestone
 
-1. promote the now-smoke-tested integration baseline to `main` via PR #5
-2. establish a supported tunnel-client route for Saori's Intel iMac or move her setup to supported hardware
-3. provision Saori with a distinct tunnel/runtime key/profile and verify read-only access to her local Landline revision set
+1. establish a supported tunnel-client route for Saori's Intel iMac or move her setup to supported hardware
+2. provision Saori with a distinct tunnel/runtime key/profile and verify read-only access to her local Landline revision set
+3. prototype the anchored feedback → revision request → provider-neutral activity → resulting revision loop
 4. run additional real model-authored revisions beyond the one-heading V25 test
 5. refine MCP/API context schemas and tool ergonomics from observed friction
-6. use short-lived feature branches from `main` for subsequent work
+6. continue using short-lived feature branches from `main`
 
 ### Combined launcher smoke test — passed
 
@@ -230,6 +230,16 @@ The intended long-term loop remains:
 
 Revision context may later include Figma node IDs, prototype/revision IDs, DOM references, coordinates, viewport details, screenshot/render crops and surrounding project context.
 
+### Decision: Feedback + Activity, not an embedded universal LLM chat client
+
+Dialogue will support giving revision feedback directly from the prototype Share/review surface, with comments/requests anchored to the relevant prototype context.
+
+A companion panel should show the useful Dialogue-owned history of that request: the user's feedback, attached context, request status, meaningful tool/action activity, explicit assistant messages or concise work summaries when available, errors, and the resulting revision.
+
+The panel should render a provider-neutral Dialogue event model rather than trying to reproduce the complete output UI of ChatGPT, Claude, Kimi, Qwen or other providers. Provider-supplied reasoning summaries may be shown when available, but raw private chain-of-thought is not a product requirement.
+
+This keeps Dialogue focused on prototype review and revision orchestration. It avoids making Dialogue responsible for becoming a general-purpose multi-provider chat client with provider-specific streaming, formatting, reasoning displays and conversation semantics.
+
 ## UI status
 
 Figma remains the source of truth for designed UI.
@@ -242,14 +252,14 @@ The API/MCP launchers are development tooling, not product UI.
 
 Repository: `mattatgit/dialogue`
 
-Current promotion plan:
+Current branch workflow:
 
-- `main` — stable/tested baseline and normal source for new work after this milestone
+- `main` — stable/tested baseline and normal source for new work
 - `feature/*` — short-lived focused branches created from `main`
-- `develop` — temporary historical integration branch being retired after the current baseline promotion
+- `develop` — historical integration branch; no longer the normal place for new work
 
 PR #3 (`feature/mcp-llm-bridge`) was merged into `develop` after successful V24 verification. The real ChatGPT V25 test subsequently proved the hosted-LLM connection and write path.
 
-After the current promotion PR reaches `main`, new work should normally branch from `main` and return through tested pull requests rather than accumulating on a long-lived `develop` branch.
+PR #5 has been merged into `main`. New work should normally branch from `main` and return through focused pull requests rather than accumulating on the historical `develop` branch.
 
 GitHub is the source of truth for Dialogue implementation files and durable project context. Runtime imported prototypes/data remain outside Git.
