@@ -4,170 +4,91 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Current status
 
-Three lightweight functional milestones are complete and merged into `develop`:
+Three earlier lightweight milestones were completed and merged into `develop`:
 
-1. PR #1 — local prototype import/viewer
-2. PR #2 — external HTTP/API revision publishing
-3. PR #3 — local MCP / LLM bridge baseline
+1. PR #1 — local prototype ZIP import/viewer (Landline V22 imported and ran correctly)
+2. PR #2 — external HTTP/API revision publishing (V23)
+3. PR #3 — local MCP / LLM bridge baseline (V24, a non-visible change)
 
-Verified sequence on Matt's Mac:
+They proved that Dialogue could hold immutable prototype revisions and that a machine client could publish one. They are now **superseded** by the git-workspace + web-terminal build approved on 2026-09-23 (`docs/superpowers/specs/2026-09-23-git-workspaces-web-terminal-design.md`). The planned ChatGPT Business custom-MCP connection was dropped with them: the agent now runs inside Dialogue instead of connecting to it from outside.
 
-- real Landline V22 imported through the Dialogue UI and ran correctly
-- external non-UI HTTP client published Landline V23; V23 appeared and ran correctly
-- local MCP client inspected the latest Landline revision and its files, then called `publish_revision`
-- `publish_revision` created **Landline V24** as a new derived immutable revision
-- V24 appeared in the Landline project and ran correctly
-- V24 was intentionally visually/functionally equivalent to V23 because the MCP smoke test changed only a non-visible HTML comment
+The new model: a project carries its git repository (`repo.url`, `repo.prototypePath`). Dialogue fetches refs, and opening a branch creates a git worktree and a split-screen workspace with an `omp` web terminal on the left and a live-reloading prototype preview on the right. Git is the revision model; there is no separate revision store, no ZIPs and no MCP bridge.
 
-The local MCP transport/revision model is therefore proven.
+The standard fresh-chat context phrase is **`Load project context`**.
 
-Matt has now created an **Idealogue ChatGPT Business workspace** while keeping his Personal workspace separate. Dialogue will be recreated as a Project in the Business workspace rather than merging the Personal workspace. GitHub remains the durable source of truth for project continuity.
+## Current build
 
-The standard fresh-chat context phrase is now **`Load project context`** rather than `/context`, to avoid collision with ChatGPT's own slash-command UI.
+`develop` provides:
 
-The next milestone is the first **real ChatGPT-authored visible revision** using the Business workspace's custom MCP support.
+- localhost-only Node server (`server.js`) with Node-builtins-only modules `server/git.js`, `server/terminal.js`, `server/watch.js`
+- `.dialogue-data/db.json` schemaVersion 2: projects only, each with `repo: { url, prototypePath }`; Landline → `https://github.com/mattatgit/landline`, `prototypes/app`
+- bare mirror per project at `.dialogue-data/repos/<slug>.git`, fetched with `git fetch --prune origin` when refs are listed
+- one git worktree per opened ref at `.dialogue-data/workspaces/<slug>/<encoded-ref>/`; `git worktree list --porcelain` is the source of truth for workspaces (no db table)
+- branch workspaces writable with a terminal; tag/commit workspaces detached, read-only, no terminal
+- project page (`project-landline.html`) with Branches and Tags tile groups from live refs, "open" dot on tiles with a workspace, `fetchError` note when the fetch fails
+- `workspace.html` + `js/workspace.js`: crumbs `Projects › Landline › <ref>`, status chip `<sha7> · clean` / `· uncommitted changes`, terminal pane left, 370×722 sandboxed prototype iframe right, Restart / `R`
+- web terminal: `js/terminal.js` over vendored xterm.js 5.5 (`js/vendor/`), speaking ttyd's protocol through the `/ws/terminal/:id` WebSocket proxy, with reconnect backoff and server error display
+- terminal process: ttyd → `omp/attach.sh` → tmux (`-L dialogue`, `omp/tmux.conf`) → `omp --config omp/config.yml --append-system-prompt omp/system-prompt.md`, started lazily on the first WebSocket client; tmux sessions survive Dialogue restarts but rotate when `omp/*` changes
+- `omp/dialogue-theme.json` installed into the active omp profile's themes directory before spawn; `css/terminal.css` shares its palette; JetBrains Mono in `assets/fonts/`
+- SSE `GET /api/workspaces/:id/events` fed by a debounced recursive `fs.watch` on the prototype path and the worktree HEAD; `change` events reload the iframe and update the chip
+- `Start Dialogue.command` checking for `git`/`ttyd`/`tmux`/`omp`
+- Nix: devshell with `git`/`ttyd`/`tmux`, `flake.nix` input `llm-agents` providing `omp` to the VM, NixOS module with `HOME=${dataDir}/home`, nginx WebSocket proxying and `services.dialogue.omp`
+- `test/git.test.js` (`node --test test/`) covering ref parsing and workspace-id/path safety
 
-## Verified local functional build
-
-`develop` now provides:
-
-- localhost-only Node server
-- local project/prototype/revision persistence in `.dialogue-data/db.json`
-- local filesystem storage for imported prototype packages
-- visible Landline Import flow
-- ZIP validation and one-wrapper-directory support
-- duplicate revision rejection
-- data-driven Landline revision cards
-- dynamic owner viewer with sandboxed prototype iframe
-- Restart / `R` reload support
-- internal Dialogue HTTP API shared by browser import and external publishing
-- `Start Dialogue.command`
-- `scripts/publish-revision.js` external HTTP publishing client
-- `Publish API Test.command`
-- local stdio MCP adapter in `mcp-server.mjs`
-- automated MCP smoke client in `scripts/test-mcp.mjs`
-- one-click `Test MCP Bridge.command`
-
-## MCP / LLM bridge
-
-Current MCP tools:
-
-- `list_projects()`
-- `list_revisions(project_slug)`
-- `get_revision(revision_id)`
-- `list_revision_files(revision_id)`
-- `read_revision_file(revision_id, path)`
-- `publish_revision(...)`
-
-`publish_revision` derives a new revision from an immutable base, applies bounded text-file edits, reuses unchanged assets, packages the complete derived prototype, and publishes it back through Dialogue's existing HTTP ingestion path.
-
-Conceptually:
-
-```text
-existing Dialogue revision
-   ↓ inspect/read through MCP
-small HTML/CSS/JS change
-   ↓
-derive complete new package
-   ↓
-Dialogue revision ingestion API
-   ↓
-new immutable revision
-```
-
-The base revision is never overwritten. No destructive delete tool exists at this stage.
-
-Development-only limitation: revision file listing/reading currently accesses `.dialogue-data/` directly because the lightweight HTTP API does not yet expose those operations. Publishing still goes through Dialogue's authoritative HTTP revision-ingestion path. Before production, file access should move behind Dialogue application/API operations.
-
-See `docs/API.md` and `docs/MCP.md`.
+Removed: `mcp-server.mjs`, `scripts/publish-revision.js`, `scripts/test-mcp.mjs`, every `*.command` except `Start Dialogue.command`, `js/local-import.js`, `docs/MCP.md`, ZIP/unzip code, `/api/revisions`, `/api/prototypes`, the import route, and the MCP npm dependencies.
 
 ## Current local requirements
 
 No production web services are required for the local build.
 
 - Node.js 22+
-- macOS `/usr/bin/unzip`
-- macOS `/usr/bin/zip`
-- npm packages required by the MCP development adapter
+- `git`, `ttyd`, `tmux` on PATH (devshell provides them)
+- `omp` on PATH (the developer's own)
 
-Normal Dialogue start: `Start Dialogue.command`.
+Normal start: `dev` in the devshell, `npm start`, or `Start Dialogue.command`. VM: `nix run .#vm`.
+
+In the VM, `HOME` is `/var/lib/dialogue/home`. On first use open a branch and run `/login` in the web terminal. Git push credentials are placed in that home directory by hand; this is documented, not automated.
 
 ## Architecture direction
 
 The current local architecture remains product-validation scaffolding:
 
 - existing HTML/CSS/JS Dialogue UI
-- small Node HTTP/API server
-- local JSON persistence
-- local prototype filesystem storage
-- sandboxed iframe viewer
-- local MCP adapter
+- small Node HTTP server with SSE and a WebSocket proxy
+- git as the store: bare mirror + worktrees, no separate revision database
+- ttyd + tmux + omp as the agent runtime
+- sandboxed iframe preview served from the worktree
 - no real auth or production hosting yet
 
-Do not productionize infrastructure yet unless the real LLM test exposes a requirement that forces it.
+Do not productionize infrastructure yet unless the real designer-driven test exposes a requirement that forces it.
 
-The current lean production candidate remains a small self-hosted deployment (likely VPS + Docker/Coolify), Postgres when needed, persistent prototype storage, automated off-server backups and a separate prototype origin for untrusted prototype code.
-
-## LLM/API direction
-
-Dialogue owns project/revision state. ChatGPT or another LLM should connect to Dialogue through an adapter/tool layer rather than Dialogue initially making provider-specific model calls itself.
-
-Human import, local HTTP publishing and LLM publishing should converge on the same additive revision-ingestion model.
-
-Preferred LLM editing flow:
-
-1. list projects/revisions
-2. select a base revision
-3. inspect its file tree
-4. read only the text files needed for the requested change
-5. publish a **new** derived revision with bounded text edits
-6. review the new revision in Dialogue
-
-## ChatGPT Business / first real LLM test path
-
-Matt has created an Idealogue ChatGPT Business workspace specifically so the first real Dialogue integration can use ChatGPT's custom MCP support with write/modify actions.
-
-The Personal workspace will remain separate. The Dialogue Project itself is not being migrated; instead, a new Dialogue Project will be created in the Business workspace and will reconstruct project state from this repository when Matt sends `Load project context`.
-
-Preferred next test path:
-
-- keep Dialogue and its local MCP bridge on Matt's Mac
-- configure ChatGPT Business developer mode / custom MCP connection using the supported secure local/private MCP connection path
-- do not expose Dialogue's localhost web app directly to the public internet
-- ask ChatGPT to inspect the latest Landline revision through the MCP tools
-- ask it to make one small visible change and publish a new immutable revision through `publish_revision`
-
-The OpenAI API billing/key route remains a valid fallback for provider-agnostic testing, but it is no longer the preferred path now that the Business workspace is available.
+The lean production candidate remains a small self-hosted deployment (the NixOS module is the current shape of it), persistent storage for repos/worktrees, automated off-server backups and a separate prototype origin for untrusted prototype code.
 
 ## Next milestone
 
-1. recreate the Dialogue Project in the Idealogue Business workspace with the minimal repository/context instructions
-2. confirm GitHub access is available from that workspace
-3. enable/configure the supported ChatGPT Business custom MCP developer workflow
-4. connect ChatGPT Business to the local Dialogue MCP bridge securely
-5. use the real model to inspect the latest Landline revision (currently V24 on Matt's test Mac)
-6. ask it to make one small visible change
-7. have it publish a new immutable revision through `publish_revision`
-8. verify the resulting revision appears and runs in Dialogue
-9. use the result to refine tool schemas/context before any production infrastructure work
+The first **real designer-driven change** through the web terminal:
 
-The key product question is now whether an actual ChatGPT model can get enough context through Dialogue's tools to make a useful targeted change and publish a safe additive revision.
+1. open a Landline branch in Dialogue (locally via `dev`, then in the VM)
+2. ask `omp` in the terminal for one small visible change to the prototype
+3. watch the preview reload with the change and the chip show uncommitted changes
+4. have the agent commit and push the branch, then open a pull request
+5. record what context the agent needed and what the split screen got wrong or right
+
+The key product question is whether a designer can drive a useful change end to end from inside Dialogue without touching developer tooling outside the terminal pane.
 
 ## Product direction
 
 The intended long-term loop remains:
 
-`Figma design + live prototype → anchored feedback → structured revision request → connected LLM → new prototype revision → compare again`
+`Figma design + live prototype → anchored feedback → structured revision request → connected agent → new prototype revision → compare again`
 
-Revision context may later include Figma node IDs, prototype/revision IDs, DOM references, coordinates, viewport details, screenshot/render crops and surrounding project context.
+Revision context may later include Figma node IDs, branch/commit references, DOM references, coordinates, viewport details, screenshot/render crops and surrounding project context.
 
 ## UI status
 
 Figma remains the source of truth for designed UI.
 
-The current Import UI is temporary functional UI suitable for product validation. Settings remains intentionally incomplete while the LLM connection model is being proven.
-
-The API/MCP launchers are development tooling, not product UI.
+The branch/tag tiles on the project page and the split-screen workspace are temporary functional UI suitable for product validation. The terminal's typography and palette are a deliberate designer-facing choice, but the raw terminal pane itself will be superseded by a designed conversation UI. Settings remains intentionally incomplete while the agent model is being proven.
 
 ## Repository / continuity workflow
 
@@ -177,6 +98,4 @@ Repository: `mattatgit/dialogue`
 - `develop` — current integration branch and standard context-loading source
 - `feature/*` — focused implementation work
 
-PR #3 (`feature/mcp-llm-bridge`) has been merged into `develop` after successful V24 verification.
-
-GitHub is the source of truth for Dialogue implementation files and durable project context. Runtime imported prototypes/data remain outside Git.
+GitHub is the source of truth for Dialogue implementation files and durable project context. `.dialogue-data/` (repos, workspaces, home) stays outside Git.

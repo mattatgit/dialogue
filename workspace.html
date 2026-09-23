@@ -3,28 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Dialogue — Prototype</title>
+  <title>Dialogue — Workspace</title>
   <link rel="stylesheet" href="css/dialogue.css">
   <link rel="stylesheet" href="css/local-functional.css">
+  <link rel="stylesheet" href="js/vendor/xterm.css">
+  <link rel="stylesheet" href="css/terminal.css">
 </head>
-<body class="viewer">
+<body class="viewer workspace">
   <header class="viewer-bar">
     <nav class="viewer-crumb" aria-label="Breadcrumb">
       <a class="crumb-link" href="projects.html">Projects</a>
       <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
-      <a class="crumb-link" href="project-landline.html" data-project-link><span data-project-title>Landline</span></a>
+      <a class="crumb-link" href="project-landline.html" data-project-link><span data-project-title>Project</span></a>
       <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
-      <span class="crumb-current" data-prototype-title>Prototype</span>
+      <span class="crumb-current" data-ref-title>Workspace</span>
     </nav>
-    <div class="viewer-title" data-prototype-title>Prototype</div>
+    <div class="viewer-title"><span data-ref-title>Workspace</span><span class="workspace-status" data-workspace-status hidden></span></div>
     <button class="pill viewer-share" type="button" data-share-open aria-haspopup="dialog" aria-controls="share-modal">Share</button>
   </header>
 
-  <main class="viewer-stage">
-    <div class="prototype-frame-shell" data-prototype-frame-shell hidden>
-      <iframe class="prototype-live-frame" data-prototype-frame sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe>
-    </div>
-    <div class="prototype-load-state" data-prototype-state>Loading prototype…</div>
+  <main class="workspace-body" data-workspace-body>
+    <section class="terminal-pane" data-terminal-pane hidden aria-label="Agent terminal">
+      <div class="terminal-host" data-terminal-host></div>
+      <div class="terminal-overlay" data-terminal-overlay hidden>
+        <span class="terminal-overlay-text" data-terminal-overlay-text>Connecting…</span>
+      </div>
+    </section>
+
+    <section class="viewer-stage workspace-stage" aria-label="Prototype preview">
+      <div class="prototype-frame-shell" data-prototype-frame-shell hidden>
+        <iframe class="prototype-live-frame" data-prototype-frame sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe>
+      </div>
+      <div class="prototype-load-state" data-prototype-state>Loading workspace…</div>
+    </section>
   </main>
   <button class="viewer-restart" type="button" data-restart>↻ &nbsp; Restart <span class="key">R</span></button>
 
@@ -43,7 +54,10 @@
     </section>
   </div>
 
+  <script src="js/vendor/xterm.js"></script>
+  <script src="js/vendor/xterm-addon-fit.js"></script>
   <script src="js/dialogue.js"></script>
-  <script src="js/prototype-viewer.js"></script>
+  <script src="js/terminal.js"></script>
+  <script src="js/workspace.js"></script>
 </body>
 </html>

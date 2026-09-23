@@ -1,22 +1,24 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
+const net = require('node:net');
 const path = require('node:path');
-const { randomUUID } = require('node:crypto');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
+const { createHash } = require('node:crypto');
 
-const execFileAsync = promisify(execFile);
+const git = require('./server/git.js');
+const { TerminalManager, TerminalError } = require('./server/terminal.js');
+const { WatchRegistry } = require('./server/watch.js');
 
 const ROOT = __dirname;
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4173);
 const DATA_ROOT = path.resolve(process.env.DIALOGUE_DATA || path.join(ROOT, '.dialogue-data'));
 const DB_PATH = path.join(DATA_ROOT, 'db.json');
-const TMP_ROOT = path.join(DATA_ROOT, 'tmp');
-const PROTOTYPE_ROOT = path.join(DATA_ROOT, 'prototypes');
-const UNZIP_BIN = process.env.DIALOGUE_UNZIP || '/usr/bin/unzip';
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const REPOS_ROOT = path.join(DATA_ROOT, 'repos');
+const WORKSPACES_ROOT = path.join(DATA_ROOT, 'workspaces');
+const SCHEMA_VERSION = 2;
+const FETCH_TTL_MS = 10 * 1000;
+const MAX_BODY_BYTES = 64 * 1024;
 
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -34,6 +36,8 @@ const MIME_TYPES = new Map([
   ['.woff', 'font/woff'],
   ['.woff2', 'font/woff2'],
   ['.ttf', 'font/ttf'],
+  ['.txt', 'text/plain; charset=utf-8'],
+  ['.md', 'text/plain; charset=utf-8'],
   ['.mp3', 'audio/mpeg'],
   ['.wav', 'audio/wav'],
   ['.mp4', 'video/mp4'],
@@ -47,330 +51,192 @@ class HttpError extends Error {
   }
 }
 
+const terminals = new TerminalManager({ appRoot: ROOT });
+const watchers = new WatchRegistry();
+const repos = new Map();
+
+// --- data -------------------------------------------------------------------
+
 function initialData() {
   return {
-    schemaVersion: 1,
+    schemaVersion: SCHEMA_VERSION,
     projects: [
       {
         id: 'project-landline',
         slug: 'landline',
         name: 'Landline',
         description: 'A simpler way for households to stay in touch.',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        repo: { url: 'https://github.com/mattatgit/landline', prototypePath: 'prototypes/app' }
       }
-    ],
-    prototypes: [],
-    revisions: []
+    ]
   };
 }
 
 async function ensureData() {
-  await Promise.all([
-    fsp.mkdir(DATA_ROOT, { recursive: true }),
-    fsp.mkdir(TMP_ROOT, { recursive: true }),
-    fsp.mkdir(PROTOTYPE_ROOT, { recursive: true })
-  ]);
-
+  await fsp.mkdir(DATA_ROOT, { recursive: true });
+  await fsp.mkdir(REPOS_ROOT, { recursive: true });
+  await fsp.mkdir(WORKSPACES_ROOT, { recursive: true });
+  let current = null;
   try {
-    await fsp.access(DB_PATH, fs.constants.F_OK);
+    current = JSON.parse(await fsp.readFile(DB_PATH, 'utf8'));
   } catch {
-    await saveData(initialData());
+    // missing or unreadable: reseed below
+  }
+  if (!current || current.schemaVersion !== SCHEMA_VERSION) {
+    if (current) console.log(`Replacing db.json schema ${current.schemaVersion} with ${SCHEMA_VERSION}.`);
+    await fsp.writeFile(DB_PATH, `${JSON.stringify(initialData(), null, 2)}\n`);
   }
 }
 
 async function loadData() {
-  await ensureData();
-  const raw = await fsp.readFile(DB_PATH, 'utf8');
-  return JSON.parse(raw);
+  return JSON.parse(await fsp.readFile(DB_PATH, 'utf8'));
 }
 
-async function saveData(data) {
-  await fsp.mkdir(DATA_ROOT, { recursive: true });
-  const tempPath = `${DB_PATH}.tmp`;
-  await fsp.writeFile(tempPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
-  await fsp.rename(tempPath, DB_PATH);
+async function findProject(slug) {
+  const data = await loadData();
+  const project = data.projects.find((item) => item.slug === slug);
+  if (!project) throw new HttpError(404, 'Project not found.');
+  return project;
 }
+
+async function repoFor(project) {
+  let repo = repos.get(project.slug);
+  if (!repo) {
+    repo = new git.ProjectRepo({
+      slug: project.slug,
+      url: project.repo.url,
+      reposRoot: REPOS_ROOT,
+      workspacesRoot: WORKSPACES_ROOT
+    });
+    repo.ready = repo.ensure();
+    repos.set(project.slug, repo);
+  }
+  try {
+    await repo.ready;
+  } catch (error) {
+    repos.delete(project.slug);
+    throw new HttpError(502, `Could not clone ${project.repo.url}: ${error.message}`);
+  }
+  return repo;
+}
+
+async function fetchIfStale(repo) {
+  if (Date.now() - repo.fetchedAt < FETCH_TTL_MS) return null;
+  try {
+    await repo.fetch();
+    return null;
+  } catch (error) {
+    return error.message || 'Fetch failed.';
+  }
+}
+
+async function publicWorkspace(project, workspace) {
+  const prototypeDir = path.join(workspace.dir, project.repo.prototypePath);
+  const hasEntry = await fsp.stat(path.join(prototypeDir, 'index.html')).then((s) => s.isFile(), () => false);
+  return {
+    id: workspace.id,
+    project: { slug: project.slug, name: project.name },
+    ref: workspace.ref,
+    kind: workspace.kind,
+    head: workspace.head,
+    dirty: workspace.dirty,
+    prototypePath: project.repo.prototypePath,
+    entryPoint: hasEntry ? 'index.html' : null,
+    terminal: workspace.kind === 'branch',
+    viewerUrl: `workspace.html?id=${encodeURIComponent(workspace.id)}`,
+    filesUrl: `/workspace-files/${workspace.id}/`
+  };
+}
+
+async function resolveWorkspace(id) {
+  const parsed = git.parseWorkspaceId(id);
+  if (!parsed) throw new HttpError(404, 'Workspace not found.');
+  const project = await findProject(parsed.slug);
+  const repo = await repoFor(project);
+  const workspace = await repo.findWorkspace(parsed.ref);
+  if (!workspace) throw new HttpError(404, 'Workspace not found.');
+  workspace.prototypePath = project.repo.prototypePath;
+  return { project, repo, workspace };
+}
+
+// --- http helpers -------------------------------------------------------------
 
 function sendJson(res, status, payload) {
-  const body = Buffer.from(JSON.stringify(payload));
+  const body = JSON.stringify(payload);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': body.length,
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff'
+    'Content-Length': Buffer.byteLength(body),
+    'Cache-Control': 'no-store'
   });
   res.end(body);
 }
 
 function sendText(res, status, text) {
-  const body = Buffer.from(text);
   res.writeHead(status, {
     'Content-Type': 'text/plain; charset=utf-8',
-    'Content-Length': body.length,
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff'
+    'Content-Length': Buffer.byteLength(text),
+    'Cache-Control': 'no-store'
   });
-  res.end(body);
+  res.end(text);
 }
 
-function slugify(value) {
-  const slug = String(value || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'prototype';
-}
-
-function nextVersionFor(data, prototypeId) {
-  const numbers = data.revisions
-    .filter((revision) => revision.prototypeId === prototypeId)
-    .map((revision) => /^v?(\d+)$/i.exec(revision.version || ''))
-    .filter(Boolean)
-    .map((match) => Number(match[1]));
-  return `V${numbers.length ? Math.max(...numbers) + 1 : 1}`;
-}
-
-function joinedRevision(data, revision) {
-  const prototype = data.prototypes.find((item) => item.id === revision.prototypeId);
-  const project = prototype && data.projects.find((item) => item.id === prototype.projectId);
-  return {
-    ...revision,
-    prototype: prototype
-      ? { id: prototype.id, name: prototype.name, slug: prototype.slug }
-      : null,
-    project: project
-      ? { id: project.id, name: project.name, slug: project.slug }
-      : null,
-    viewerUrl: `/prototype.html?revision=${encodeURIComponent(revision.id)}`
-  };
-}
-
-async function readRequestBody(req, limit = MAX_UPLOAD_BYTES) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    let size = 0;
-
-    req.on('data', (chunk) => {
-      size += chunk.length;
-      if (size > limit) {
-        reject(new HttpError(413, 'Prototype package is larger than the 100 MB development limit.'));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
-
-async function listZipEntries(zipPath) {
-  try {
-    const { stdout } = await execFileAsync(UNZIP_BIN, ['-Z1', zipPath], {
-      maxBuffer: 8 * 1024 * 1024
-    });
-    return stdout.split(/\r?\n/).filter(Boolean);
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      throw new HttpError(500, `Could not find unzip at ${UNZIP_BIN}.`);
-    }
-    throw new HttpError(400, 'The selected file could not be read as a ZIP package.');
+async function readJsonBody(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'Request body too large.');
+    chunks.push(chunk);
   }
-}
-
-function validateZipEntries(entries) {
-  if (!entries.length) throw new HttpError(400, 'The ZIP package is empty.');
-  if (entries.length > 5000) throw new HttpError(400, 'The ZIP package contains too many files for this development build.');
-
-  for (const originalEntry of entries) {
-    if (originalEntry.includes('\0')) throw new HttpError(400, 'The ZIP package contains an invalid file path.');
-    const entry = originalEntry.replace(/\\/g, '/');
-    if (entry.startsWith('/') || /^[A-Za-z]:\//.test(entry)) {
-      throw new HttpError(400, 'The ZIP package contains an unsafe absolute file path.');
-    }
-    const segments = entry.split('/').filter(Boolean);
-    if (segments.some((segment) => segment === '..')) {
-      throw new HttpError(400, 'The ZIP package contains an unsafe parent-directory path.');
-    }
-  }
-}
-
-async function isRegularFile(filePath) {
+  if (!chunks.length) return {};
   try {
-    const stat = await fsp.lstat(filePath);
-    return stat.isFile() && !stat.isSymbolicLink();
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch {
-    return false;
+    throw new HttpError(400, 'Invalid JSON body.');
   }
 }
 
-async function collectIndexFiles(root, current = root, results = []) {
-  const entries = await fsp.readdir(current, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.name === '__MACOSX') continue;
-    const absolute = path.join(current, entry.name);
-    if (entry.isSymbolicLink()) continue;
-    if (entry.isDirectory()) {
-      await collectIndexFiles(root, absolute, results);
-    } else if (entry.isFile() && entry.name.toLowerCase() === 'index.html') {
-      results.push(path.relative(root, absolute).split(path.sep).join('/'));
-    }
-  }
-  return results;
-}
-
-async function findEntryPoint(root) {
-  const rootIndex = path.join(root, 'index.html');
-  if (await isRegularFile(rootIndex)) return 'index.html';
-
-  const candidates = await collectIndexFiles(root);
-  if (!candidates.length) {
-    throw new HttpError(400, 'The prototype package must contain an index.html entry point.');
-  }
-  if (candidates.length > 1) {
-    throw new HttpError(400, 'The prototype package contains multiple index.html files. Put the intended entry point at the ZIP root.');
-  }
-  return candidates[0];
-}
-
-async function importPrototype(req, res, projectSlug, url) {
-  const data = await loadData();
-  const project = data.projects.find((item) => item.slug === projectSlug);
-  if (!project) throw new HttpError(404, 'Project not found.');
-
-  const prototypeName = (url.searchParams.get('name') || '').trim() || project.name;
-  const prototypeSlug = slugify(prototypeName);
-  let prototype = data.prototypes.find(
-    (item) => item.projectId === project.id && item.slug === prototypeSlug
-  );
-
-  const requestedVersion = (url.searchParams.get('version') || '').trim();
-  const version = requestedVersion || (prototype ? nextVersionFor(data, prototype.id) : 'V1');
-
-  if (prototype) {
-    const duplicate = data.revisions.some(
-      (revision) =>
-        revision.prototypeId === prototype.id &&
-        String(revision.version).toLowerCase() === version.toLowerCase()
-    );
-    if (duplicate) {
-      throw new HttpError(409, `${prototypeName} ${version} has already been imported.`);
-    }
-  }
-
-  const body = await readRequestBody(req);
-  if (body.length < 4 || body[0] !== 0x50 || body[1] !== 0x4b) {
-    throw new HttpError(400, 'Choose a valid ZIP package.');
-  }
-
-  const tempZip = path.join(TMP_ROOT, `${randomUUID()}.zip`);
-  await fsp.writeFile(tempZip, body);
-
-  let finalDir = null;
-  try {
-    const entries = await listZipEntries(tempZip);
-    validateZipEntries(entries);
-
-    if (!prototype) {
-      prototype = {
-        id: randomUUID(),
-        projectId: project.id,
-        slug: prototypeSlug,
-        name: prototypeName,
-        createdAt: new Date().toISOString()
-      };
-      data.prototypes.push(prototype);
-    }
-
-    const revisionId = randomUUID();
-    finalDir = path.join(PROTOTYPE_ROOT, project.slug, prototype.slug, revisionId);
-    await fsp.mkdir(finalDir, { recursive: true });
-
-    try {
-      await execFileAsync(UNZIP_BIN, ['-qq', tempZip, '-d', finalDir], {
-        maxBuffer: 8 * 1024 * 1024
-      });
-    } catch {
-      throw new HttpError(400, 'The ZIP package could not be extracted.');
-    }
-
-    const entryPoint = await findEntryPoint(finalDir);
-    const createdAt = new Date().toISOString();
-    const storageKey = path.relative(DATA_ROOT, finalDir).split(path.sep).join('/');
-    const revision = {
-      id: revisionId,
-      prototypeId: prototype.id,
-      version,
-      title: `${prototype.name} ${version}`.trim(),
-      createdAt,
-      importedAt: createdAt,
-      entryPoint,
-      storageKey,
-      source: 'manual-zip-import',
-      fileCount: entries.filter((entry) => !entry.endsWith('/')).length
-    };
-
-    data.revisions.push(revision);
-    await saveData(data);
-    sendJson(res, 201, { revision: joinedRevision(data, revision) });
-  } catch (error) {
-    if (finalDir) await fsp.rm(finalDir, { recursive: true, force: true }).catch(() => {});
-    throw error;
-  } finally {
-    await fsp.rm(tempZip, { force: true }).catch(() => {});
-  }
-}
-
-async function servePrototypeFile(res, revisionId, requestedRelativePath) {
-  const data = await loadData();
-  const revision = data.revisions.find((item) => item.id === revisionId);
-  if (!revision) throw new HttpError(404, 'Prototype revision not found.');
-
-  const baseDir = path.resolve(DATA_ROOT, revision.storageKey);
-  let relativePath = requestedRelativePath || revision.entryPoint;
-  relativePath = decodeURIComponent(relativePath).replace(/\\/g, '/');
-
-  if (relativePath.split('/').some((segment) => segment === '..')) {
-    throw new HttpError(403, 'Unsafe prototype path.');
-  }
-
-  let absolute = path.resolve(baseDir, relativePath);
-  const basePrefix = `${baseDir}${path.sep}`;
-  if (absolute !== baseDir && !absolute.startsWith(basePrefix)) {
-    throw new HttpError(403, 'Unsafe prototype path.');
-  }
-
-  let stat;
-  try {
-    stat = await fsp.stat(absolute);
-  } catch {
-    throw new HttpError(404, 'Prototype file not found.');
-  }
-
-  if (stat.isDirectory()) {
-    absolute = path.join(absolute, 'index.html');
-    try {
-      stat = await fsp.stat(absolute);
-    } catch {
-      throw new HttpError(404, 'Prototype file not found.');
-    }
-  }
-
-  if (!stat.isFile()) throw new HttpError(404, 'Prototype file not found.');
-
+function streamFile(res, absolute, stat, extraHeaders = {}) {
   const contentType = MIME_TYPES.get(path.extname(absolute).toLowerCase()) || 'application/octet-stream';
   res.writeHead(200, {
     'Content-Type': contentType,
     'Content-Length': stat.size,
     'Cache-Control': 'no-store',
-    'Access-Control-Allow-Origin': '*',
-    'Cross-Origin-Resource-Policy': 'cross-origin',
-    'X-Content-Type-Options': 'nosniff'
+    'X-Content-Type-Options': 'nosniff',
+    ...extraHeaders
   });
   fs.createReadStream(absolute).pipe(res);
+}
+
+// --- file serving ----------------------------------------------------------------
+
+async function serveWorkspaceFile(res, id, requestedRelativePath) {
+  const { project, workspace } = await resolveWorkspace(id);
+  const baseDir = path.resolve(workspace.dir, project.repo.prototypePath);
+
+  let relativePath;
+  try {
+    relativePath = decodeURIComponent(requestedRelativePath || 'index.html').replace(/\\/g, '/');
+  } catch {
+    throw new HttpError(400, 'Invalid URL.');
+  }
+  if (relativePath.split('/').some((segment) => segment === '..')) throw new HttpError(403, 'Unsafe prototype path.');
+
+  let absolute = path.resolve(baseDir, relativePath);
+  if (absolute !== baseDir && !absolute.startsWith(`${baseDir}${path.sep}`)) throw new HttpError(403, 'Unsafe prototype path.');
+
+  let stat = await fsp.stat(absolute).catch(() => null);
+  if (stat?.isDirectory()) {
+    absolute = path.join(absolute, 'index.html');
+    stat = await fsp.stat(absolute).catch(() => null);
+  }
+  if (!stat?.isFile()) throw new HttpError(404, 'Prototype file not found.');
+
+  streamFile(res, absolute, stat, {
+    'Access-Control-Allow-Origin': '*',
+    'Cross-Origin-Resource-Policy': 'cross-origin'
+  });
 }
 
 async function serveAppFile(res, pathname) {
@@ -394,23 +260,37 @@ async function serveAppFile(res, pathname) {
   const absolute = path.resolve(ROOT, ...segments);
   if (!absolute.startsWith(`${ROOT}${path.sep}`)) throw new HttpError(403, 'Forbidden.');
 
-  let stat;
-  try {
-    stat = await fsp.stat(absolute);
-  } catch {
-    throw new HttpError(404, 'Not found.');
-  }
-  if (!stat.isFile()) throw new HttpError(404, 'Not found.');
+  const stat = await fsp.stat(absolute).catch(() => null);
+  if (!stat?.isFile()) throw new HttpError(404, 'Not found.');
+  streamFile(res, absolute, stat, { 'Referrer-Policy': 'same-origin' });
+}
 
-  const contentType = MIME_TYPES.get(path.extname(absolute).toLowerCase()) || 'application/octet-stream';
+// --- api ---------------------------------------------------------------------------
+
+async function serveEvents(req, res, id) {
+  const { project, repo, workspace } = await resolveWorkspace(id);
   res.writeHead(200, {
-    'Content-Type': contentType,
-    'Content-Length': stat.size,
+    'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'same-origin'
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no'
   });
-  fs.createReadStream(absolute).pipe(res);
+  res.write(`retry: 2000\n\n`);
+  const keepAlive = setInterval(() => res.write(': ping\n\n'), 25000);
+  res.on('close', () => clearInterval(keepAlive));
+
+  watchers.subscribe(id, workspace.dir, project.repo.prototypePath, res, async (watcher) => {
+    try {
+      const fresh = await repo.findWorkspace(workspace.ref);
+      if (!fresh) {
+        watchers.drop(id);
+        return;
+      }
+      watcher.broadcast('change', { head: fresh.head, dirty: fresh.dirty });
+    } catch (error) {
+      console.error(error);
+    }
+  });
 }
 
 async function handleApi(req, res, url) {
@@ -423,44 +303,65 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && pathname === '/api/projects') {
     const data = await loadData();
-    const projects = data.projects.map((project) => ({
-      ...project,
-      prototypes: data.prototypes.filter((item) => item.projectId === project.id).length
-    }));
-    sendJson(res, 200, { projects });
+    sendJson(res, 200, { projects: data.projects });
     return true;
   }
 
-  let match = /^\/api\/projects\/([^/]+)\/revisions$/.exec(pathname);
+  let match = /^\/api\/projects\/([^/]+)\/refs$/.exec(pathname);
   if (req.method === 'GET' && match) {
-    const projectSlug = decodeURIComponent(match[1]);
-    const data = await loadData();
-    const project = data.projects.find((item) => item.slug === projectSlug);
-    if (!project) throw new HttpError(404, 'Project not found.');
-    const prototypeIds = new Set(
-      data.prototypes.filter((item) => item.projectId === project.id).map((item) => item.id)
-    );
-    const revisions = data.revisions
-      .filter((revision) => prototypeIds.has(revision.prototypeId))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .map((revision) => joinedRevision(data, revision));
-    sendJson(res, 200, { project, revisions });
+    const project = await findProject(decodeURIComponent(match[1]));
+    const repo = await repoFor(project);
+    const fetchError = await fetchIfStale(repo);
+    const [refs, open] = await Promise.all([repo.refs(), repo.openWorkspaces()]);
+    const openRefs = new Set(open.map((item) => item.ref));
+    const decorate = (ref) => ({ ...ref, open: openRefs.has(ref.name), workspaceId: git.workspaceId(project.slug, ref.name) });
+    sendJson(res, 200, {
+      project,
+      branches: refs.branches.map(decorate),
+      tags: refs.tags.map(decorate),
+      ...(fetchError ? { fetchError } : {})
+    });
     return true;
   }
 
-  match = /^\/api\/projects\/([^/]+)\/import$/.exec(pathname);
+  match = /^\/api\/projects\/([^/]+)\/workspaces$/.exec(pathname);
   if (req.method === 'POST' && match) {
-    await importPrototype(req, res, decodeURIComponent(match[1]), url);
+    const project = await findProject(decodeURIComponent(match[1]));
+    const body = await readJsonBody(req);
+    const ref = typeof body.ref === 'string' ? body.ref.trim() : '';
+    if (!git.isValidRefName(ref)) throw new HttpError(400, 'Choose a valid branch, tag or commit.');
+    const repo = await repoFor(project);
+    await fetchIfStale(repo);
+    let workspace;
+    try {
+      workspace = await repo.ensureWorkspace(ref);
+    } catch (error) {
+      if (error instanceof git.GitError && /Unknown ref/.test(error.message)) throw new HttpError(404, `${ref} does not exist in ${project.repo.url}.`);
+      throw error;
+    }
+    sendJson(res, 201, { workspace: await publicWorkspace(project, workspace) });
     return true;
   }
 
-  match = /^\/api\/revisions\/([^/]+)$/.exec(pathname);
+  match = /^\/api\/workspaces\/([^/]+\/[^/]+)$/.exec(pathname);
+  if (match && req.method === 'GET') {
+    const { project, workspace } = await resolveWorkspace(match[1]);
+    sendJson(res, 200, { workspace: await publicWorkspace(project, workspace) });
+    return true;
+  }
+  if (match && req.method === 'DELETE') {
+    const id = match[1];
+    const { repo, workspace } = await resolveWorkspace(id);
+    terminals.stop(id);
+    watchers.drop(id);
+    await repo.removeWorkspace(workspace.ref);
+    sendJson(res, 200, { removed: id });
+    return true;
+  }
+
+  match = /^\/api\/workspaces\/([^/]+\/[^/]+)\/events$/.exec(pathname);
   if (req.method === 'GET' && match) {
-    const revisionId = decodeURIComponent(match[1]);
-    const data = await loadData();
-    const revision = data.revisions.find((item) => item.id === revisionId);
-    if (!revision) throw new HttpError(404, 'Prototype revision not found.');
-    sendJson(res, 200, { revision: joinedRevision(data, revision) });
+    await serveEvents(req, res, match[1]);
     return true;
   }
 
@@ -477,16 +378,13 @@ async function requestHandler(req, res) {
       return;
     }
 
-    const prototypeMatch = /^\/prototype-files\/([^/]+)(?:\/(.*))?$/.exec(url.pathname);
-    if (req.method === 'GET' && prototypeMatch) {
-      await servePrototypeFile(res, decodeURIComponent(prototypeMatch[1]), prototypeMatch[2] || '');
+    const workspaceMatch = /^\/workspace-files\/([^/]+\/[^/]+)(?:\/(.*))?$/.exec(url.pathname);
+    if ((req.method === 'GET' || req.method === 'HEAD') && workspaceMatch) {
+      await serveWorkspaceFile(res, workspaceMatch[1], workspaceMatch[2] || '');
       return;
     }
 
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      throw new HttpError(405, 'Method not allowed.');
-    }
-
+    if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed.');
     await serveAppFile(res, url.pathname);
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
@@ -501,15 +399,88 @@ async function requestHandler(req, res) {
   }
 }
 
+// --- websocket proxy to ttyd ------------------------------------------------------
+
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+function rejectUpgrade(socket, req, code, reason) {
+  // Complete the handshake ourselves so the browser receives a close reason.
+  const key = req.headers['sec-websocket-key'];
+  if (!key) {
+    socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+    return;
+  }
+  const accept = createHash('sha1').update(key + WS_GUID).digest('base64');
+  const protocol = req.headers['sec-websocket-protocol'] ? `Sec-WebSocket-Protocol: ${req.headers['sec-websocket-protocol'].split(',')[0].trim()}\r\n` : '';
+  socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n${protocol}\r\n`);
+  const text = Buffer.from(String(reason).slice(0, 120), 'utf8');
+  const payload = Buffer.alloc(2 + text.length);
+  payload.writeUInt16BE(code, 0);
+  text.copy(payload, 2);
+  socket.end(Buffer.concat([Buffer.from([0x88, payload.length]), payload]));
+}
+
+async function upgradeHandler(req, socket, head) {
+  const match = /^\/ws\/terminal\/([^/]+\/[^/]+)\/ws$/.exec(req.url || '');
+  if (!match) {
+    socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+    return;
+  }
+  const id = match[1];
+  socket.on('error', () => {});
+
+  let socketPath;
+  try {
+    const { workspace } = await resolveWorkspace(id);
+    if (workspace.kind !== 'branch') throw new HttpError(403, 'Read-only workspace: terminals are only available on branches.');
+    ({ socketPath } = await terminals.ensure(workspace));
+  } catch (error) {
+    const message = error instanceof HttpError || error instanceof TerminalError ? error.message : 'Terminal could not be started.';
+    if (!(error instanceof HttpError) && !(error instanceof TerminalError)) console.error(error);
+    rejectUpgrade(socket, req, 1011, message);
+    return;
+  }
+
+  const upstream = net.connect({ path: socketPath });
+  upstream.on('error', () => socket.destroy());
+  socket.on('close', () => upstream.destroy());
+  upstream.on('close', () => socket.destroy());
+  upstream.once('connect', () => {
+    const lines = [`${req.method} ${req.url} HTTP/1.1`];
+    for (let i = 0; i < req.rawHeaders.length; i += 2) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
+    upstream.write(`${lines.join('\r\n')}\r\n\r\n`);
+    if (head.length) upstream.write(head);
+    socket.pipe(upstream);
+    upstream.pipe(socket);
+  });
+}
+
+// --- startup ---------------------------------------------------------------------------
+
+const server = http.createServer(requestHandler);
+server.on('upgrade', (req, socket, head) => {
+  upgradeHandler(req, socket, head).catch((error) => {
+    console.error(error);
+    socket.destroy();
+  });
+});
+
+function shutdown() {
+  terminals.shutdown();
+  server.close();
+  process.exit(0);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
 ensureData()
   .then(() => {
-    const server = http.createServer(requestHandler);
     server.listen(PORT, HOST, () => {
-      console.log(`Dialogue local functional build: http://${HOST}:${PORT}`);
-      console.log(`Data is stored locally in ${DATA_ROOT} and is not committed to Git.`);
+      console.log(`Dialogue local server running at http://${HOST}:${PORT}`);
+      console.log(`Data directory: ${DATA_ROOT}`);
     });
   })
   .catch((error) => {
-    console.error('Could not start Dialogue:', error);
-    process.exitCode = 1;
+    console.error(error);
+    process.exit(1);
   });

@@ -17,7 +17,7 @@ The workflow being used to build Dialogue today is effectively a manual prototyp
 5. The LLM changes the implementation.
 6. A new build is inspected and the loop repeats.
 
-Dialogue is intended to remove the friction from that loop. In particular, it should reduce or eliminate manual screenshot handoffs, ambiguous references to UI elements, ZIP/file transfers, and loss of implementation context between conversations.
+Dialogue is intended to remove the friction from that loop. In particular, it should reduce or eliminate manual screenshot handoffs, ambiguous references to UI elements, file transfers between tools, and loss of implementation context between conversations.
 
 ## Initial users and scale
 
@@ -30,22 +30,21 @@ The product should be designer-first: a designer should be able to review, comme
 ## Core product flow
 
 1. Sign in to Dialogue.
-2. Create or open a project.
-3. Build or revise a prototype through an LLM such as ChatGPT.
-4. Publish the generated prototype package directly into the selected Dialogue project.
-5. Dialogue stores the prototype as a revisioned artifact and generates a preview/thumbnail.
-6. Open the prototype in Dialogue's owner view.
-7. Compare the live prototype with the associated Figma design when available.
-8. Add revision comments directly against the relevant design/prototype element.
-9. Send those comments and their context to the connected LLM.
-10. Receive a new prototype revision back into Dialogue and review it.
-11. Share a public link when needed.
+2. Create or open a project. A project is backed by a git repository that contains the prototype.
+3. Open a branch of that repository as a workspace.
+4. Ask the connected agent, in the workspace, for a change; the agent edits the branch's checkout.
+5. Dialogue shows the live prototype beside the agent and reloads it on every change.
+6. Compare the live prototype with the associated Figma design when available.
+7. Add revision comments directly against the relevant design/prototype element.
+8. Send those comments and their context to the agent.
+9. Commit and push the result; a pull request is the review artifact.
+10. Share a public link when needed.
 
 The long-term review loop should feel closer to:
 
-`Compare design and prototype → identify what is wrong → describe the desired change → send to LLM → inspect the new revision`
+`Compare design and prototype → identify what is wrong → describe the desired change → agent changes the branch → inspect the reloaded prototype`
 
-GitHub, storage, deployment, API calls and other implementation machinery should remain largely underneath that experience.
+GitHub, storage, deployment, terminals and other implementation machinery should remain largely underneath that experience. The current split-screen terminal deliberately exposes some of that machinery so the loop can be learned before it is designed away.
 
 ## Design/prototype comparison
 
@@ -54,7 +53,7 @@ A major planned capability is a side-by-side review surface containing the Figma
 Feedback should be attachable to a specific point in that comparison rather than relying on prose alone. Depending on the surface, a comment may carry context such as:
 
 - Figma file/node ID
-- prototype ID and revision ID
+- prototype ID and branch/commit
 - DOM selector or element reference
 - coordinates within the design or rendered prototype
 - viewport dimensions
@@ -63,41 +62,27 @@ Feedback should be attachable to a specific point in that comparison rather than
 
 This allows an LLM to receive a much more precise revision request than a screenshot plus a manually written explanation.
 
-## Prototype package
+## Prototype and revisions
 
-A published prototype should be treated as a complete package rather than a loose set of individual edits. A package may contain:
+A prototype lives in a git repository at a known path (`repo.prototypePath`), as `index.html`, CSS, optional JavaScript, images/fonts/other assets. Git is the revision model: a commit is a revision, a branch is a line of work, a tag is a named release. Dialogue does not keep its own package or revision store.
 
-- `index.html`
-- CSS
-- optional JavaScript
-- images/fonts/other assets
-- metadata
-
-Publishing should be atomic: validate the complete package, then make that revision live.
-
-## Revisions
-
-Internally, prototypes and revisions are separate concepts. LLM updates should create a new revision rather than destructively replacing the previous version.
-
-This supports:
+This supports, without extra machinery:
 
 - revision history
 - comparison between versions
 - rollback
-- traceability from feedback to resulting revision
-- retaining the design/comment context that caused a change
+- traceability from feedback to resulting commit
+- retaining the design/comment context that caused a change (in commit messages and PRs)
 
-The lightweight local build has already proven this model with Landline V22 → V23 → V24 while leaving earlier revisions intact.
+Earlier lightweight milestones proved an immutable revision store with Landline V22 → V23 → V24 before this model replaced it.
 
-## LLM relationship
+## Agent relationship
 
-Dialogue should not be a ChatGPT-specific product. Dialogue exposes an LLM-facing API/tool layer that capable models can connect to.
+Dialogue should not be a product tied to one model vendor. The current build embeds oh-my-pi (`omp`) as a **connected agent terminal** running inside the branch checkout; anything that can run in a terminal in a checkout could take its place, and a designed conversation UI will eventually replace the raw pane.
 
-ChatGPT is the initial integration target, but the product model remains provider-agnostic so another LLM can participate in the same workflow later.
+The connected agent can see the whole project checkout, edit files, run the project's own tooling, commit and push. Dialogue's job is to put the right context in front of it — the branch, the prototype, and later Figma references and anchored review comments — and to show the designer the result immediately.
 
-The connected LLM should be able to discover Dialogue projects, read relevant prototype/revision context, inspect the files needed for a requested change, and publish a new immutable revision.
-
-The current local MCP bridge already proves those basic operations. The next product-learning milestone is whether a real ChatGPT model can use them effectively to make a useful visible change.
+The next product-learning milestone is whether a designer can drive a useful visible change end to end from that terminal without leaving Dialogue.
 
 ## Sharing
 
@@ -107,73 +92,64 @@ The public Share shell should remain HTML/CSS-only where practical. A prototype 
 
 ## Proven lightweight milestones
 
-Completed locally with Landline:
+Completed locally with Landline and now superseded:
 
-- real project/prototype/revision persistence for the current dogfood project
-- manual prototype import
-- prototype package validation/storage
-- live imported-prototype owner viewer
-- API publishing using the same ingestion path as manual import
-- local MCP project/revision/file inspection
-- additive `publish_revision` deriving a new complete revision from an immutable base
+- manual ZIP import of a real prototype (V22) with validation, storage and an in-Dialogue viewer
+- API publishing through the same ingestion path (V23)
+- an MCP bridge letting an external LLM inspect files and publish an additive derived revision (V24, a non-visible change)
 
-Verified sequence:
+These proved that a revisioned prototype could be held and machine-published. The planned follow-on — connecting a ChatGPT Business workspace to that MCP bridge — was dropped when the model changed: the agent now runs inside Dialogue against a git branch rather than connecting from outside.
 
-1. imported real Landline V22 through Dialogue;
-2. external API client published V23;
-3. local MCP client inspected V23 and published V24;
-4. all revisions appeared in Dialogue and ran correctly.
+## Current build
 
-The V24 change was intentionally non-visible so the infrastructure/tool loop could be proven independently of model-authored design decisions.
+`develop` provides git-backed workspaces: a project page listing the repository's branches and tags, and a split-screen workspace per branch with a connected agent terminal on the left and a live-reloading prototype preview on the right. Tags and commits open as read-only previews.
 
 ## Near-term capabilities
 
 Next:
 
-- first real ChatGPT Business custom-MCP connection
-- first model-authored visible revision
-- refine MCP/API context schemas based on that test
+- first designer-driven visible change made through the connected agent terminal, pushed and opened as a PR
+- learn what context the agent and designer need from that test
+- a designed conversation UI to replace the raw terminal pane
+- workspace management (close/clean up, see open branches)
 - thumbnails/screenshots
-- stronger revision management UI
-- authentication when the workflow moves beyond local development
+- authentication when the workflow moves beyond a single user
 - public sharing
-- broader project/prototype management
+- broader project management (adding projects with their repositories)
 
 Later:
 
 - side-by-side Figma design and live prototype views
 - comments on both Figma and prototype surfaces
-- comment context sent back to the LLM as update prompts
+- comment context sent to the connected agent as change requests
 - comment anchors such as Figma node ID, prototype selector, coordinates, viewport and screenshot crop
-- direct revision requests from Dialogue to a connected LLM
-- feedback/revision traceability
+- feedback/revision traceability through commits and PRs
 - JS warning/consent state for prototypes that require scripting
 - share-link expiry/password options
 
 ## Current dogfood milestone
 
-The current milestone is the first **real model-authored visible revision**.
+The current milestone is the first **real designer-driven change** in the web terminal.
 
 Success means:
 
-1. connect the Idealogue ChatGPT Business workspace to Dialogue's local MCP bridge through the supported secure developer path;
-2. let ChatGPT discover the Landline project and latest revision (currently V24 on Matt's test Mac);
-3. let the model inspect the relevant files;
-4. ask for one small visible HTML/CSS/JS change;
-5. publish the result as a new immutable revision through `publish_revision`;
-6. verify the new revision appears and runs in Dialogue;
-7. record what additional structured context/tool behavior was needed.
+1. open a Landline branch in Dialogue;
+2. ask the connected agent for one small visible HTML/CSS/JS change;
+3. see the preview reload with the change and the status chip show uncommitted changes;
+4. commit and push from the same terminal and open a pull request;
+5. repeat in the NixOS VM;
+6. record what additional structured context or UI the designer and agent needed.
 
-The temporary Import UI and current development launchers are not final product design.
+The branch/tag tiles, the split-screen layout and the raw terminal pane are not final product design.
 
 ## Product-learning principle
 
-Friction encountered while building Dialogue is useful product evidence. Problems such as screenshot handoffs, ambiguous element references, ZIP transfers, cross-machine file syncing, lost chat context and difficulty comparing revisions should be treated as signals for features Dialogue can eventually solve.
+Friction encountered while building Dialogue is useful product evidence. Problems such as screenshot handoffs, ambiguous element references, file transfers, cross-machine syncing, lost chat context and difficulty comparing revisions should be treated as signals for features Dialogue can eventually solve.
 
-The same applies to LLM integration: if the real model struggles to identify the right file/element/change, improve Dialogue's context model rather than compensating with ad-hoc manual instructions forever.
+The same applies to the connected agent: if it struggles to identify the right file/element/change, improve Dialogue's context model rather than compensating with ad-hoc manual instructions forever.
 
 ## Current repository state
 
-`develop` contains the lightweight functional import/API/MCP build plus the durable project documentation. New focused work should normally branch from `develop` and return through a tested pull request.
+`develop` contains the git-workspace/terminal functional build plus the durable project documentation. New focused work should normally branch from `develop` and return through a tested pull request.
 
-GitHub is the durable source of truth for Dialogue application code and project documentation. Imported runtime prototypes themselves live in application storage rather than being treated as Dialogue source files.
+GitHub is the durable source of truth for Dialogue application code and project documentation. The repositories and worktrees Dialogue clones for projects live in application storage (`.dialogue-data/`) rather than being treated as Dialogue source files.

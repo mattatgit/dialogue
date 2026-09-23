@@ -1,0 +1,69 @@
+/* Workspace split view and web terminal. Temporary functional UI; the
+   terminal styling deliberately follows Dialogue's palette so designers get
+   a calm, readable surface rather than a stock developer console. */
+
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400;font-display:swap;src:url("../assets/fonts/JetBrainsMono-Regular.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:700;font-display:swap;src:url("../assets/fonts/JetBrainsMono-Bold.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:italic;font-weight:400;font-display:swap;src:url("../assets/fonts/JetBrainsMono-Italic.woff2") format("woff2")}
+
+:root{
+  --term-bg:#171717;
+  --term-fg:#f8f8f8;
+  --term-line:#272727;
+  --term-line-strong:#3a3a3a;
+  --term-muted:#9ea39e;
+  --term-accent:#ccff00;
+}
+
+/* layout */
+.workspace{overflow:hidden}
+.workspace-body{position:fixed;inset:48px 0 0 0;display:grid;grid-template-columns:1fr;background:var(--term-bg)}
+.workspace-body.has-terminal{grid-template-columns:minmax(420px,44%) 1fr}
+.workspace-stage{position:relative;min-height:0;height:auto;padding-top:0;display:grid;place-items:center;min-width:0;overflow:hidden}
+.workspace-body.has-terminal .workspace-stage{border-left:1px solid var(--term-line)}
+
+/* status chip in the title */
+.workspace .viewer-title{gap:10px;white-space:nowrap}
+.workspace-status{display:inline-flex;align-items:center;gap:4px;font-weight:500;font-size:11px;color:var(--term-muted);padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.06)}
+.workspace-status code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:#cdd1cd}
+.workspace-status.is-dirty{color:#f5a623}
+.workspace-status[hidden]{display:none}
+
+/* terminal pane */
+.terminal-pane{position:relative;min-width:0;min-height:0;background:var(--term-bg);padding:24px 16px 24px 24px}
+.terminal-pane[hidden]{display:none}
+.terminal-host{position:absolute;inset:24px 16px 24px 24px;overflow:hidden}
+.terminal-host .xterm{height:100%}
+.terminal-host .xterm .xterm-viewport{background:transparent!important;scrollbar-width:thin;scrollbar-color:var(--term-line-strong) transparent}
+.terminal-host .xterm .xterm-viewport::-webkit-scrollbar{width:6px}
+.terminal-host .xterm .xterm-viewport::-webkit-scrollbar-thumb{background:var(--term-line-strong);border-radius:3px}
+.terminal-host .xterm .xterm-viewport::-webkit-scrollbar-track{background:transparent}
+.terminal-host .xterm:focus-within .xterm-screen{outline:0}
+.terminal-host .xterm-helper-textarea{opacity:0}
+
+.terminal-overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(23,23,23,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer;z-index:2}
+.terminal-overlay[hidden]{display:none}
+.terminal-overlay-text{max-width:360px;padding:12px 18px;border-radius:12px;border:1px solid var(--term-line-strong);background:#1f1f1f;color:var(--term-muted);font-size:12px;line-height:18px;text-align:center}
+
+/* project page ref groups */
+.ref-note{margin:-24px 0 24px;color:var(--mid);font-size:12px;line-height:18px;min-height:18px}
+.ref-note.is-error{color:#c83a35}
+.ref-groups{display:grid;gap:48px;padding-bottom:96px}
+.ref-group-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin:0 0 16px;color:var(--ink)}
+.ref-group-count{color:var(--mid);font-weight:500}
+.ref-tile.is-busy{opacity:.55;pointer-events:none}
+.ref-preview{opacity:.9}
+.ref-open-badge{position:absolute;z-index:2;top:16px;left:16px;display:inline-flex;align-items:center;gap:6px;background:var(--lime);color:#000;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700}
+.ref-open-badge::before{content:"";width:6px;height:6px;border-radius:50%;background:#000}
+.ref-tile .proto-info{padding-right:16px;height:84px;padding-top:14px}
+.ref-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;margin-bottom:3px}
+.ref-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ref-meta code{font-family:"JetBrains Mono",ui-monospace,monospace;color:var(--ink)}
+.ref-when{display:block;font-size:11px;color:var(--cloud);margin-top:3px}
+
+@media (max-width:1100px){
+  .workspace-body.has-terminal{grid-template-columns:minmax(360px,48%) 1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  .terminal-overlay{backdrop-filter:none;-webkit-backdrop-filter:none}
+}

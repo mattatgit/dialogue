@@ -12,7 +12,7 @@ Figma remains the source of truth for intended UI where a design exists.
 
 ## Typography
 
-Primary UI typeface: Inter Tight.
+Primary UI typeface: Inter Tight. The workspace terminal pane uses JetBrains Mono (see Terminal styling below); it is the only monospace surface in the product.
 
 Use the actual intended weights rather than browser-synthesized approximations. For example, SemiBold should be `font-weight: 600`.
 
@@ -43,34 +43,35 @@ Current prototype behaviors that should be preserved unless designs change:
 
 ## Temporary functional UI
 
-The lightweight functional build includes an **Import prototype** modal created by reusing the existing Dialogue modal/form visual language.
+The lightweight functional build adds two pieces of UI that have not been designed in Figma. Both are deliberately temporary so the real branch → agent → preview workflow can be tested before the final experience is designed.
 
-This remains deliberately temporary functional UI so the real import/revision workflow can be tested before the final create/import interaction is designed in Figma.
+### Branch and tag tiles
 
-Current temporary behaviour:
+The Landline project page replaces the static fallback cards with a **Branches** group and, when non-empty, a **Tags** group. Tiles reuse the existing `.proto-tile` visual language: ref name, short sha, commit subject, relative commit date, and a small dot when a workspace is already open. A failed fetch renders as a one-line note above the grid.
 
-- Landline page action uses **Import**
-- modal fields are Prototype name, Revision and Prototype package
-- package selection accepts ZIP files
-- successful real imports replace the static fallback cards with data-driven revision tiles
+This is functional UI. When Matt designs how projects, branches and history are presented, the Figma design supersedes it.
 
-The real Landline V22 package has been imported successfully through this UI. External API publishing then created V23, and the local MCP bridge created V24. The functional success of those flows does **not** make the current Import modal or developer launchers final product UI.
+### Split-screen workspace
 
-When Matt designs the final create/import/revision experience, the Figma design supersedes this temporary UI.
+`workspace.html` keeps the existing dark owner-viewer shell, crumbs (`Projects › Landline › <ref>`) and the 370×722 sandboxed prototype stage with Restart / `R`, and adds a status chip (`<sha7> · clean` / `· uncommitted changes`) and a terminal pane on the left (`minmax(420px, 44%)`). Tag/commit workspaces show the stage full-width without a terminal.
 
-## Imported prototype viewer
+The two-column layout is temporary functional UI. It exists to prove that a designer can ask for a change and see it land without leaving Dialogue.
 
-The dynamic local owner viewer preserves the existing dark Dialogue owner shell and loads the actual imported prototype into its central stage instead of showing the static Landline PNG.
+### Terminal styling
 
-The current viewer has been verified with real Landline V22/V23/V24 runtime content.
+The terminal pane's look (`css/terminal.css`) is a deliberate designer-facing choice rather than a default: JetBrains Mono (OFL, `assets/fonts/`) at 13 px / 1.45, 24 px pane padding, hidden scrollbar chrome, non-blinking block cursor, and one palette shared by the xterm theme and the omp theme (`omp/dialogue-theme.json`) — background `#171717`, foreground `#f8f8f8`, muted `#9ea39e`, borders `#272727`/`#3a3a3a`, accent `#ccff00`, success `#17b239`, error `#e5484d`, warning `#f5a623`, selection `rgba(204,255,0,.25)`, restrained syntax tints.
+
+The pane itself, however, is a raw agent TUI. It will be superseded by a designed conversation UI once the workflow shows what the designer actually needs to say and see. Final in-product agent/connection management belongs in a designed Dialogue Settings/Connections experience after that.
+
+## Prototype preview
+
+The workspace preview loads the actual checked-out prototype from the branch's worktree into the central stage instead of showing the static Landline PNG, and reloads it on every file change.
 
 The production viewer should retain the same design intent while providing the separate-origin security boundary described in `docs/ARCHITECTURE.md`.
 
-## LLM/MCP development UI
+## Development launchers
 
-`Start Dialogue.command`, `Publish API Test.command` and `Test MCP Bridge.command` are development/testing launchers only. They are not product-interface decisions and should not influence future Settings/Connections design.
-
-Likewise, the first ChatGPT Business MCP connection should initially be treated as infrastructure/product validation. Final in-product connection management belongs in a designed Dialogue Settings/Connections experience after the workflow is understood.
+`Start Dialogue.command` is a development launcher only, not a product-interface decision.
 
 ## Assets
 
@@ -89,7 +90,7 @@ Current examples include:
 - Landline prototype thumbnail PNG
 - Landline full-size prototype PNG
 
-Imported revisions currently reuse the existing Landline thumbnail PNG. Automatic screenshots/thumbnails are a later functional milestone.
+Branch and tag tiles currently reuse the existing Landline thumbnail PNG. Automatic screenshots/thumbnails are a later functional milestone.
 
 ## Prototype tile clipping
 
@@ -103,4 +104,4 @@ The prototype public Share shell is intentionally minimal and HTML/CSS-only. Do 
 
 When implementation and screenshots differ, use Figma measurements/assets/typography as the primary visual reference.
 
-Avoid inventing missing product UI unless a temporary interaction is specifically needed to prove functionality. Any such temporary UI must be clearly documented as temporary, as with the current Import prototype modal.
+Avoid inventing missing product UI unless a temporary interaction is specifically needed to prove functionality. Any such temporary UI must be clearly documented as temporary, as with the current branch/tag tiles and split-screen workspace.

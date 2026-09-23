@@ -6,8 +6,9 @@
   <title>Dialogue — Landline</title>
   <link rel="stylesheet" href="css/dialogue.css">
   <link rel="stylesheet" href="css/local-functional.css">
+  <link rel="stylesheet" href="css/terminal.css">
 </head>
-<body>
+<body data-project="landline">
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand"><div class="brand-mark"><i></i><i></i><i></i><i></i></div></div>
@@ -25,45 +26,16 @@
           <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
           <span class="crumb-current">Landline</span>
         </h1>
-        <button class="pill" type="button" data-import-open>Import</button>
+        <a class="pill outline" href="https://github.com/mattatgit/landline" target="_blank" rel="noopener">GitHub</a>
       </header>
 
-      <section class="grid" data-prototype-grid>
-        <!-- Static fallback remains visible when this prototype is opened without the local server. -->
-        <a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><img class="new-badge-img" src="assets/badge-new.svg" alt="New"><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V19</span><span class="proto-time">Edited 2:35pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a>
-        <a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V18</span><span class="proto-time">Edited 2:18pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a>
-      </section>
+      <p class="ref-note" data-ref-note hidden></p>
+      <div class="ref-groups" data-ref-groups></div>
     </main>
   </div>
 
-  <div class="modal-layer import-prototype-layer" data-import-layer aria-hidden="true">
-    <section class="modal import-prototype-modal" role="dialog" aria-modal="true" aria-labelledby="import-prototype-title">
-      <button class="modal-close" type="button" aria-label="Close import dialog" data-import-close>×</button>
-      <h2 id="import-prototype-title">Import prototype</h2>
-      <form data-import-form>
-        <div class="modal-section">
-          <div class="modal-label">Prototype name</div>
-          <input class="form-field" type="text" name="prototypeName" value="Landline" autocomplete="off">
-        </div>
-        <div class="modal-section">
-          <div class="modal-label">Revision</div>
-          <input class="form-field" type="text" name="version" value="V22" autocomplete="off">
-        </div>
-        <div class="modal-section">
-          <div class="modal-label">Prototype package</div>
-          <input class="hidden-file-input" type="file" accept=".zip,application/zip" data-import-file>
-          <div class="import-file-row">
-            <button class="pill secondary import-file-button" type="button" data-import-file-trigger>Choose ZIP</button>
-            <span class="import-file-name" data-import-file-name>No ZIP selected</span>
-          </div>
-        </div>
-        <div class="import-status" data-import-status aria-live="polite"></div>
-        <button class="apply import-submit" type="submit">Import</button>
-      </form>
-    </section>
-  </div>
 
   <script src="js/dialogue.js"></script>
-  <script src="js/local-import.js"></script>
+  <script src="js/project-refs.js"></script>
 </body>
 </html>

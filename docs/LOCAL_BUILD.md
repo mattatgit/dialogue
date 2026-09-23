@@ -2,136 +2,75 @@
 
 ## Purpose
 
-This build exists to prove Dialogue's core product workflow before committing to production hosting, authentication, database or storage services.
+This build exists to prove Dialogue's core product workflow — open a project branch, ask an agent for a change, see the prototype update, push the result — before committing to production hosting, authentication, database or storage services.
 
 No production web-service accounts are required for the local application itself.
 
-The current dogfood project is Landline. The local runtime history on Matt's test Mac has progressed from imported V22 to API-published V23 to MCP-derived V24.
+The current dogfood project is Landline (`https://github.com/mattatgit/landline`, prototype at `prototypes/app`). The earlier V22/V23/V24 runtime history on Matt's Mac belongs to the superseded revision-store model recorded in `docs/CURRENT.md`; those revisions do not exist in this build.
 
 ## Current architecture
 
-The local build runs on one Mac:
+The local build runs on one machine:
 
 ```text
 Browser
-  ↓
-Dialogue local Node server
-  ├── existing Dialogue HTML/CSS/JS UI
-  ├── small local JSON data store
-  ├── local prototype file storage
-  └── local HTTP API
-
-local MCP stdio adapter
-  ↓
-reads Dialogue revision context
-  ↓
-publishes derived revisions through Dialogue HTTP API
-```
-
-Runtime data lives under:
-
-```text
+  ├── Dialogue UI + /api/*          HTTP
+  ├── /api/workspaces/:id/events    SSE → reload preview on change
+  └── /ws/terminal/:id              WebSocket → ttyd → tmux → omp
+        ↓
+Dialogue local Node server (server.js, server/git.js, server/watch.js, server/terminal.js)
+        ↓
 .dialogue-data/
-  db.json
-  prototypes/
-  tmp/
+  db.json                     projects (schemaVersion 2) with repo.url / repo.prototypePath
+  repos/<slug>.git            bare mirror, fetched on demand
+  workspaces/<slug>/<ref>/    one git worktree per opened ref (<ref> URL-encoded)
+  home/                       omp profile + credentials — VM only; dev uses the real $HOME
 ```
 
 `.dialogue-data/` is ignored by Git.
 
-The JSON store is deliberate development scaffolding, not the final database decision. The application/API boundary should make it possible to replace it later with Postgres or another persistent store without changing the product workflow.
+Workspaces have no database table: `git worktree list --porcelain` on the bare mirror is the source of truth. Git is the revision model; there is no separate revision store.
 
 ## Start
 
 Requirements:
 
 - Node.js 22+
-- macOS `/usr/bin/unzip`
-- macOS `/usr/bin/zip`
-- MCP npm dependencies when using the MCP bridge
+- `git`, `ttyd`, `tmux` on PATH — the Nix devshell provides them
+- `omp` (oh-my-pi) on PATH — your own install; the devshell deliberately does not provide it
 
-Start by double-clicking `Start Dialogue.command`, or with:
+Start with one of:
 
 ```text
-npm start
+dev                       # devshell: live-reloading dev server, http://127.0.0.1:8080
+npm start                 # plain server, http://127.0.0.1:4173
+Start Dialogue.command    # macOS launcher for npm start; checks git/ttyd/tmux/omp are present
 ```
 
-Then visit:
+The server binds to localhost only.
 
-`http://127.0.0.1:4173`
+## Workflow
 
-The server binds to localhost only by default.
+1. Open Projects → Landline. Dialogue fetches the repository and shows a **Branches** group and, when there are any, a **Tags** group. Each tile shows the ref name, short sha, commit subject and relative commit date; a dot marks refs that already have a workspace. If the fetch fails (offline), a one-line note appears and tiles render from the last local refs.
+2. Click a branch. Dialogue creates the worktree (first open creates a local tracking branch from `origin/<branch>`) and opens `workspace.html?id=…`.
+3. The workspace is split: the **terminal** on the left, running `omp` inside that branch's checkout; the **prototype preview** on the right in the familiar 370×722 sandboxed iframe, served from `<worktree>/prototypes/app`. Crumbs read `Projects › Landline › <branch>`; the status chip shows `<sha7> · clean`.
+4. Ask omp for a change in the terminal. As it edits files the preview reloads automatically and the chip switches to `· uncommitted changes`. Restart / `R` still reloads the preview by hand.
+5. Ask omp to commit and push, or do it yourself in the same terminal. The chip returns to `clean` with the new sha.
 
-## Import workflow
+Closing the tab does not end the agent: the omp session lives in tmux and reattaches when the workspace is reopened. Opening a **tag** or commit gives a full-width read-only preview with no terminal.
 
-1. Open Projects → Landline.
-2. Choose **Import**.
-3. Enter the prototype name and revision.
-4. Choose a ZIP package.
-5. Dialogue validates the ZIP.
-6. The package must contain an `index.html` entry point, either at the ZIP root or as the single `index.html` inside one wrapper directory.
-7. Dialogue stores the package locally and creates a revision record.
-8. The project grid switches from the static fallback cards to real imported revision records.
-9. Opening the card loads the imported prototype in Dialogue's owner viewer.
+Deleting a workspace (`DELETE /api/workspaces/:id`) stops its terminal and removes the worktree; the bare mirror and the remote are untouched.
 
-The importer rejects duplicate prototype/revision combinations and obvious unsafe ZIP paths such as `../` traversal entries.
+## Terminal details
 
-## Verified Landline compatibility
-
-The real `LANDLINE-prototype-v22.zip` was imported through the complete Dialogue UI/server flow and ran correctly.
-
-The package is compatible with the current rules:
-
-- one wrapper directory: `LANDLINE-prototype-v22/`
-- one prototype entry point: `LANDLINE-prototype-v22/index.html`
-- referenced assets present
-- no unsafe absolute or parent-directory ZIP paths
-- package well under the development upload limit
-
-Key interactions ran inside Dialogue's iframe sandbox without JavaScript errors, including Profile, Add person, Volume, PTT/VU and Copy Landline ID.
-
-The ZIP contains normal macOS metadata (`__MACOSX`, `.DS_Store`, `._*`). Dialogue currently stores those harmless files too. Ignoring/cleaning them is future importer polish rather than a blocker.
-
-## Current HTTP API
-
-The local server exposes:
-
-- `GET /api/health`
-- `GET /api/projects`
-- `GET /api/projects/:project/revisions`
-- `GET /api/revisions/:id`
-- `POST /api/projects/:project/import`
-
-The import route accepts ZIP bytes directly. The browser Import UI and external publishing client use the same revision-ingestion path.
-
-The external API test successfully used this surface to publish Landline V23 from the V22 package, proving that a non-UI client can create a new revision without bypassing Dialogue's application path.
-
-See `docs/API.md`.
-
-## Current MCP bridge
-
-The local stdio MCP adapter in `mcp-server.mjs` exposes:
-
-- `list_projects`
-- `list_revisions`
-- `get_revision`
-- `list_revision_files`
-- `read_revision_file`
-- `publish_revision`
-
-`publish_revision` derives from an immutable base revision, applies bounded text edits, reuses unchanged assets, packages a complete new revision and publishes it through Dialogue's existing HTTP import route.
-
-The local MCP smoke test successfully inspected V23 and created V24. V24 ran correctly. The test change was intentionally only a non-visible HTML comment.
-
-Development-only limitation: MCP file listing/reading currently knows the local `.dialogue-data/` storage layout directly. Before production this should become a proper Dialogue application/API operation.
-
-See `docs/MCP.md`.
+- ttyd starts lazily on the first WebSocket client, on a UNIX socket, and is proxied through Dialogue at `/ws/terminal/:id`; the browser never connects to ttyd directly.
+- The command is `tmux -f omp/tmux.conf new-session -A -s dialogue-<hash> -c <worktree> omp --config omp/config.yml --append-system-prompt omp/system-prompt.md`.
+- `omp/dialogue-theme.json` is installed into the active omp profile's themes directory before the first spawn, so the agent's colours match the pane (`css/terminal.css`).
+- If `ttyd`, `tmux` or `omp` is missing, the pane shows the server's error instead of "Reconnecting…".
 
 ## Prototype viewer isolation
 
-Imported prototypes run inside a sandboxed iframe in the local build.
-
-This is useful development containment, but it is **not yet the final production security boundary** because Dialogue and prototype files are still served by the same local server.
+Prototypes run inside a sandboxed iframe. This is useful development containment, but it is **not yet the final production security boundary** because Dialogue and prototype files are still served by the same local server, and the agent runs with the Dialogue process's own privileges.
 
 Production should retain a separate prototype execution origin, for example:
 
@@ -140,32 +79,24 @@ Production should retain a separate prototype execution origin, for example:
 
 ## Known limitations
 
-- no real authentication
+- no authentication — anyone who can reach the port gets a shell-capable agent in the checkout; localhost-only mitigates this on a dev machine
+- the terminal is the raw omp TUI in an xterm.js pane, not a designed conversation UI
+- localhost-only; the VM adds nginx but still no auth
+- omp is authenticated through `OPENROUTER_API_KEY` in `.env` (dev and VM); other providers need `/login` in the terminal, and git push credentials are placed in `/var/lib/dialogue/home` by hand in the VM
 - no multi-user access
 - no public sharing implementation
-- no thumbnail generation; imported Landline revisions reuse the existing thumbnail asset
-- no revision management UI beyond importing/opening revisions
+- no thumbnail generation; Landline tiles reuse the existing thumbnail asset
 - no Figma comparison/comments yet
-- local JSON persistence is single-process development storage, not a production database
-- ZIP extraction relies on macOS command-line tools
-- production-grade ZIP bomb/symlink/content hardening is incomplete
-- macOS ZIP metadata is not cleaned during import
+- workspaces are only removed through the API; there is no cleanup UI yet
 - production separate-origin prototype hosting is not implemented
-- MCP file reads currently use direct local storage knowledge
-- the real ChatGPT Business → Dialogue MCP connection has not yet been configured/tested
 
 ## Next test
 
-The local app/import/API/MCP layers are now proven through V24.
+1. run `dev`, open Landline → `main` (or a feature branch)
+2. confirm the terminal connects and omp starts in the worktree
+3. ask omp for one small visible colour/copy change in the prototype
+4. confirm the preview reloads with the change and the chip shows uncommitted changes
+5. commit and push from the terminal; open a PR on GitHub
+6. repeat end to end in `nix run .#vm`
 
-Next:
-
-1. keep the local Dialogue app and MCP adapter unchanged where possible;
-2. configure the Idealogue ChatGPT Business workspace for the supported custom MCP developer flow;
-3. connect ChatGPT Business to the local/private Dialogue MCP server securely;
-4. ask the real model to inspect V24;
-5. make one small visible HTML/CSS/JS change;
-6. publish the next immutable revision through `publish_revision`;
-7. verify it appears and runs in Dialogue.
-
-The purpose is to learn what additional context/tool schema a real model needs before any production infrastructure work begins.
+The purpose is to learn what the designer and the agent each need from the split screen before any production infrastructure work begins.

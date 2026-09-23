@@ -18,8 +18,8 @@ Do not ask the user to restate project history that is already recorded here.
    - `docs/DESIGN.md`
    - `docs/DEVELOPMENT.md`
    - `docs/LOCAL_BUILD.md` when local functional work is active
-   - `docs/API.md` when API/LLM integration work is active
-   - `docs/MCP.md` when MCP/LLM bridge work is active
+   - `docs/API.md` when server/API work is active
+   - `docs/superpowers/specs/2026-09-23-git-workspaces-web-terminal-design.md` when touching workspaces, the terminal or the preview
 4. Inspect the current `develop` branch and any active feature branch named in `docs/CURRENT.md` or otherwise relevant to the next task.
 5. Check recent commits/PR state when necessary to understand changes made after the documentation was last updated.
 
@@ -29,7 +29,7 @@ Do not ask the user to restate project history that is already recorded here.
 - Figma is the source of truth for intended visual design where a Figma design exists.
 - `docs/CURRENT.md` must be updated when a meaningful milestone, architecture decision, UI status, known issue or next step changes.
 - Other durable docs should be updated when their subject changes; do not put every long-term decision only in `CURRENT.md`.
-- Runtime imported prototypes/data are not Dialogue source files and should not be committed unless explicitly being added as test fixtures.
+- `.dialogue-data/` (cloned repos, worktrees, the VM home directory) is runtime data, not Dialogue source, and should not be committed.
 - Do not rely on chat memory as the primary project record.
 - Do not invent missing project history. If repository documentation does not support something, say so.
 - Do not modify files merely because `Load project context` was invoked. Context loading is read-only unless the user also asks for a change.

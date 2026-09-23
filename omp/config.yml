@@ -1,0 +1,19 @@
+# Overlay applied to omp sessions started from a Dialogue workspace.
+theme:
+  dark: dialogue
+  light: dialogue
+symbolPreset: unicode
+# Skip the first-run setup wizard; credentials arrive via environment
+# (OPENROUTER_API_KEY from .env) or /login.
+setupVersion: 2
+modelRoles:
+  default: openrouter/anthropic/claude-opus-5.5
+# Designer-facing transcript: prose only, no tool calls/results or thinking.
+display:
+  hideToolActivity: true
+hideThinkingBlock: true
+# omp is pinned by Nix (VM) or the developer's own install; never nag.
+startup:
+  checkUpdate: false
+marketplace:
+  autoUpdate: off

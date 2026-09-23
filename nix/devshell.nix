@@ -5,6 +5,9 @@ let
     runtimeInputs = [
       pkgs.nodejs
       pkgs.browser-sync
+      pkgs.git
+      pkgs.ttyd
+      pkgs.tmux
     ];
     text = ''
       # Run the Dialogue Node server with live reload in the browser.
@@ -14,9 +17,9 @@ let
       #                            open tabs when html/css/js/assets change
       #
       # PORT overrides the public port; OPEN=0 skips launching the browser.
+      # omp is taken from your own PATH (or DIALOGUE_OMP).
       port="''${PORT:-8080}"
       upstream=4173
-
       PORT="$upstream" node --watch server.js &
       server=$!
       trap 'kill "$server" 2>/dev/null' EXIT
@@ -28,7 +31,8 @@ let
         --proxy "127.0.0.1:$upstream" \
         --listen 127.0.0.1 \
         --port "$port" \
-        --files '*.html' 'css/**' 'js/**' 'assets/**' 'server.js' \
+        --ws \
+        --files '*.html' 'css/**' 'js/**' 'assets/**' 'server.js' 'server/**' \
         --reload-delay 600 \
         --no-ui --no-notify --no-ghost-mode \
         --open "$open" \
@@ -41,10 +45,8 @@ pkgs.mkShell {
     dev
     pkgs.nodejs
     pkgs.browser-sync
-    pkgs.unzip
-    pkgs.zip
+    pkgs.git
+    pkgs.ttyd
+    pkgs.tmux
   ];
-  # server.js / mcp-server.mjs default to macOS /usr/bin paths.
-  DIALOGUE_UNZIP = "${pkgs.unzip}/bin/unzip";
-  DIALOGUE_ZIP = "${pkgs.zip}/bin/zip";
 }

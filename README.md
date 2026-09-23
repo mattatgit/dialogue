@@ -5,67 +5,39 @@ Dialogue is Idealogue's private catalogue, review and publishing tool for AI-ass
 The repository currently contains two layers of work:
 
 1. the Figma-derived static interaction prototype, which remains the visual/interaction baseline; and
-2. a lightweight local functional build that is proving the real project → prototype → revision → LLM workflow before production infrastructure is chosen.
+2. a lightweight local functional build that is proving the real project → branch → agent → prototype workflow before production infrastructure is chosen.
 
 ## Current functional state
 
-Three functional milestones are complete on `develop`:
+The functional build is git-backed. A project points at a git repository (Landline: `https://github.com/mattatgit/landline`, prototype at `prototypes/app`). Dialogue fetches the repository's branches and tags, and opening one creates a **workspace**: a git worktree for that ref under `.dialogue-data/`.
 
-1. real prototype import/viewing;
-2. external HTTP/API revision publishing;
-3. local MCP read/edit/publish flow.
+A branch workspace is a split screen: on the left, a web terminal running the oh-my-pi coding agent (`omp`) inside that branch's checkout; on the right, a live preview of the prototype in a sandboxed iframe that reloads on every file change. The designer asks the agent for a change, sees the result immediately, and git is the revision model — commits and pushes happen from the same terminal. Tag and commit workspaces are read-only previews without a terminal.
 
-Verified with Landline on Matt's Mac:
+The three earlier functional milestones (Landline V22, V23, V24 on Matt's Mac) are superseded by this model; `docs/CURRENT.md` records them.
 
-- Landline V22 imported through the Dialogue UI and ran correctly;
-- an external API client published V23;
-- the local MCP bridge inspected V23 and published V24 as a new immutable derived revision;
-- V24 appeared and ran correctly.
-
-The next milestone is the first **real ChatGPT-authored visible revision** using the Idealogue ChatGPT Business workspace and Dialogue's custom MCP bridge.
+The next milestone is the first **real designer-driven change** made through the web terminal on a Landline branch, then pushed and opened as a pull request.
 
 ## Run the lightweight local build
 
 Requirements:
 
-- macOS for the current development importer/tooling
 - Node.js 22 or newer
-- standard macOS `/usr/bin/unzip`
-- standard macOS `/usr/bin/zip` for derived MCP revisions
-- npm internet access when the MCP packages need to be installed
+- `git`, `ttyd` and `tmux` on PATH (the Nix devshell provides these)
+- `omp` (oh-my-pi) on PATH — the developer's own install; the devshell deliberately does not provide it
 
-Start Dialogue by double-clicking `Start Dialogue.command`, or run:
+Start Dialogue in one of these ways:
 
 ```text
-npm start
+dev                          # inside the Nix devshell: live-reloading dev server at http://127.0.0.1:8080
+npm start                    # plain server at http://127.0.0.1:4173
+Start Dialogue.command       # macOS double-click launcher for npm start; checks for git/ttyd/tmux/omp
+nix run .#vm                 # headless NixOS demo VM with nginx; console prints http://127.0.0.1:8483 and the ssh command
+cp .env.example .env         # then set OPENROUTER_API_KEY; picked up by dev, npm start and the VM
 ```
 
-Then open:
+Local application data — the bare git mirrors, worktrees and (in the VM) the omp home directory — is stored in `.dialogue-data/`. That folder is deliberately excluded from Git.
 
-`http://127.0.0.1:4173`
-
-Local application data and imported prototype files are stored in `.dialogue-data/`. That folder is deliberately excluded from Git.
-
-See `docs/LOCAL_BUILD.md` for current local-build details and limitations.
-
-## LLM / MCP development path
-
-Dialogue owns project/prototype/revision state and exposes a provider-agnostic tool layer. The current local MCP adapter is `mcp-server.mjs`.
-
-Current tools include:
-
-- `list_projects`
-- `list_revisions`
-- `get_revision`
-- `list_revision_files`
-- `read_revision_file`
-- `publish_revision`
-
-`publish_revision` creates a new revision from an immutable base, applies bounded text edits, reuses unchanged assets, packages the complete result and sends it through Dialogue's existing revision-ingestion API.
-
-Matt has created an Idealogue ChatGPT Business workspace. The next test is to connect ChatGPT Business to this local MCP bridge securely and ask the model to make one small visible change to the latest Landline revision.
-
-See `docs/MCP.md` and `docs/API.md`.
+See `docs/LOCAL_BUILD.md` for the workflow, data layout and limitations, and `docs/DEVELOPMENT.md` for the devshell, environment overrides and VM.
 
 ## Static design prototype
 
@@ -84,7 +56,7 @@ Current static prototype UI/interaction coverage includes:
 - Settings skeleton
 - HTML/CSS-only public Share shell
 
-Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored in `assets/`.
+Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored in `assets/`. The terminal pane uses JetBrains Mono (OFL) from `assets/fonts/`.
 
 ## Project documentation
 
@@ -93,10 +65,10 @@ Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored
 - `docs/PRODUCT.md` — product purpose and planned capabilities
 - `docs/ARCHITECTURE.md` — current development and production architecture direction
 - `docs/DESIGN.md` — Figma source and UI conventions
-- `docs/DEVELOPMENT.md` — branches and development workflow
+- `docs/DEVELOPMENT.md` — branches, devshell, VM and development workflow
 - `docs/LOCAL_BUILD.md` — lightweight local functional build
-- `docs/API.md` — local application/API publishing contract
-- `docs/MCP.md` — MCP tool layer and LLM connection direction
+- `docs/API.md` — local HTTP/SSE/WebSocket contract
+- `docs/superpowers/specs/2026-09-23-git-workspaces-web-terminal-design.md` — approved design for the git-workspace/terminal build
 
 ## Branches
 
@@ -108,6 +80,6 @@ New work normally branches from `develop`, is tested, and returns through a pull
 
 ## Important
 
-GitHub is the source of truth for the Dialogue application source and durable project documentation. Imported user prototypes are runtime artifacts and should not be committed to this repository.
+GitHub is the source of truth for the Dialogue application source and durable project documentation. The git mirrors and worktrees Dialogue creates under `.dialogue-data/` are runtime artifacts and should not be committed to this repository.
 
 Do not commit credentials, API keys, database secrets, environment files, `.dialogue-data/`, generated `node_modules/` or runtime logs.
