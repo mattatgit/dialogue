@@ -32,6 +32,15 @@
     const badge = document.createElement('div');
     badge.className = 'project-badge';
     badge.textContent = initials(project);
+    if (project.previewUrl) {
+      const shot = document.createElement('img');
+      shot.className = 'project-shot';
+      shot.src = project.previewUrl;
+      shot.alt = '';
+      shot.loading = 'lazy';
+      shot.addEventListener('load', () => badge.classList.add('has-shot'));
+      badge.appendChild(shot);
+    }
 
     const remove = document.createElement('button');
     remove.type = 'button';

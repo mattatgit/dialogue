@@ -30,6 +30,7 @@ Dialogue Node server (server.js)
   ├── server/git.js         bare repos, refs, worktrees, HEAD/dirty/ahead, push check
   ├── server/deploy-key.js  per-project SSH deploy key, push URL, known_hosts
   ├── server/watch.js       fs.watch on worktree + git dirs → SSE fan-out
+  ├── server/preview.js     headless-Chromium screenshots per commit, cached
   └── server/terminal.js    ttyd lifecycle per branch workspace, prompt injection
         ↓
 .dialogue-data/
@@ -37,6 +38,7 @@ Dialogue Node server (server.js)
   ├── repos/<slug>.git              bare mirror, git fetch --prune origin
   ├── workspaces/<slug>/<ref>/      one git worktree per opened ref
   ├── keys/<slug>, <slug>.pub       deploy key per project; keys/known_hosts
+  ├── previews/<slug>/<sha>.png     prototype screenshots per commit
   └── home/                         omp profile + credentials (VM only)
 
 per branch workspace:
@@ -52,6 +54,10 @@ This deliberately avoids an early framework/database/hosting migration while the
 `db.json` (schemaVersion 3, `server/projects.js`) holds projects only: `{ slug, createdAt, repo: { url, host, owner, repo, prototypePath } }`. The slug is `<owner>-<repo>` so it is unique per repository and stable for the `repos/`, `workspaces/` and `keys/` paths; the display name is computed at read time (`repo`, or `owner/repo` when two projects share a repo name). A schema-2 file is migrated in place, not replaced. Nothing is hardcoded: projects are added from the Projects page by pasting a repository URL (HTTPS or SSH), and `DIALOGUE_SEED` names a JSON list (`seed.json` in the repo lists Landline; the NixOS module writes one from `services.dialogue.seedProjects`) that is merged in on every start for entries not present yet. Adding a project clones the mirror synchronously so a wrong address fails in the dialog, then detects `repo.prototypePath` from the default branch (`prototypes/app/index.html` first, else the shallowest `index.html`). An SSH URL is used for fetching as well as pushing, so a private repository shows the connect panel on its project page until the deploy key is registered; an HTTPS URL to a private repository fails with a hint to use the SSH address instead.
 
 Per project, `server/git.js` maintains a bare clone at `repos/<slug>.git`, fetched on demand when refs are listed. Fetch failure is not fatal: the last local refs are returned together with a `fetchError` so the UI keeps working offline.
+
+### Previews
+
+Project cards show the default branch's prototype and branch tiles show their commit's, as screenshots rendered by `server/preview.js`: `git archive <sha>:<prototypePath>` into a temp dir, then headless Chromium (`--screenshot`, 370×722, `--virtual-time-budget=3000`), one render at a time, cached at `previews/<slug>/<sha>.png` and served with immutable cache headers. Keying by commit sha means a preview refreshes by itself whenever a branch moves — opening the Projects or project page fetches, and the new sha yields a new image — and branches on the same commit share one file. Chromium comes from `DIALOGUE_CHROMIUM`, `PUPPETEER_EXECUTABLE_PATH`, PATH, or the macOS Chrome bundle; without one, cards show the initials badge and tiles a blank device. The devshell and the NixOS module provide `pkgs.chromium`.
 
 ### Worktree per ref
 

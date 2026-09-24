@@ -60,11 +60,17 @@
 
     const preview = document.createElement('span');
     preview.className = 'proto-preview ref-preview';
-    const image = document.createElement('img');
-    image.className = 'landline-proto-img';
-    image.src = 'assets/landline-proto.png';
-    image.alt = '';
-    preview.appendChild(image);
+    if (ref.previewUrl) {
+      const image = document.createElement('img');
+      image.className = 'ref-shot';
+      image.src = ref.previewUrl;
+      image.alt = '';
+      image.loading = 'lazy';
+      image.addEventListener('error', () => { image.remove(); preview.classList.add('is-empty'); });
+      preview.appendChild(image);
+    } else {
+      preview.classList.add('is-empty');
+    }
 
     if (ref.open) {
       const badge = document.createElement('span');

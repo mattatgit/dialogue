@@ -79,6 +79,8 @@ in
         # the web terminal on first use.
         HOME = "${cfg.dataDir}/home";
         DIALOGUE_SEED = toString (pkgs.writeText "dialogue-seed.json" (builtins.toJSON cfg.seedProjects));
+        # Prototype preview screenshots for project cards and branch tiles.
+        DIALOGUE_CHROMIUM = lib.getExe pkgs.chromium;
       };
       preStart = "mkdir -p ${cfg.dataDir}/home";
       serviceConfig = {

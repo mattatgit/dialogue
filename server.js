@@ -10,6 +10,7 @@ const { DeployKeys, classifyPushError, hostingSetup, pushUrl } = require('./serv
 const { ProjectError, ProjectStore } = require('./server/projects.js');
 const { TerminalManager, TerminalError } = require('./server/terminal.js');
 const { WatchRegistry } = require('./server/watch.js');
+const { PreviewRenderer } = require('./server/preview.js');
 
 const ROOT = __dirname;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -19,6 +20,7 @@ const DB_PATH = path.join(DATA_ROOT, 'db.json');
 const REPOS_ROOT = path.join(DATA_ROOT, 'repos');
 const WORKSPACES_ROOT = path.join(DATA_ROOT, 'workspaces');
 const KEYS_ROOT = path.join(DATA_ROOT, 'keys');
+const PREVIEWS_ROOT = path.join(DATA_ROOT, 'previews');
 const COMMIT_PROMPT_PATH = path.join(ROOT, 'omp', 'commit-prompt.md');
 const SEED_PATH = process.env.DIALOGUE_SEED ? path.resolve(process.env.DIALOGUE_SEED) : null;
 const FETCH_TTL_MS = 10 * 1000;
@@ -58,6 +60,7 @@ class HttpError extends Error {
 const terminals = new TerminalManager({ appRoot: ROOT });
 const watchers = new WatchRegistry();
 const deployKeys = new DeployKeys(KEYS_ROOT);
+const previews = new PreviewRenderer(PREVIEWS_ROOT);
 const repos = new Map();
 
 // --- data -------------------------------------------------------------------
@@ -149,6 +152,26 @@ async function discardRepo(project) {
   }
   await instance.destroy();
   await deployKeys.remove(project.slug);
+  await previews.remove(project.slug);
+}
+
+function previewUrl(project, sha) {
+  if (!previews.available || project.repo.prototypePath === null || !sha) return null;
+  return `/api/projects/${encodeURIComponent(project.slug)}/preview/${sha}.png`;
+}
+
+// Default-branch preview for a project card. Only consults mirrors that
+// already exist so listing never triggers a clone.
+async function withPreview(project) {
+  const cloned = await fsp.access(path.join(REPOS_ROOT, `${project.slug}.git`, 'HEAD')).then(() => true, () => false);
+  if (!cloned) return { ...project, previewUrl: null };
+  try {
+    const repo = await repoFor(project);
+    const head = await repo.defaultBranch();
+    return { ...project, defaultBranch: head?.name || null, previewUrl: previewUrl(project, head?.sha) };
+  } catch {
+    return { ...project, previewUrl: null };
+  }
 }
 
 async function fetchIfStale(repo) {
@@ -340,7 +363,8 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && pathname === '/api/projects') {
-    sendJson(res, 200, { projects: await projects.list() });
+    const list = await projects.list();
+    sendJson(res, 200, { projects: await Promise.all(list.map(withPreview)) });
     return true;
   }
 
@@ -400,13 +424,27 @@ async function handleApi(req, res, url) {
     }
     const [refs, open] = await Promise.all([repo.refs(), repo.openWorkspaces()]);
     const openRefs = new Set(open.map((item) => item.ref));
-    const decorate = (ref) => ({ ...ref, open: openRefs.has(ref.name), workspaceId: git.workspaceId(project.slug, ref.name) });
+    const decorate = (ref) => ({ ...ref, open: openRefs.has(ref.name), workspaceId: git.workspaceId(project.slug, ref.name), previewUrl: previewUrl(project, ref.sha) });
+    previews.prune(project.slug, [...refs.branches, ...refs.tags].map((ref) => ref.sha)).catch(() => {});
     sendJson(res, 200, {
-      project,
+      project: await withPreview(project),
       branches: refs.branches.map(decorate),
       tags: refs.tags.map(decorate),
       ...(fetchError ? { fetchError } : {})
     });
+    return true;
+  }
+
+  // Screenshot of the prototype at one commit; rendered on first request.
+  match = /^\/api\/projects\/([^/]+)\/preview\/([0-9a-f]{40})\.png$/.exec(pathname);
+  if (req.method === 'GET' && match) {
+    const project = await findProject(decodeURIComponent(match[1]));
+    if (project.repo.prototypePath === null) throw new HttpError(404, 'No prototype to preview.');
+    const repo = await repoFor(project);
+    const file = await previews.get(repo, match[2], project.repo.prototypePath);
+    if (!file) throw new HttpError(404, 'No preview available.');
+    const stat = await fsp.stat(file);
+    streamFile(res, file, stat, { 'Cache-Control': 'public, max-age=31536000, immutable' });
     return true;
   }
 

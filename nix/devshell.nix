@@ -9,6 +9,7 @@ let
       pkgs.ttyd
       pkgs.tmux
       pkgs.openssh
+      pkgs.chromium
     ];
     text = ''
       # Run the Dialogue Node server with live reload in the browser.
@@ -53,5 +54,6 @@ pkgs.mkShell {
     pkgs.ttyd
     pkgs.tmux
     pkgs.openssh
+    pkgs.chromium
   ];
 }

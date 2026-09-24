@@ -166,6 +166,14 @@ class ProjectRepo {
     return pickPrototypePath(listing.split('\n'));
   }
 
+  // Name and current remote sha of the default branch (bare HEAD symref).
+  async defaultBranch() {
+    const ref = (await this.git(['symbolic-ref', '--quiet', 'HEAD']).catch(() => '')).trim();
+    const name = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : 'main';
+    const sha = (await this.git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${name}^{commit}`]).catch(() => '')).trim();
+    return sha ? { name, sha } : null;
+  }
+
   // Remove every worktree and the mirror itself.
   async destroy() {
     for (const tree of await this.openWorkspaces()) {
