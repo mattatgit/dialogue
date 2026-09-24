@@ -11,7 +11,7 @@ The repository currently contains two layers of work:
 
 The functional build is git-backed. A project points at a git repository (Landline: `https://github.com/mattatgit/landline`, prototype at `prototypes/app`). Dialogue fetches the repository's branches and tags, and opening one creates a **workspace**: a git worktree for that ref under `.dialogue-data/`.
 
-A branch workspace is a split screen: on the left, a web terminal running the oh-my-pi coding agent (`omp`) inside that branch's checkout; on the right, a live preview of the prototype in a sandboxed iframe that reloads on every file change. The designer asks the agent for a change, sees the result immediately, and git is the revision model — commits and pushes happen from the same terminal. Tag and commit workspaces are read-only previews without a terminal.
+A branch workspace is a split screen: on the left, a web terminal running the oh-my-pi coding agent (`omp`) inside that branch's checkout; on the right, a live preview of the prototype in a sandboxed iframe that reloads on every file change. The designer asks the agent for a change, sees the result immediately, and presses COMMIT: the agent commits and pushes the branch over a per-project SSH deploy key that Dialogue generates and asks the designer to add to the repository once. Git is the revision model. Tag and commit workspaces are read-only previews without a terminal.
 
 The three earlier functional milestones (Landline V22, V23, V24 on Matt's Mac) are superseded by this model; `docs/CURRENT.md` records them.
 

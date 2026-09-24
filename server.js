@@ -6,6 +6,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 
 const git = require('./server/git.js');
+const { DeployKeys, hostingSetup, pushUrl } = require('./server/deploy-key.js');
 const { TerminalManager, TerminalError } = require('./server/terminal.js');
 const { WatchRegistry } = require('./server/watch.js');
 
@@ -16,6 +17,8 @@ const DATA_ROOT = path.resolve(process.env.DIALOGUE_DATA || path.join(ROOT, '.di
 const DB_PATH = path.join(DATA_ROOT, 'db.json');
 const REPOS_ROOT = path.join(DATA_ROOT, 'repos');
 const WORKSPACES_ROOT = path.join(DATA_ROOT, 'workspaces');
+const KEYS_ROOT = path.join(DATA_ROOT, 'keys');
+const COMMIT_PROMPT_PATH = path.join(ROOT, 'omp', 'commit-prompt.md');
 const SCHEMA_VERSION = 2;
 const FETCH_TTL_MS = 10 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -53,6 +56,7 @@ class HttpError extends Error {
 
 const terminals = new TerminalManager({ appRoot: ROOT });
 const watchers = new WatchRegistry();
+const deployKeys = new DeployKeys(KEYS_ROOT);
 const repos = new Map();
 
 // --- data -------------------------------------------------------------------
@@ -106,10 +110,23 @@ async function repoFor(project) {
     repo = new git.ProjectRepo({
       slug: project.slug,
       url: project.repo.url,
+      pushUrl: pushUrl(project.repo.url),
       reposRoot: REPOS_ROOT,
       workspacesRoot: WORKSPACES_ROOT
     });
-    repo.ready = repo.ensure();
+    repo.ready = (async () => {
+      // Key generation is local and cheap; a failed host-key scan (offline)
+      // must not block browsing, so it only disables pushing for now.
+      try {
+        const key = await deployKeys.ensure(project.slug, project.repo.url);
+        repo.sshCommand = key.sshCommand;
+        repo.publicKey = key.publicKey;
+      } catch (error) {
+        console.error(`Deploy key for ${project.slug} unavailable: ${error.message}`);
+        repo.pushUrl = null;
+      }
+      await repo.ensure();
+    })();
     repos.set(project.slug, repo);
   }
   try {
@@ -141,6 +158,7 @@ async function publicWorkspace(project, workspace) {
     kind: workspace.kind,
     head: workspace.head,
     dirty: workspace.dirty,
+    ahead: workspace.ahead,
     prototypePath: project.repo.prototypePath,
     entryPoint: hasEntry ? 'index.html' : null,
     terminal: workspace.kind === 'branch',
@@ -269,6 +287,7 @@ async function serveAppFile(res, pathname) {
 
 async function serveEvents(req, res, id) {
   const { project, repo, workspace } = await resolveWorkspace(id);
+  const roots = await repo.watchRoots(workspace, project.repo.prototypePath);
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-store',
@@ -279,14 +298,20 @@ async function serveEvents(req, res, id) {
   const keepAlive = setInterval(() => res.write(': ping\n\n'), 25000);
   res.on('close', () => clearInterval(keepAlive));
 
-  watchers.subscribe(id, workspace.dir, project.repo.prototypePath, res, async (watcher) => {
+  watchers.subscribe(id, roots, res, async (watcher, files) => {
     try {
       const fresh = await repo.findWorkspace(workspace.ref);
       if (!fresh) {
         watchers.drop(id);
         return;
       }
-      watcher.broadcast('change', { head: fresh.head, dirty: fresh.dirty });
+      // `git status` refreshes the index, which the git-dir watch sees; only
+      // announce when something observable moved.
+      const payload = { head: fresh.head, dirty: fresh.dirty, ahead: fresh.ahead };
+      const fingerprint = JSON.stringify(payload);
+      if (!files && watcher.last === fingerprint) return;
+      watcher.last = fingerprint;
+      watcher.broadcast('change', { ...payload, files });
     } catch (error) {
       console.error(error);
     }
@@ -362,6 +387,35 @@ async function handleApi(req, res, url) {
   match = /^\/api\/workspaces\/([^/]+\/[^/]+)\/events$/.exec(pathname);
   if (req.method === 'GET' && match) {
     await serveEvents(req, res, match[1]);
+    return true;
+  }
+
+  // Ask the workspace's agent to commit and push. Refused with the deploy-key
+  // setup when the remote does not accept the project's key yet.
+  match = /^\/api\/workspaces\/([^/]+\/[^/]+)\/commit$/.exec(pathname);
+  if (req.method === 'POST' && match) {
+    const { project, repo, workspace } = await resolveWorkspace(match[1]);
+    if (workspace.kind !== 'branch') throw new HttpError(409, 'Only branches can be committed.');
+    const check = await repo.checkPush();
+    if (!check.ok) {
+      if (check.reason === 'key' && repo.publicKey) {
+        sendJson(res, 409, {
+          error: 'Dialogue is not connected to this repository yet.',
+          setup: { publicKey: repo.publicKey, repository: project.repo.url, ...hostingSetup(project.repo.url), detail: check.message }
+        });
+        return true;
+      }
+      throw new HttpError(502, `Could not reach the repository to push: ${check.message}`);
+    }
+    // One line: a newline would submit the first line before the rest arrives.
+    const prompt = (await fsp.readFile(COMMIT_PROMPT_PATH, 'utf8')).replace(/\s+/g, ' ').trim();
+    try {
+      await terminals.sendPrompt(workspace, prompt);
+    } catch (error) {
+      if (error instanceof TerminalError) throw new HttpError(409, error.message);
+      throw error;
+    }
+    sendJson(res, 202, { accepted: true });
     return true;
   }
 

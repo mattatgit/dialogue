@@ -54,7 +54,7 @@ The VM's disk image `nixos.qcow2` is written to the current directory and is ign
 
 Copy `.env.example` to `.env` (gitignored) and set `OPENROUTER_API_KEY`. `.envrc` loads it with `dotenv_if_exists`, so `dev` and `npm start` pass it to Dialogue, which runs its tmux server (`tmux -L dialogue`) with that environment; omp therefore starts authenticated. `nix run .#vm` stages `.env` (plus `OPENROUTER_API_KEY` from the shell) into a temporary directory that the VM mounts read-only at `/run/dialogue-env` and the service reads as `EnvironmentFile`. `omp/config.yml` sets `setupVersion` so the first-run wizard is skipped, `modelRoles.default` to `openrouter/anthropic/claude-opus-5.5`, `display.hideToolActivity` / `hideThinkingBlock` so the designer sees prose, not tool calls, and `startup.checkUpdate: false` (omp is Nix-pinned; no update banner) (toggle live with `/tools`-style display commands or Settings → Appearance); use `/model` in the terminal to change it, or `/login` for providers without an API key.
 
-Git push credentials for the Landline remote are still placed in `/var/lib/dialogue/home` by hand in the VM (for example a credential helper or SSH key); this is documented, not automated.
+Git push uses a per-project SSH deploy key that Dialogue generates in `.dialogue-data/keys/` on first use; the first COMMIT shows the public key to register on the repository. Nothing is placed in `/var/lib/dialogue/home` by hand any more.
 
 ## Branch strategy
 
@@ -144,8 +144,8 @@ When touching git/workspace/terminal/preview behaviour, preserve:
 ## Near-term build sequence
 
 1. run the split-screen workspace end to end locally on a Landline branch: ask omp for a visible change, watch the preview reload
-2. commit and push from the terminal; open a PR
-3. repeat in `nix run .#vm` with `.env` providing the API key and hand-placed push credentials
+2. press COMMIT, register the deploy key on first use, let omp commit and push; open a PR
+3. repeat in `nix run .#vm` with `.env` providing the API key
 4. record what context omp needed and where the designer had to leave the pane
 5. use that to shape the designed conversation UI and the structured revision-request context
 6. only then finalize production hosting/auth/storage choices

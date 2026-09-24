@@ -27,14 +27,16 @@ Browser
   └── WS:   /ws/terminal/:id            (xterm.js ↔ ttyd, byte-for-byte)
         ↓
 Dialogue Node server (server.js)
-  ├── server/git.js       bare repos, refs, worktrees, HEAD/dirty
-  ├── server/watch.js     fs.watch on worktree → SSE fan-out
-  └── server/terminal.js  ttyd lifecycle per branch workspace
+  ├── server/git.js         bare repos, refs, worktrees, HEAD/dirty/ahead, push check
+  ├── server/deploy-key.js  per-project SSH deploy key, push URL, known_hosts
+  ├── server/watch.js       fs.watch on worktree + git dirs → SSE fan-out
+  └── server/terminal.js    ttyd lifecycle per branch workspace, prompt injection
         ↓
 .dialogue-data/
   ├── db.json                       projects with repo.url / repo.prototypePath
   ├── repos/<slug>.git              bare mirror, git fetch --prune origin
   ├── workspaces/<slug>/<ref>/      one git worktree per opened ref
+  ├── keys/<slug>, <slug>.pub       deploy key per project; keys/known_hosts
   └── home/                         omp profile + credentials (VM only)
 
 per branch workspace:
@@ -91,7 +93,15 @@ The local build implements projects and workspaces. A "revision" is a commit; a 
 
 ## Publishing
 
-Publishing a change is a git commit and push from the workspace terminal. Dialogue does not implement its own ingestion pipeline any more; the branch's remote (GitHub) is where the result lands, and a pull request is the review artifact.
+Publishing a change is a git commit and push made by the agent in the workspace. The branch's remote (GitHub or any git host) is where the result lands, and a pull request is the review artifact.
+
+### Deploy keys
+
+Fetching keeps using the project's HTTPS URL so browsing a public repository needs no setup. Pushing goes over SSH: `server/deploy-key.js` generates an ed25519 key per project on first use (`keys/<slug>`), records the host's SSH key with `ssh-keyscan` in `keys/known_hosts`, and `ProjectRepo.ensure()` sets `remote.origin.pushurl` (`git@host:owner/repo.git`) and `core.sshCommand` (`ssh -i <key> -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=<known_hosts>`) on the bare mirror. Worktrees inherit both, so `git push` works for the agent in the terminal as soon as the public key is registered as a deploy key with write access. GitHub allows one deploy key per repository, which is why the key is per project. The bare repo also gets a fallback `user.name`/`user.email` when no global identity exists (VM).
+
+### COMMIT button
+
+A dirty or ahead branch workspace shows a COMMIT (or PUSH) button. `POST /api/workspaces/:id/commit` first runs `git ls-remote <pushurl>` with the deploy key (successes cached 60 s). If the host rejects the key, the response carries the public key and host-specific instructions, and the workspace page opens the "Connect Dialogue to your repository" panel: copy the key, open `<repo>/settings/keys/new` (GitHub) or the equivalent, tick write access, come back and press continue. Once the check passes, the server finds the workspace's tmux session (`dialogue-<hash>-<checksum>`) and types `omp/commit-prompt.md` into it with `tmux send-keys`; omp commits, pushes and reports in the terminal. Dialogue itself never runs `git commit`. The status chip and button follow the SSE stream: commit → `ahead` 1, push → clean.
 
 A revision request should eventually be able to reference the feedback that caused it:
 
@@ -186,6 +196,6 @@ Important production details:
 - the agent process needs real authentication in front of it before anyone but the owner can reach the terminal
 - repos/worktrees/home live on the host filesystem; storage calls should remain behind `server/git.js` so the layout can move
 - automated off-server backups are mandatory if the data lives on one host
-- agent credentials (`/login`, git push) live in the service home directory and are placed by hand
+- agent credentials (`/login`) live in the service home directory; git push uses the per-project deploy key under `keys/`, which is unencrypted on disk and readable by the agent process, so the data directory must be treated as secret
 
 The final production choice should be revisited after the branch → agent → preview → PR loop has been dogfooded.

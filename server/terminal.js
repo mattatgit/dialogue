@@ -6,8 +6,11 @@ const fsp = require('node:fs/promises');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { execFile, spawn } = require('node:child_process');
+const { promisify } = require('node:util');
 const { createHash } = require('node:crypto');
+
+const execFileAsync = promisify(execFile);
 
 const TTYD_BIN = process.env.DIALOGUE_TTYD || 'ttyd';
 const TMUX_BIN = process.env.DIALOGUE_TMUX || 'tmux';
@@ -33,6 +36,10 @@ async function installTheme(appRoot) {
   if (existing && existing.equals(content)) return;
   await fsp.mkdir(dir, { recursive: true });
   await fsp.writeFile(target, content);
+}
+
+function sessionPrefix(workspaceId) {
+  return `dialogue-${createHash('sha1').update(workspaceId).digest('hex').slice(0, 12)}`;
 }
 
 function waitForSocket(socketPath, child) {
@@ -86,8 +93,8 @@ class TerminalManager {
   }
 
   async start(workspace, record) {
-    const hash = createHash('sha1').update(workspace.id).digest('hex').slice(0, 12);
-    const socketPath = path.join(this.socketDir, `${hash}.sock`);
+    const prefix = sessionPrefix(workspace.id);
+    const socketPath = path.join(this.socketDir, `${prefix.slice('dialogue-'.length)}.sock`);
     await Promise.all([fsp.rm(socketPath, { force: true }), installTheme(this.appRoot)]);
 
     // ttyd runs omp/attach.sh per client; the script owns the tmux session
@@ -107,7 +114,7 @@ class TerminalManager {
         DIALOGUE_APP: this.appRoot,
         DIALOGUE_WORKSPACE: workspace.id,
         DIALOGUE_WORKSPACE_DIR: workspace.dir,
-        DIALOGUE_SESSION: `dialogue-${hash}`,
+        DIALOGUE_SESSION: prefix,
         DIALOGUE_PROTOTYPE_PATH: workspace.prototypePath,
         DIALOGUE_TMUX: TMUX_BIN,
         DIALOGUE_OMP: OMP_BIN
@@ -130,6 +137,25 @@ class TerminalManager {
     if (!record) return;
     this.terminals.delete(id);
     record.child?.kill('SIGTERM');
+  }
+
+  // Type `text` into the workspace's omp session as if the user had entered
+  // it. attach.sh names sessions `<prefix>-<overlay checksum>`; the live one
+  // is whichever currently exists under the prefix.
+  async sendPrompt(workspace, text) {
+    let sessions = '';
+    try {
+      ({ stdout: sessions } = await execFileAsync(TMUX_BIN, ['-L', 'dialogue', 'list-sessions', '-F', '#S']));
+    } catch {
+      // no tmux server: no sessions
+    }
+    const prefix = `${sessionPrefix(workspace.id)}-`;
+    const session = sessions.split('\n').find((name) => name.startsWith(prefix));
+    if (!session) throw new TerminalError('Open the agent terminal first, then try again.');
+    // `<session>:` targets the session's current window exactly (no
+    // prefix matching against other session names).
+    await execFileAsync(TMUX_BIN, ['-L', 'dialogue', 'send-keys', '-t', `${session}:`, '-l', text]);
+    await execFileAsync(TMUX_BIN, ['-L', 'dialogue', 'send-keys', '-t', `${session}:`, 'Enter']);
   }
 
   shutdown() {

@@ -24,6 +24,7 @@ Dialogue local Node server (server.js, server/git.js, server/watch.js, server/te
   db.json                     projects (schemaVersion 2) with repo.url / repo.prototypePath
   repos/<slug>.git            bare mirror, fetched on demand
   workspaces/<slug>/<ref>/    one git worktree per opened ref (<ref> URL-encoded)
+  keys/<slug>, <slug>.pub     per-project SSH deploy key (push only) + known_hosts
   home/                       omp profile + credentials — VM only; dev uses the real $HOME
 ```
 
@@ -54,8 +55,8 @@ The server binds to localhost only.
 1. Open Projects → Landline. Dialogue fetches the repository and shows a **Branches** group and, when there are any, a **Tags** group. Each tile shows the ref name, short sha, commit subject and relative commit date; a dot marks refs that already have a workspace. If the fetch fails (offline), a one-line note appears and tiles render from the last local refs.
 2. Click a branch. Dialogue creates the worktree (first open creates a local tracking branch from `origin/<branch>`) and opens `workspace.html?id=…`.
 3. The workspace is split: the **terminal** on the left, running `omp` inside that branch's checkout; the **prototype preview** on the right in the familiar 370×722 sandboxed iframe, served from `<worktree>/prototypes/app`. Crumbs read `Projects › Landline › <branch>`; the status chip shows `<sha7> · clean`.
-4. Ask omp for a change in the terminal. As it edits files the preview reloads automatically and the chip switches to `· uncommitted changes`. Restart / `R` still reloads the preview by hand.
-5. Ask omp to commit and push, or do it yourself in the same terminal. The chip returns to `clean` with the new sha.
+4. Ask omp for a change in the terminal. As it edits files the preview reloads automatically, the chip switches to `· uncommitted changes` and a **COMMIT** button appears in the header. Restart / `R` still reloads the preview by hand.
+5. Press COMMIT. The first time, Dialogue shows the project's public deploy key with instructions to add it to the repository with write access; after "I've added the key — continue" (or immediately on later commits) omp is asked to commit and push, reports in the terminal, and the chip returns to `clean` with the new sha. Between commit and push it reads `· 1 to push` and the button says **Push 1 commit**.
 
 Closing the tab does not end the agent: the omp session lives in tmux and reattaches when the workspace is reopened. Opening a **tag** or commit gives a full-width read-only preview with no terminal.
 
@@ -82,7 +83,7 @@ Production should retain a separate prototype execution origin, for example:
 - no authentication — anyone who can reach the port gets a shell-capable agent in the checkout; localhost-only mitigates this on a dev machine
 - the terminal is the raw omp TUI in an xterm.js pane, not a designed conversation UI
 - localhost-only; the VM adds nginx but still no auth
-- omp is authenticated through `OPENROUTER_API_KEY` in `.env` (dev and VM); other providers need `/login` in the terminal, and git push credentials are placed in `/var/lib/dialogue/home` by hand in the VM
+- omp is authenticated through `OPENROUTER_API_KEY` in `.env` (dev and VM); other providers need `/login` in the terminal. Git push uses the generated deploy key; the private key lives unencrypted in `.dialogue-data/keys/` and is readable by the agent process
 - no multi-user access
 - no public sharing implementation
 - no thumbnail generation; Landline tiles reuse the existing thumbnail asset
@@ -96,7 +97,7 @@ Production should retain a separate prototype execution origin, for example:
 2. confirm the terminal connects and omp starts in the worktree
 3. ask omp for one small visible colour/copy change in the prototype
 4. confirm the preview reloads with the change and the chip shows uncommitted changes
-5. commit and push from the terminal; open a PR on GitHub
+5. press COMMIT, register the deploy key, let omp commit and push; open a PR on GitHub
 6. repeat end to end in `nix run .#vm`
 
 The purpose is to learn what the designer and the agent each need from the split screen before any production infrastructure work begins.

@@ -7,32 +7,37 @@ const path = require('node:path');
 const DEBOUNCE_MS = 150;
 
 class WorkspaceWatcher {
-  constructor(dir, prototypePath) {
-    this.dir = dir;
-    this.roots = [path.join(dir, prototypePath), path.join(dir, '.git')];
+  // roots[0] is the prototype directory; a change there means the preview
+  // must reload. Other roots (git dirs) only move head/dirty/ahead.
+  constructor(roots) {
+    this.roots = roots;
     this.clients = new Set();
     this.watchers = [];
     this.timer = null;
     this.onChange = null;
+    this.filesChanged = false;
   }
 
   start() {
-    for (const root of this.roots) {
+    this.roots.forEach((root, index) => {
       try {
-        const watcher = fs.watch(root, { recursive: true }, () => this.schedule());
+        const watcher = fs.watch(root, { recursive: true }, () => this.schedule(index === 0));
         watcher.on('error', () => {});
         this.watchers.push(watcher);
       } catch {
         // Missing path (e.g. prototypePath absent on this ref): nothing to watch.
       }
-    }
+    });
   }
 
-  schedule() {
+  schedule(files) {
+    this.filesChanged ||= files;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.onChange?.();
+      const changed = this.filesChanged;
+      this.filesChanged = false;
+      this.onChange?.(changed);
     }, DEBOUNCE_MS);
   }
 
@@ -53,11 +58,11 @@ class WatchRegistry {
     this.watchers = new Map();
   }
 
-  subscribe(id, dir, prototypePath, res, onChange) {
+  subscribe(id, roots, res, onChange) {
     let watcher = this.watchers.get(id);
     if (!watcher) {
-      watcher = new WorkspaceWatcher(dir, prototypePath);
-      watcher.onChange = () => onChange(watcher);
+      watcher = new WorkspaceWatcher(roots);
+      watcher.onChange = (files) => onChange(watcher, files);
       watcher.start();
       this.watchers.set(id, watcher);
     }

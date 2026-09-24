@@ -5,3 +5,29 @@
 .prototype-live-frame{display:block;width:100%;height:100%;border:0;background:#fff}
 .prototype-load-state{color:#9ea39e;font-size:12px;text-align:center;max-width:360px;line-height:18px}
 .prototype-load-state.is-error{color:#ff8d86}
+
+/* workspace header actions: COMMIT next to Share */
+.viewer-actions{position:absolute;right:16px;top:8px;display:flex;gap:8px;align-items:center}
+.viewer-actions .viewer-share{position:static}
+.commit-button{background:#f5a623;color:#171717}
+.commit-button[hidden]{display:none}
+.commit-button:disabled{opacity:.7;cursor:progress;transform:none}
+
+/* deploy-key setup panel (reuses the share modal layer) */
+.setup-modal.share-modal{width:min(640px,calc(100vw - 32px));height:auto;max-height:calc(100vh - 48px);overflow:auto;padding:40px}
+.setup-modal h2{position:static;margin:0 44px 8px 0;font-size:24px;line-height:29px;font-weight:600;color:#171717}
+.setup-intro{margin:0 0 24px;color:#555;line-height:20px;font-size:14px}
+.setup-steps{margin:0;padding:0 0 0 24px;display:grid;gap:20px;font-size:14px;line-height:20px;color:#171717}
+.setup-steps li::marker{font-weight:700}
+.setup-step-title{display:block;font-weight:700;margin-bottom:6px}
+.setup-step-text{display:block;color:#555}
+.setup-key-row{display:flex;gap:12px;align-items:center;padding:12px 16px;border-radius:16px;background:#f8f8f8}
+.setup-key{flex:1;min-width:0;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;line-height:16px;word-break:break-all;color:#171717}
+.setup-open-link{display:inline-flex;margin-top:10px;height:36px;padding:0 14px;font-size:13px}
+.setup-error{margin:20px 0 0;padding:12px 16px;border-radius:12px;background:#fff1e6;color:#8a3b00;font-size:14px;line-height:20px}
+.setup-error[hidden]{display:none}
+.setup-details{margin-top:12px;font-size:12px;color:#777}
+.setup-details[hidden]{display:none}
+.setup-details pre{white-space:pre-wrap;word-break:break-word;margin:8px 0 0;padding:10px;background:#f8f8f8;border-radius:8px;font-size:11px;color:#555}
+.setup-actions{margin-top:28px;display:flex;justify-content:flex-end}
+.setup-actions .pill:disabled{opacity:.6;cursor:progress;transform:none}

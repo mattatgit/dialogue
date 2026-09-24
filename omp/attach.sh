@@ -12,7 +12,7 @@ app="$DIALOGUE_APP"
 tmux="${DIALOGUE_TMUX:-tmux}"
 omp="${DIALOGUE_OMP:-omp}"
 
-sum=$(cat "$app/omp/config.yml" "$app/omp/system-prompt.md" "$app/omp/tmux.conf" "$app/omp/dialogue-theme.json" | cksum | cut -d' ' -f1)
+sum=$(cat "$app/omp/config.yml" "$app/omp/system-prompt.md" "$app/omp/commit-prompt.md" "$app/omp/tmux.conf" "$app/omp/dialogue-theme.json" | cksum | cut -d' ' -f1)
 session="$DIALOGUE_SESSION-$sum"
 
 "$tmux" -L dialogue list-sessions -F '#S' 2>/dev/null | while IFS= read -r name; do

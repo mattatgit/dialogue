@@ -4,11 +4,13 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { classifyPushError } = require('./deploy-key.js');
 
 const execFileAsync = promisify(execFile);
 const GIT_BIN = process.env.DIALOGUE_GIT || 'git';
 const SEP = '|';
 const REF_FORMAT = `%(refname)${SEP}%(objectname)${SEP}%(subject)${SEP}%(creatordate:iso-strict)`;
+const PUSH_CHECK_TTL_MS = 60 * 1000;
 
 class GitError extends Error {
   constructor(message, stderr = '') {
@@ -92,12 +94,15 @@ function workspaceDir(workspacesRoot, slug, ref) {
 // --- repository operations -------------------------------------------------
 
 class ProjectRepo {
-  constructor({ slug, url, reposRoot, workspacesRoot }) {
+  constructor({ slug, url, pushUrl = null, sshCommand = null, reposRoot, workspacesRoot }) {
     this.slug = slug;
     this.url = url;
+    this.pushUrl = pushUrl;
+    this.sshCommand = sshCommand;
     this.bareDir = path.join(reposRoot, `${slug}.git`);
     this.workspacesRoot = workspacesRoot;
     this.fetchedAt = 0;
+    this.pushCheckedAt = 0;
   }
 
   git(args, options) {
@@ -109,23 +114,48 @@ class ProjectRepo {
     // /var/lib/x -> private/x); compare against the same canonical form.
     await fsp.mkdir(this.workspacesRoot, { recursive: true });
     this.workspacesRoot = await fsp.realpath(this.workspacesRoot);
-    try {
-      await fsp.access(path.join(this.bareDir, 'HEAD'));
-      return;
-    } catch {
-      // fall through: clone
+    const cloned = await fsp.access(path.join(this.bareDir, 'HEAD')).then(() => true, () => false);
+    if (!cloned) {
+      await fsp.mkdir(path.dirname(this.bareDir), { recursive: true });
+      await run(['clone', '--bare', '--quiet', this.url, this.bareDir]);
+      // Bare clones do not create a remote-tracking layout by default; make
+      // origin/<branch> exist so worktrees can track it.
+      await this.git(['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*']);
+      await this.git(['fetch', '--quiet', '--prune', 'origin']);
     }
-    await fsp.mkdir(path.dirname(this.bareDir), { recursive: true });
-    await run(['clone', '--bare', '--quiet', this.url, this.bareDir]);
-    // Bare clones do not create a remote-tracking layout by default; make
-    // origin/<branch> exist so worktrees can track it.
-    await this.git(['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*']);
-    await this.git(['fetch', '--quiet', '--prune', 'origin']);
+    // Fetch over HTTPS, push over SSH with the project's deploy key. Set on
+    // every start so existing mirrors pick the settings up; worktrees share
+    // the bare repo's config.
+    if (this.pushUrl) await this.git(['config', 'remote.origin.pushurl', this.pushUrl]);
+    else await this.git(['config', '--unset-all', 'remote.origin.pushurl']).catch(() => {});
+    if (this.sshCommand) await this.git(['config', 'core.sshCommand', this.sshCommand]);
+    else await this.git(['config', '--unset-all', 'core.sshCommand']).catch(() => {});
+    // Commits made by the agent need an identity; on a fresh VM home there
+    // is no global one. Only fill the gap at repo level.
+    const hasIdentity = await this.git(['config', '--get', 'user.email']).then(() => true, () => false);
+    if (!hasIdentity) {
+      await this.git(['config', 'user.name', 'Dialogue']);
+      await this.git(['config', 'user.email', `dialogue-${this.slug}@localhost`]);
+    }
   }
 
   async fetch() {
     await this.git(['fetch', '--quiet', '--prune', '--prune-tags', 'origin']);
     this.fetchedAt = Date.now();
+  }
+
+  // Can this repo push? Talks to the push URL with the deploy key. A success
+  // is cached for a minute; failures are always re-checked.
+  async checkPush() {
+    if (!this.pushUrl) return { ok: false, reason: 'unknown', message: 'No push URL configured.' };
+    if (Date.now() - this.pushCheckedAt < PUSH_CHECK_TTL_MS) return { ok: true };
+    try {
+      await this.git(['ls-remote', this.pushUrl, 'HEAD'], { timeout: 20000 });
+    } catch (error) {
+      return { ok: false, reason: classifyPushError(error.stderr || error.message), message: error.message };
+    }
+    this.pushCheckedAt = Date.now();
+    return { ok: true };
   }
 
   async refs() {
@@ -197,7 +227,12 @@ class ProjectRepo {
     await fsp.mkdir(path.dirname(dir), { recursive: true });
     if (target.kind === 'branch') {
       const hasLocal = await this.git(['show-ref', '--verify', '--quiet', `refs/heads/${ref}`]).then(() => true, () => false);
-      if (hasLocal) await this.git(['worktree', 'add', '--quiet', dir, ref]);
+      if (hasLocal) {
+        await this.git(['worktree', 'add', '--quiet', dir, ref]);
+        // A local branch left by an earlier workspace may lack its upstream;
+        // `ahead` and the agent's push both rely on it.
+        await run(['-C', dir, 'branch', '--quiet', `--set-upstream-to=origin/${ref}`]).catch(() => {});
+      }
       else await this.git(['worktree', 'add', '--quiet', '--track', '-b', ref, dir, `origin/${ref}`]);
     } else {
       await this.git(['worktree', 'add', '--quiet', '--detach', dir, target.sha]);
@@ -214,9 +249,13 @@ class ProjectRepo {
 
   async describeWorkspace(ref, tree) {
     if (!tree) throw new GitError(`Workspace not found: ${ref}`);
-    const [subject, status] = await Promise.all([
+    const [subject, status, ahead] = await Promise.all([
       run(['-C', tree.dir, 'log', '-1', '--format=%s']).then((s) => s.trim(), () => ''),
-      run(['-C', tree.dir, 'status', '--porcelain', '--untracked-files=normal']).then((s) => s.trim(), () => '')
+      run(['-C', tree.dir, 'status', '--porcelain', '--untracked-files=normal']).then((s) => s.trim(), () => ''),
+      // Commits not yet on the tracked remote branch; 0 without an upstream.
+      tree.branch
+        ? run(['-C', tree.dir, 'rev-list', '--count', '@{upstream}..HEAD']).then((s) => Number(s.trim()) || 0, () => 0)
+        : Promise.resolve(0)
     ]);
     let kind = 'commit';
     if (tree.branch) kind = 'branch';
@@ -227,8 +266,17 @@ class ProjectRepo {
       kind,
       dir: tree.dir,
       head: { sha: tree.head, subject },
-      dirty: status.length > 0
+      dirty: status.length > 0,
+      ahead
     };
+  }
+
+  // Directories whose changes mean the workspace's head/dirty/ahead state
+  // may have moved: prototype files, the worktree's own git dir (HEAD, index)
+  // and the mirror's remote-tracking refs (updated by push and fetch).
+  async watchRoots(workspace, prototypePath) {
+    const gitDir = (await run(['-C', workspace.dir, 'rev-parse', '--absolute-git-dir'])).trim();
+    return [path.join(workspace.dir, prototypePath), gitDir, path.join(this.bareDir, 'refs', 'remotes')];
   }
 
   async findWorkspace(ref) {

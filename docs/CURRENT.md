@@ -31,9 +31,11 @@ The standard fresh-chat context phrase is **`Load project context`**.
 - terminal process: ttyd → `omp/attach.sh` → tmux (`-L dialogue`, `omp/tmux.conf`) → `omp --config omp/config.yml --append-system-prompt omp/system-prompt.md`, started lazily on the first WebSocket client; tmux sessions survive Dialogue restarts but rotate when `omp/*` changes
 - `omp/dialogue-theme.json` installed into the active omp profile's themes directory before spawn; `css/terminal.css` shares its palette; JetBrains Mono in `assets/fonts/`
 - SSE `GET /api/workspaces/:id/events` fed by a debounced recursive `fs.watch` on the prototype path and the worktree HEAD; `change` events reload the iframe and update the chip
-- `Start Dialogue.command` checking for `git`/`ttyd`/`tmux`/`omp`
-- Nix: devshell with `git`/`ttyd`/`tmux`, `flake.nix` input `llm-agents` providing `omp` to the VM, NixOS module with `HOME=${dataDir}/home`, nginx WebSocket proxying and `services.dialogue.omp`
-- `test/git.test.js` (`node --test test/`) covering ref parsing and workspace-id/path safety
+- COMMIT button on dirty/ahead branch workspaces: `POST /api/workspaces/:id/commit` checks the remote accepts the project's deploy key, then types `omp/commit-prompt.md` into the workspace's tmux session so omp commits and pushes; the chip shows `· N to push` between commit and push
+- per-project SSH deploy key (`.dialogue-data/keys/<slug>`), generated on first use by `server/deploy-key.js`; fetch stays HTTPS, `remote.origin.pushurl` + `core.sshCommand` on the bare mirror make push use the key. First commit without a registered key opens the "Connect Dialogue to your repository" panel with the public key and step-by-step instructions written for a designer
+- `Start Dialogue.command` checking for `git`/`ttyd`/`tmux`/`omp`/`ssh`/`ssh-keygen`
+- Nix: devshell with `git`/`ttyd`/`tmux`/`openssh`, `flake.nix` input `llm-agents` providing `omp` to the VM, NixOS module with `HOME=${dataDir}/home`, nginx WebSocket proxying and `services.dialogue.omp`
+- `test/git.test.js` and `test/deploy-key.test.js` (`npm test`) covering ref parsing, workspace-id/path safety, push-URL derivation and push-error classification
 
 Removed: `mcp-server.mjs`, `scripts/publish-revision.js`, `scripts/test-mcp.mjs`, every `*.command` except `Start Dialogue.command`, `js/local-import.js`, `docs/MCP.md`, ZIP/unzip code, `/api/revisions`, `/api/prototypes`, the import route, and the MCP npm dependencies.
 
@@ -42,12 +44,12 @@ Removed: `mcp-server.mjs`, `scripts/publish-revision.js`, `scripts/test-mcp.mjs`
 No production web services are required for the local build.
 
 - Node.js 22+
-- `git`, `ttyd`, `tmux` on PATH (devshell provides them)
+- `git`, `ttyd`, `tmux`, `ssh`/`ssh-keygen`/`ssh-keyscan` on PATH (devshell provides them; OpenSSH ships with macOS)
 - `omp` on PATH (the developer's own)
 
 Normal start: `dev` in the devshell, `npm start`, or `Start Dialogue.command`. VM: `nix run .#vm`.
 
-In the VM, `HOME` is `/var/lib/dialogue/home`. On first use open a branch and run `/login` in the web terminal. Git push credentials are placed in that home directory by hand; this is documented, not automated.
+In the VM, `HOME` is `/var/lib/dialogue/home`. On first use open a branch and run `/login` in the web terminal. Pushing needs no hand-placed credentials: the first COMMIT shows the project's public deploy key to add to the repository.
 
 ## Architecture direction
 
@@ -71,7 +73,7 @@ The first **real designer-driven change** through the web terminal:
 1. open a Landline branch in Dialogue (locally via `dev`, then in the VM)
 2. ask `omp` in the terminal for one small visible change to the prototype
 3. watch the preview reload with the change and the chip show uncommitted changes
-4. have the agent commit and push the branch, then open a pull request
+4. press COMMIT; on first use add the shown deploy key to the repository, then let the agent commit and push; open a pull request
 5. record what context the agent needed and what the split screen got wrong or right
 
 The key product question is whether a designer can drive a useful change end to end from inside Dialogue without touching developer tooling outside the terminal pane.

@@ -23,9 +23,9 @@ if [[ -z "$NODE_MAJOR" || "$NODE_MAJOR" -lt 22 ]]; then
        "Update Node once, then double-click this file again."
 fi
 
-for tool in git ttyd tmux omp; do
+for tool in git ttyd tmux omp ssh ssh-keygen; do
   if ! command -v "$tool" >/dev/null 2>&1; then
-    fail "Dialogue needs '$tool' on your PATH for the workspace terminal (brew install ttyd tmux; omp from oh-my-pi)." \
+    fail "Dialogue needs '$tool' on your PATH for the workspace terminal (brew install ttyd tmux; omp from oh-my-pi; ssh ships with macOS)." \
          "Install it once, then double-click this file again."
   fi
 done

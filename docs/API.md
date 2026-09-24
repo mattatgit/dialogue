@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`server.js` exposes a small localhost HTTP surface used by the Dialogue UI. Workspaces are git worktrees; the API creates, lists, watches and removes them and proxies a terminal to each branch workspace. There is no import route, revision store or external publishing client any more: changes are committed and pushed from the workspace terminal.
+`server.js` exposes a small localhost HTTP surface used by the Dialogue UI. Workspaces are git worktrees; the API creates, lists, watches and removes them and proxies a terminal to each branch workspace. There is no import route, revision store or external publishing client any more: changes are committed and pushed by the agent in the workspace terminal, triggered from the COMMIT button.
 
 All routes bind to `127.0.0.1` in the local build. In the VM nginx proxies them, including WebSockets.
 
@@ -14,9 +14,10 @@ All routes bind to `127.0.0.1` in the local build. In the VM nginx proxies them,
 | `GET /api/projects` | projects including `repo: { url, prototypePath }` |
 | `GET /api/projects/:slug/refs` | runs `git fetch --prune origin` on the bare mirror, then returns `{ branches: [{ name, sha, subject, committedAt, open }], tags: [ … ], fetchError? }`. If the fetch fails the last local refs are returned with `fetchError` set; this route only 5xxs when the bare repo cannot be created at all |
 | `POST /api/projects/:slug/workspaces` body `{ ref }` | idempotent; ensures the worktree exists (branch → tracking branch from `origin/<ref>`; tag/commit → detached) and returns the workspace object below |
-| `GET /api/workspaces/:id` | `{ id, project: { slug, name }, ref, kind: "branch" \| "tag" \| "commit", head: { sha, subject }, dirty, viewerUrl, entryPoint, terminal }`. `terminal` is `true` only for branch workspaces |
+| `GET /api/workspaces/:id` | `{ id, project: { slug, name }, ref, kind: "branch" \| "tag" \| "commit", head: { sha, subject }, dirty, ahead, viewerUrl, entryPoint, terminal }`. `terminal` is `true` only for branch workspaces; `ahead` counts commits not yet on `origin/<ref>` |
+| `POST /api/workspaces/:id/commit` | asks the workspace's omp session to commit and push (types `omp/commit-prompt.md` into its tmux session). `202 { accepted }`; `409 { error, setup }` when the remote does not accept the project's deploy key yet — `setup` carries `publicKey`, `repository`, `kind`, `name`, `settingsUrl`, `writeOption`, `addButton`, `detail` for the connect panel; `409` without `setup` when no terminal session exists; `502` when the remote is unreachable |
 | `DELETE /api/workspaces/:id` | stops the workspace's ttyd if running, then `git worktree remove --force` |
-| `GET /api/workspaces/:id/events` | Server-Sent Events. Event `change` with data `{ head, dirty }`, emitted (debounced 150 ms) when files under `<worktree>/<prototypePath>` or the worktree HEAD change |
+| `GET /api/workspaces/:id/events` | Server-Sent Events. Event `change` with data `{ head, dirty, ahead, files }`, emitted (debounced 150 ms) when files under `<worktree>/<prototypePath>`, the worktree's git dir or the mirror's remote-tracking refs change. `files` is `false` for git-only changes (commit, push), so the preview is not reloaded |
 | `GET /workspace-files/:id/*` | serves `<worktree>/<prototypePath>/*` for the preview iframe, with the same path-safety rules as the earlier prototype file server (no traversal outside the prototype path) |
 | `GET /ws/terminal/:id` | WebSocket upgrade, proxied byte-for-byte to the workspace's ttyd. Branch workspaces only |
 

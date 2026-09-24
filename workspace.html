@@ -19,7 +19,10 @@
       <span class="crumb-current" data-ref-title>Workspace</span>
     </nav>
     <div class="viewer-title"><span data-ref-title>Workspace</span><span class="workspace-status" data-workspace-status hidden></span></div>
-    <button class="pill viewer-share" type="button" data-share-open aria-haspopup="dialog" aria-controls="share-modal">Share</button>
+    <div class="viewer-actions">
+      <button class="pill commit-button" type="button" data-commit hidden>Commit</button>
+      <button class="pill viewer-share" type="button" data-share-open aria-haspopup="dialog" aria-controls="share-modal">Share</button>
+    </div>
   </header>
 
   <main class="workspace-body" data-workspace-body>
@@ -51,6 +54,37 @@
         <span>Allow access to all prototypes in the project</span>
         <input type="checkbox" data-share-project-access aria-label="Allow access to all prototypes in the project">
       </label>
+    </section>
+  </div>
+
+  <div class="share-modal-layer setup-modal-layer" data-setup-layer hidden>
+    <section class="share-modal setup-modal" id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-modal-title">
+      <button class="share-modal-close" type="button" aria-label="Close" data-setup-close>×</button>
+      <h2 id="setup-modal-title">Connect Dialogue to your repository</h2>
+      <p class="setup-intro">Dialogue needs permission to save changes to <strong data-setup-repo>this repository</strong>. This is a one-time step and takes about a minute.</p>
+      <ol class="setup-steps">
+        <li>
+          <span class="setup-step-title">Copy Dialogue's key</span>
+          <div class="setup-key-row">
+            <code class="setup-key" data-setup-key></code>
+            <button class="share-copy-button" type="button" data-setup-copy>Copy</button>
+          </div>
+        </li>
+        <li>
+          <span class="setup-step-title">Add it to <span data-setup-host>the repository</span></span>
+          <span class="setup-step-text" data-setup-instructions></span>
+          <a class="pill outline setup-open-link" href="#" target="_blank" rel="noopener" data-setup-link>Open the key settings page</a>
+        </li>
+        <li>
+          <span class="setup-step-title">Come back here</span>
+          <span class="setup-step-text">Once the key is added, press the button below. Dialogue checks the connection and commits your changes.</span>
+        </li>
+      </ol>
+      <p class="setup-error" data-setup-error hidden></p>
+      <details class="setup-details" data-setup-details hidden><summary>Technical details</summary><pre data-setup-detail-text></pre></details>
+      <div class="setup-actions">
+        <button class="pill" type="button" data-setup-retry>I've added the key — continue</button>
+      </div>
     </section>
   </div>
 

@@ -8,6 +8,7 @@ let
       pkgs.git
       pkgs.ttyd
       pkgs.tmux
+      pkgs.openssh
     ];
     text = ''
       # Run the Dialogue Node server with live reload in the browser.
@@ -48,5 +49,6 @@ pkgs.mkShell {
     pkgs.git
     pkgs.ttyd
     pkgs.tmux
+    pkgs.openssh
   ];
 }
