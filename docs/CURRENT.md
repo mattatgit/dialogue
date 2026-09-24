@@ -16,6 +16,8 @@ Twelve Node checks passed, including disposable HTTP import/restart persistence 
 
 Next: switch the existing checkout to this branch, use the app-only `Start Dialogue.command`, and review the interactions before merging. No tunnel, new setup, data reset or re-import is required for the simulated UI. See `docs/PROTOTYPE_FEEDBACK_UI.md` for the adapter contract, test commands, limitations and designer review checklist. Keep `main` unchanged during review.
 
+**Figma export preflight (required before future Figma-driven build work):** re-check the target Figma node and confirm intended SVG/PNG assets are actually exportable before implementing or refining the UI. On 2026-09-24 this preflight confirmed that the Folder and Suitcase clay empty-state illustrations are now available as PNG exports, and Dialogue/Grid/Share/Reload have SVG exports. The current first-review commit predates that asset availability and still uses line-icon placeholders for the clay illustrations; replace/verify those assets during the post-browser-review fidelity pass rather than rebuilding the branch before Matt's interaction review.
+
 The earlier local data-loss trigger remains unproven; the prior external-cleanup theory was not a confirmed diagnosis. This UI branch does not reset or migrate `.dialogue-data`.
 
 ## Current status
