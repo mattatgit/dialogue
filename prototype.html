@@ -3,47 +3,66 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Dialogue — Prototype</title>
+  <title>Dialogue - Prototype</title>
   <link rel="stylesheet" href="css/dialogue.css">
-  <link rel="stylesheet" href="css/local-functional.css">
+  <link rel="stylesheet" href="css/review-shared.css">
+  <link rel="stylesheet" href="css/prototype-review.css">
 </head>
-<body class="viewer">
-  <header class="viewer-bar">
-    <nav class="viewer-crumb" aria-label="Breadcrumb">
-      <a class="crumb-link" href="projects.html">Projects</a>
-      <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
-      <a class="crumb-link" href="project-landline.html" data-project-link><span data-project-title>Landline</span></a>
-      <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
-      <span class="crumb-current" data-prototype-title>Prototype</span>
+<body class="review-view" data-mode="test">
+  <header class="review-header">
+    <a class="review-home hover-small" href="projects.html" aria-label="Dialogue projects"><svg class="icon"><use href="assets/review-icons.svg#mark"/></svg></a>
+    <nav class="review-crumb" aria-label="Breadcrumb">
+      <a href="projects.html">Projects</a><span aria-hidden="true">&#8594;</span>
+      <a href="project-landline.html" data-project-link>Landline</a><span aria-hidden="true">&#8594;</span>
+      <span data-review-title>Prototype</span>
     </nav>
-    <div class="viewer-title" data-prototype-title>Prototype</div>
-    <button class="pill viewer-share" type="button" data-share-open aria-haspopup="dialog" aria-controls="share-modal">Share</button>
-  </header>
-
-  <main class="viewer-stage">
-    <div class="prototype-frame-shell" data-prototype-frame-shell hidden>
-      <iframe class="prototype-live-frame" data-prototype-frame sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe>
+    <div class="review-mode-switch" role="group" aria-label="Prototype mode">
+      <button type="button" data-mode-button="test" aria-pressed="true"><svg class="icon"><use href="assets/review-icons.svg#test"/></svg>Test</button>
+      <button type="button" data-mode-button="comment" aria-pressed="false"><svg class="icon"><use href="assets/review-icons.svg#comment"/></svg>Comment</button>
     </div>
-    <div class="prototype-load-state" data-prototype-state>Loading prototype…</div>
-  </main>
-  <button class="viewer-restart" type="button" data-restart>↻ &nbsp; Restart <span class="key">R</span></button>
-
-  <div class="share-modal-layer" data-share-layer hidden>
-    <section class="share-modal" id="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
-      <button class="share-modal-close" type="button" aria-label="Close share dialog" data-share-close>×</button>
-      <h2 id="share-modal-title">Share this prototype</h2>
-      <div class="share-link-row">
-        <span class="share-link-label">Local functional build — public sharing not connected yet</span>
-        <button class="share-copy-button" type="button" data-share-copy>Copy</button>
+    <div class="review-top-actions">
+      <button class="review-button" data-reload type="button" disabled title="Restart this prototype"><svg class="icon reload-icon"><use href="assets/review-icons.svg#reload"/></svg><span>Reload</span></button>
+      <button class="review-button" data-review-share type="button" disabled aria-haspopup="dialog"><svg class="icon"><use href="assets/review-icons.svg#share"/></svg>Share</button>
+    </div>
+  </header>
+  <aside class="review-history" aria-label="Revision activity and history" tabindex="0" hidden>
+    <div data-history-items></div><div class="history-spacer" aria-hidden="true"></div>
+  </aside>
+  <main class="review-canvas" aria-label="Prototype canvas">
+    <div class="review-scroll">
+      <div class="review-plane">
+        <div class="review-frame-host" hidden><iframe title="Prototype" data-review-frame sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe></div>
+        <div class="review-grid" aria-hidden="true" hidden></div>
+        <div class="review-hit-layer" aria-label="Select a prototype element or draw an annotation" hidden></div>
+        <svg class="review-annotations" aria-hidden="true"><defs><marker id="annotation-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 9 5 1 9" fill="none" stroke="currentColor" stroke-width="1.4"/></marker></defs><rect data-selection-rect hidden/><line data-selection-arrow marker-end="url(#annotation-arrowhead)" hidden/></svg>
       </div>
-      <label class="share-project-access">
-        <span>Allow access to all prototypes in the project</span>
-        <input type="checkbox" data-share-project-access aria-label="Allow access to all prototypes in the project">
-      </label>
-    </section>
-  </div>
-
-  <script src="js/dialogue.js"></script>
-  <script src="js/prototype-viewer.js"></script>
+    </div>
+    <button class="grid-toggle hover-small" type="button" data-grid-toggle aria-label="Show grid" aria-pressed="false" title="Show grid"><svg class="icon"><use href="assets/review-icons.svg#grid"/></svg></button>
+    <div class="review-load-state" role="status" data-load-state>Loading prototype...</div>
+    <form class="review-composer" aria-label="Prototype comment" data-comment-form hidden>
+      <div class="composer-heading"><span class="anchor-tag" data-anchor-label>Selection</span><button type="button" class="composer-close hover-small" aria-label="Close comment" data-close-comment><svg class="icon"><use href="assets/review-icons.svg#close"/></svg></button></div>
+      <label class="sr-only" for="review-comment">Add your comment</label>
+      <textarea id="review-comment" name="feedback" maxlength="4000" placeholder="Add your comment" rows="3"></textarea>
+      <div class="composer-footer"><small data-composer-status>Simulation - no LLM call</small><button class="composer-send hover-small" type="submit" aria-label="Send comment" title="Send comment (Enter); Shift+Enter for a new line" disabled><span>Enter</span><svg class="icon"><use href="assets/review-icons.svg#enter"/></svg></button></div>
+    </form>
+    <div class="review-tools" role="group" aria-label="Comment tools" hidden>
+      <button type="button" data-tool="selection" aria-pressed="true"><svg class="icon"><use href="assets/review-icons.svg#select"/></svg>Select</button>
+      <button type="button" data-tool="area" aria-pressed="false"><svg class="icon"><use href="assets/review-icons.svg#area"/></svg>Area</button>
+      <button type="button" data-tool="arrow" aria-pressed="false"><svg class="icon"><use href="assets/review-icons.svg#arrow"/></svg>Arrow</button>
+    </div>
+    <details class="simulation-controls">
+      <summary title="This branch simulates LLM responses">Simulated connection</summary>
+      <div><p>No LLM calls or prototype writes. Demo results replay the unchanged base.</p><label>Next request <select data-simulation-scenario><option value="success">Success</option><option value="failure">Connection failure</option></select></label><a href="settings.html">Grid settings</a></div>
+    </details>
+  </main>
+  <div class="review-toast" role="status" aria-live="polite" hidden></div>
+  <dialog class="review-share-dialog" aria-labelledby="review-share-title">
+    <button class="dialog-close hover-small" type="button" aria-label="Close share dialog"><svg class="icon"><use href="assets/review-icons.svg#close"/></svg></button>
+    <h1 id="review-share-title">Share this prototype</h1>
+    <div class="review-share-row"><input readonly aria-label="Local prototype link" data-share-url><button class="review-button primary" type="button" data-copy-local>Copy</button></div>
+    <p>Local link only. This opens on this Mac; public sharing is not connected yet.</p>
+    <label class="review-share-option"><span>Allow access to all prototypes in the project</span><input type="checkbox" disabled title="Public sharing is not connected yet"></label>
+  </dialog>
+  <script type="module" src="js/prototype-review.mjs"></script>
 </body>
 </html>

@@ -2,6 +2,22 @@
 
 This is the concise continuity record for active Dialogue work. Update it whenever a meaningful milestone, decision, known issue or next step changes.
 
+## Active UI branch — 2026-09-24
+
+`feature/prototype-feedback-ui` is the new first-review UI build from `main`. It is NOT merged into `main` and is not a completed live LLM integration.
+
+Two parallel workstreams are now active: Matt's developer colleague is building an easier LLM connection, while Matt and Saori's updated Figma defines the prototype feedback/review UI. This branch implements the UI against a clearly labelled simulated adapter so the connection can be replaced later without redesigning the viewer.
+
+Implemented here: Test/Comment mode, Select/Area/Arrow anchors, comment composer, activity/history navigation, output-version badges, explicit Load/Cancel, green/black Reload arrow status, and a canvas-local grid toggle. Grid defaults are 8 design pixels, `#BAE6FF`, and 50% opacity, with Settings controls. Hover uses 110% for <=24px controls and 105% for normal >=32px controls, 100ms ease-out. Design systems navigation/empty state is a placeholder for the later import milestone; Projects distinguishes empty data from a connection failure.
+
+Saved revisions and navigation are real. Sending feedback only creates browser-local simulated requests and labelled `Demo N` previews of the unchanged base. It does not call an LLM or publish/modify any prototype files. The iframe sandbox is retained; response-only inspection metadata provides element selection without adding `allow-same-origin`.
+
+Twelve Node checks passed, including disposable HTTP import/restart persistence and verification that review instrumentation does not modify stored prototype bytes. Full browser interaction testing was blocked by the implementation environment's browser navigation policy; an offline viewer-layout/hover check was performed instead. Safari review on Matt/Saori's actual prototypes remains necessary. Empty-state clay illustrations are still line-icon placeholders, and some utility icons need the final asset pass.
+
+Next: switch the existing checkout to this branch, use the app-only `Start Dialogue.command`, and review the interactions before merging. No tunnel, new setup, data reset or re-import is required for the simulated UI. See `docs/PROTOTYPE_FEEDBACK_UI.md` for the adapter contract, test commands, limitations and designer review checklist. Keep `main` unchanged during review.
+
+The earlier local data-loss trigger remains unproven; the prior external-cleanup theory was not a confirmed diagnosis. This UI branch does not reset or migrate `.dialogue-data`.
+
 ## Current status
 
 Four lightweight functional milestones are now proven:

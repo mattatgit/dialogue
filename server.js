@@ -397,7 +397,7 @@ async function importPrototype(req, res, projectSlug, url) {
   }
 }
 
-async function servePrototypeFile(res, revisionId, requestedRelativePath) {
+async function servePrototypeFile(res, revisionId, requestedRelativePath, reviewChannel = null) {
   const data = await loadData();
   const revision = data.revisions.find((item) => item.id === revisionId);
   if (!revision) throw new HttpError(404, 'Prototype revision not found.');
@@ -438,7 +438,26 @@ async function servePrototypeFile(res, revisionId, requestedRelativePath) {
 
   if (!stat.isFile()) throw new HttpError(404, 'Prototype file not found.');
 
+  // Review instrumentation is response-only. Never rewrite an imported revision.
+  // Keep the iframe sandbox opaque; the helper reports bounded selection geometry
+  // through postMessage instead of granting the parent same-origin DOM access.
   const contentType = MIME_TYPES.get(path.extname(absolute).toLowerCase()) || 'application/octet-stream';
+  if (contentType.startsWith('text/html') && /^[a-f0-9]{32}$/.test(reviewChannel || '') && stat.size <= 5 * 1024 * 1024) {
+    const html = await fsp.readFile(absolute, 'utf8');
+    const helper = `<script src="/js/prototype-review-bridge.js" data-review-channel="${reviewChannel}"></script>`;
+    const instrumented = /<head(?:\s[^>]*)?>/i.test(html)
+      ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => head + helper)
+      : helper + html;
+    const body = Buffer.from(instrumented);
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': body.length,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff'
+    });
+    res.end(body);
+    return;
+  }
   res.writeHead(200, {
     'Content-Type': contentType,
     'Content-Length': stat.size,
@@ -556,7 +575,7 @@ async function requestHandler(req, res) {
 
     const prototypeMatch = /^\/prototype-files\/([^/]+)(?:\/(.*))?$/.exec(url.pathname);
     if (req.method === 'GET' && prototypeMatch) {
-      await servePrototypeFile(res, decodeURIComponent(prototypeMatch[1]), prototypeMatch[2] || '');
+      await servePrototypeFile(res, decodeURIComponent(prototypeMatch[1]), prototypeMatch[2] || '', url.searchParams.get('reviewChannel'));
       return;
     }
 
