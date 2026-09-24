@@ -66,6 +66,12 @@ An optional Playwright browser smoke test is in `tests/review-browser.py`. It re
 
 Designer review: stop existing Dialogue/tunnel processes, switch the SAME checkout to this branch, then use `Start Dialogue.command`. A tunnel is not required for this simulated feedback UI. Open an existing revision, switch to Comment, try each annotation type and submit. A demo result should leave the current prototype visible until Reload. Rewind via a history card, then scroll upward to retrieve newer versions. Check Settings, grid registration, and the failure/retry controls.
 
+## Figma asset preflight
+
+Before any future build or fidelity pass sourced from Figma, first re-check the target Figma node and verify the intended SVG/PNG assets are exportable. Do not assume asset export settings from an earlier session are still complete.
+
+Re-checked 2026-09-24: the Folder and Suitcase clay empty-state illustrations are now available as PNG exports; Dialogue, Grid, Share and Reload expose SVG exports. The current first-review commit was created before those exports were available, so its line-icon empty-state placeholders remain a known fidelity gap to replace/verify after the first local interaction review.
+
 ## Remaining before merge
 
 - Matt/Saori review of the real browser interactions and Figma fidelity.
