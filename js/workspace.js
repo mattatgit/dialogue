@@ -9,18 +9,6 @@
   const status = document.querySelector('[data-workspace-status]');
   const restartButton = document.querySelector('[data-restart]');
   const commitButton = document.querySelector('[data-commit]');
-  const setupLayer = document.querySelector('[data-setup-layer]');
-  const setupClose = document.querySelector('[data-setup-close]');
-  const setupRepo = document.querySelector('[data-setup-repo]');
-  const setupKey = document.querySelector('[data-setup-key]');
-  const setupCopy = document.querySelector('[data-setup-copy]');
-  const setupHost = document.querySelector('[data-setup-host]');
-  const setupInstructions = document.querySelector('[data-setup-instructions]');
-  const setupLink = document.querySelector('[data-setup-link]');
-  const setupError = document.querySelector('[data-setup-error]');
-  const setupDetails = document.querySelector('[data-setup-details]');
-  const setupDetailText = document.querySelector('[data-setup-detail-text]');
-  const setupRetry = document.querySelector('[data-setup-retry]');
   const terminalPane = document.querySelector('[data-terminal-pane]');
   const terminalHost = document.querySelector('[data-terminal-host]');
   const overlay = document.querySelector('[data-terminal-overlay]');
@@ -70,68 +58,9 @@
     status.hidden = false;
   };
 
-  // --- deploy-key setup panel ------------------------------------------------
-
-  const instructionsFor = (setup) => {
-    const write = `tick "${setup.writeOption}"`;
-    if (setup.kind === 'github') return `On the page that opens, type "Dialogue" as the title, paste the key into the big "Key" box, ${write}, then click "${setup.addButton}".`;
-    if (setup.kind === 'gitlab') return `On the page that opens, expand "Deploy keys", click "Add new key", paste the key, type "Dialogue" as the title, ${write}, then click "${setup.addButton}".`;
-    if (setup.kind === 'gitea') return `On the page that opens, click "${setup.addButton}", paste the key, type "Dialogue" as the title, ${write}, then click the add button.`;
-    return `Open your repository's settings, find "Deploy keys" (sometimes "Access keys"), add the key with the title "Dialogue" and make sure it has ${setup.writeOption}.`;
-  };
-
-  const closeSetup = () => {
-    if (!setupLayer || setupLayer.hidden) return;
-    setupLayer.classList.remove('is-open');
-    window.setTimeout(() => { setupLayer.hidden = true; }, 160);
-    commitButton?.focus();
-  };
-
-  const showSetup = (setup, failedBefore) => {
-    if (!setupLayer) return;
-    if (setupRepo) setupRepo.textContent = setup.repository || 'this repository';
-    if (setupKey) setupKey.textContent = setup.publicKey || '';
-    if (setupHost) setupHost.textContent = setup.name || 'the repository';
-    if (setupInstructions) setupInstructions.textContent = instructionsFor(setup);
-    if (setupLink) setupLink.href = setup.settingsUrl || '#';
-    if (setupError) {
-      setupError.hidden = !failedBefore;
-      setupError.textContent = failedBefore
-        ? `${setup.name || 'The repository'} has not accepted the key yet. Check that the whole key was pasted and that "${setup.writeOption}" was ticked, then try again.`
-        : '';
-    }
-    if (setupDetails && setupDetailText) {
-      setupDetails.hidden = !setup.detail;
-      setupDetailText.textContent = setup.detail || '';
-    }
-    if (setupLayer.hidden) {
-      setupLayer.hidden = false;
-      requestAnimationFrame(() => setupLayer.classList.add('is-open'));
-    }
-    (failedBefore ? setupRetry : setupCopy)?.focus();
-  };
-
-  let copyResetTimer = null;
-  setupCopy?.addEventListener('click', async () => {
-    const key = setupKey?.textContent || '';
-    try {
-      await navigator.clipboard.writeText(key);
-    } catch {
-      const range = document.createRange();
-      range.selectNodeContents(setupKey);
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      document.execCommand('copy');
-    }
-    setupCopy.textContent = 'Copied!';
-    clearTimeout(copyResetTimer);
-    copyResetTimer = window.setTimeout(() => { setupCopy.textContent = 'Copy'; }, 3000);
-  });
-  setupClose?.addEventListener('click', closeSetup);
-  setupLayer?.addEventListener('click', (event) => {
-    if (event.target === setupLayer) closeSetup();
-  });
+  const connect = window.DialogueConnect;
+  const closeSetup = () => connect?.close();
+  const showSetup = (setup, failedBefore) => connect?.show(setup, { failedBefore, onRetry: () => requestCommit(true) });
 
   // --- commit ----------------------------------------------------------------
 
@@ -141,7 +70,7 @@
     committing = true;
     commitButton.disabled = true;
     commitButton.textContent = retry ? 'Checking…' : 'Committing…';
-    if (setupRetry) setupRetry.disabled = true;
+    connect?.busy(true);
     let accepted = false;
     try {
       const response = await fetch(`/api/workspaces/${workspaceId}/commit`, { method: 'POST', cache: 'no-store' });
@@ -165,12 +94,11 @@
       committing = false;
       commitButton.disabled = false;
       if (!accepted) commitButton.textContent = label;
-      if (setupRetry) setupRetry.disabled = false;
+      connect?.busy(false);
     }
   };
 
   commitButton?.addEventListener('click', () => requestCommit(false));
-  setupRetry?.addEventListener('click', () => requestCommit(true));
 
   const setOverlay = (message) => {
     if (!overlay) return;
@@ -222,7 +150,7 @@
       refTitles.forEach((node) => { node.textContent = workspace.ref; });
       document.title = `Dialogue — ${workspace.project?.name || 'Project'} · ${workspace.ref}`;
       if (projectNode) projectNode.textContent = workspace.project?.name || 'Project';
-      if (projectLink) projectLink.href = workspace.project?.slug === 'landline' ? 'project-landline.html' : 'projects.html';
+      if (projectLink) projectLink.href = workspace.project?.slug ? `project.html?slug=${encodeURIComponent(workspace.project.slug)}` : 'projects.html';
       canCommit = Boolean(workspace.terminal);
       renderStatus(workspace.head, workspace.dirty, workspace.ahead);
 

@@ -33,7 +33,7 @@ Dialogue Node server (server.js)
   └── server/terminal.js    ttyd lifecycle per branch workspace, prompt injection
         ↓
 .dialogue-data/
-  ├── db.json                       projects with repo.url / repo.prototypePath
+  ├── db.json                       projects (schemaVersion 3), see server/projects.js
   ├── repos/<slug>.git              bare mirror, git fetch --prune origin
   ├── workspaces/<slug>/<ref>/      one git worktree per opened ref
   ├── keys/<slug>, <slug>.pub       deploy key per project; keys/known_hosts
@@ -49,7 +49,7 @@ This deliberately avoids an early framework/database/hosting migration while the
 
 ### Git store
 
-`db.json` (schemaVersion 2) holds projects only. Each project carries `repo: { url, prototypePath }`. There are no `prototypes` or `revisions` tables; a v1 file is replaced by the v2 seed on startup.
+`db.json` (schemaVersion 3, `server/projects.js`) holds projects only: `{ slug, createdAt, repo: { url, host, owner, repo, prototypePath } }`. The slug is `<owner>-<repo>` so it is unique per repository and stable for the `repos/`, `workspaces/` and `keys/` paths; the display name is computed at read time (`repo`, or `owner/repo` when two projects share a repo name). A schema-2 file is migrated in place, not replaced. Nothing is hardcoded: projects are added from the Projects page by pasting a repository URL (HTTPS or SSH), and `DIALOGUE_SEED` names a JSON list (`seed.json` in the repo lists Landline; the NixOS module writes one from `services.dialogue.seedProjects`) that is merged in on every start for entries not present yet. Adding a project clones the mirror synchronously so a wrong address fails in the dialog, then detects `repo.prototypePath` from the default branch (`prototypes/app/index.html` first, else the shallowest `index.html`). An SSH URL is used for fetching as well as pushing, so a private repository shows the connect panel on its project page until the deploy key is registered; an HTTPS URL to a private repository fails with a hint to use the SSH address instead.
 
 Per project, `server/git.js` maintains a bare clone at `repos/<slug>.git`, fetched on demand when refs are listed. Fetch failure is not fatal: the last local refs are returned together with a `fetchError` so the UI keeps working offline.
 

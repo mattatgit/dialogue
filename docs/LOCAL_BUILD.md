@@ -21,7 +21,7 @@ Browser
 Dialogue local Node server (server.js, server/git.js, server/watch.js, server/terminal.js)
         ↓
 .dialogue-data/
-  db.json                     projects (schemaVersion 2) with repo.url / repo.prototypePath
+  db.json                     projects (schemaVersion 3): slug, repo.url/host/owner/repo/prototypePath
   repos/<slug>.git            bare mirror, fetched on demand
   workspaces/<slug>/<ref>/    one git worktree per opened ref (<ref> URL-encoded)
   keys/<slug>, <slug>.pub     per-project SSH deploy key (push only) + known_hosts
@@ -52,6 +52,7 @@ The server binds to localhost only.
 
 ## Workflow
 
+0. Projects lists what is in `db.json` (Landline when seeded). **Add project** takes the address of any Git repository — HTTPS for public repositories, the `git@…` SSH address for private ones (the dialog explains where to find it on GitHub). Dialogue clones it, works out where the prototype's `index.html` lives, and opens the project page; a private repository first shows the key to add as a deploy key. Hovering a card reveals **×** to remove the project from Dialogue (local copy only).
 1. Open Projects → Landline. Dialogue fetches the repository and shows a **Branches** group and, when there are any, a **Tags** group. Each tile shows the ref name, short sha, commit subject and relative commit date; a dot marks refs that already have a workspace. If the fetch fails (offline), a one-line note appears and tiles render from the last local refs.
 2. Click a branch. Dialogue creates the worktree (first open creates a local tracking branch from `origin/<branch>`) and opens `workspace.html?id=…`.
 3. The workspace is split: the **terminal** on the left, running `omp` inside that branch's checkout; the **prototype preview** on the right in the familiar 370×722 sandboxed iframe, served from `<worktree>/prototypes/app`. Crumbs read `Projects › Landline › <branch>`; the status chip shows `<sha7> · clean`.
@@ -93,7 +94,7 @@ Production should retain a separate prototype execution origin, for example:
 
 ## Next test
 
-1. run `dev`, open Landline → `main` (or a feature branch)
+1. run `dev` (seeds Landline from `seed.json`) or add a project by pasting its repository address, then open `main` (or a feature branch)
 2. confirm the terminal connects and omp starts in the worktree
 3. ask omp for one small visible colour/copy change in the prototype
 4. confirm the preview reloads with the change and the chip shows uncommitted changes

@@ -23,7 +23,9 @@ async function run(args, options = {}) {
   try {
     const { stdout } = await execFileAsync(GIT_BIN, args, {
       maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' },
+      // Never prompt: no terminal, no askpass helper (a private repository
+      // over anonymous HTTPS must fail fast so the UI can suggest SSH).
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: '', SSH_ASKPASS_REQUIRE: 'never', LC_ALL: 'C' },
       ...options
     });
     return stdout;
@@ -91,6 +93,21 @@ function workspaceDir(workspacesRoot, slug, ref) {
   return dir;
 }
 
+// Prefer the conventional prototypes/app, then the shallowest index.html
+// (ties: alphabetical). Returns the directory ('' for the repo root).
+function pickPrototypePath(paths) {
+  const candidates = paths
+    .filter((p) => p === 'index.html' || p.endsWith('/index.html'))
+    .map((p) => p.slice(0, -'index.html'.length).replace(/\/$/, ''));
+  if (!candidates.length) return null;
+  if (candidates.includes('prototypes/app')) return 'prototypes/app';
+  candidates.sort((a, b) => {
+    const depth = (a.match(/\//g) || []).length + (a ? 1 : 0) - ((b.match(/\//g) || []).length + (b ? 1 : 0));
+    return depth || a.localeCompare(b);
+  });
+  return candidates[0];
+}
+
 // --- repository operations -------------------------------------------------
 
 class ProjectRepo {
@@ -117,10 +134,13 @@ class ProjectRepo {
     const cloned = await fsp.access(path.join(this.bareDir, 'HEAD')).then(() => true, () => false);
     if (!cloned) {
       await fsp.mkdir(path.dirname(this.bareDir), { recursive: true });
-      await run(['clone', '--bare', '--quiet', this.url, this.bareDir]);
+      // An SSH clone URL needs the deploy key from the very first contact.
+      const sshConfig = this.sshCommand ? ['-c', `core.sshCommand=${this.sshCommand}`] : [];
+      await run([...sshConfig, 'clone', '--bare', '--quiet', this.url, this.bareDir], { timeout: 120000 });
       // Bare clones do not create a remote-tracking layout by default; make
       // origin/<branch> exist so worktrees can track it.
       await this.git(['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*']);
+      if (this.sshCommand) await this.git(['config', 'core.sshCommand', this.sshCommand]);
       await this.git(['fetch', '--quiet', '--prune', 'origin']);
     }
     // Fetch over HTTPS, push over SSH with the project's deploy key. Set on
@@ -137,6 +157,22 @@ class ProjectRepo {
       await this.git(['config', 'user.name', 'Dialogue']);
       await this.git(['config', 'user.email', `dialogue-${this.slug}@localhost`]);
     }
+  }
+
+  // Where the prototype lives on the default branch. `null` when the
+  // repository has no index.html at all.
+  async detectPrototypePath() {
+    const listing = await this.git(['ls-tree', '-r', '--name-only', 'HEAD']).catch(() => '');
+    return pickPrototypePath(listing.split('\n'));
+  }
+
+  // Remove every worktree and the mirror itself.
+  async destroy() {
+    for (const tree of await this.openWorkspaces()) {
+      await this.git(['worktree', 'remove', '--force', tree.dir]).catch(() => {});
+    }
+    await fsp.rm(path.join(this.workspacesRoot, this.slug), { recursive: true, force: true });
+    await fsp.rm(this.bareDir, { recursive: true, force: true });
   }
 
   async fetch() {
@@ -292,6 +328,7 @@ module.exports = {
   isValidRefName,
   parseRefs,
   parseWorkspaceId,
+  pickPrototypePath,
   workspaceDir,
   workspaceId
 };

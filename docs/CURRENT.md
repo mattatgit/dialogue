@@ -20,12 +20,12 @@ The standard fresh-chat context phrase is **`Load project context`**.
 
 `develop` provides:
 
-- localhost-only Node server (`server.js`) with Node-builtins-only modules `server/git.js`, `server/terminal.js`, `server/watch.js`
-- `.dialogue-data/db.json` schemaVersion 2: projects only, each with `repo: { url, prototypePath }`; Landline → `https://github.com/mattatgit/landline`, `prototypes/app`
+- localhost-only Node server (`server.js`) with Node-builtins-only modules `server/git.js`, `server/projects.js`, `server/deploy-key.js`, `server/terminal.js`, `server/watch.js`
+- `.dialogue-data/db.json` schemaVersion 3: projects only, `{ slug: "<owner>-<repo>", repo: { url, host, owner, repo, prototypePath } }`; nothing hardcoded — projects are added from the Projects page (paste any HTTPS/SSH git URL; the prototype directory is detected) or seeded from the JSON file named by `DIALOGUE_SEED` (`seed.json` → Landline; `dev` sets it, the NixOS module builds it from `services.dialogue.seedProjects`). Duplicate repo names display as `owner/repo`. Projects can be removed from their card
 - bare mirror per project at `.dialogue-data/repos/<slug>.git`, fetched with `git fetch --prune origin` when refs are listed
 - one git worktree per opened ref at `.dialogue-data/workspaces/<slug>/<encoded-ref>/`; `git worktree list --porcelain` is the source of truth for workspaces (no db table)
 - branch workspaces writable with a terminal; tag/commit workspaces detached, read-only, no terminal
-- project page (`project-landline.html`) with Branches and Tags tile groups from live refs, "open" dot on tiles with a workspace, `fetchError` note when the fetch fails
+- project page (`project.html?slug=…`) with Branches and Tags tile groups from live refs, "open" dot on tiles with a workspace, `fetchError` note when the fetch fails; a private SSH repository shows the "Connect Dialogue to your repository" panel (shared `js/connect-panel.js`) until its deploy key is registered
 - `workspace.html` + `js/workspace.js`: crumbs `Projects › Landline › <ref>`, status chip `<sha7> · clean` / `· uncommitted changes`, terminal pane left, 370×722 sandboxed prototype iframe right, Restart / `R`
 - web terminal: `js/terminal.js` over vendored xterm.js 5.5 (`js/vendor/`), speaking ttyd's protocol through the `/ws/terminal/:id` WebSocket proxy, with reconnect backoff and server error display
 - terminal process: ttyd → `omp/attach.sh` → tmux (`-L dialogue`, `omp/tmux.conf`) → `omp --config omp/config.yml --append-system-prompt omp/system-prompt.md`, started lazily on the first WebSocket client; tmux sessions survive Dialogue restarts but rotate when `omp/*` changes

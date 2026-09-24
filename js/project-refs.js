@@ -1,8 +1,14 @@
 (() => {
   const grid = document.querySelector('[data-ref-groups]');
   const note = document.querySelector('[data-ref-note]');
-  const projectSlug = document.body.dataset.project || 'landline';
+  const titleNode = document.querySelector('[data-project-title]');
+  const linkNode = document.querySelector('[data-project-link]');
+  const projectSlug = new URLSearchParams(window.location.search).get('slug') || '';
   if (!grid) return;
+  if (!projectSlug) {
+    window.location.replace('projects.html');
+    return;
+  }
 
   const setNote = (message = '', state = '') => {
     if (!note) return;
@@ -112,24 +118,66 @@
     return section;
   };
 
-  const load = async () => {
+  const showProject = (project) => {
+    if (!project) return;
+    document.title = `Dialogue — ${project.name}`;
+    if (titleNode) titleNode.textContent = project.name;
+    if (linkNode) {
+      linkNode.href = project.webUrl;
+      linkNode.textContent = project.repo.host === 'github.com' ? 'Open on GitHub' : `Open on ${project.repo.host}`;
+      linkNode.hidden = false;
+    }
+  };
+
+  // Private repository over SSH whose key is not registered yet: guide the
+  // user through adding it, then reload the refs.
+  const showConnect = (setup, failedBefore) => {
+    window.DialogueConnect?.show(setup, {
+      failedBefore,
+      intro: `This repository is private. Add Dialogue's key to ${setup.repository || 'it'} so Dialogue can read it — a one-time step that takes about a minute. Tick write access too, so changes can be saved later.`,
+      after: 'Once the key is added, press the button below. Dialogue connects to the repository and shows its branches.',
+      onRetry: () => {
+        window.DialogueConnect.busy(true);
+        load(true).finally(() => window.DialogueConnect.busy(false));
+      }
+    });
+  };
+
+  const load = async (retry = false) => {
     setNote('Fetching branches…');
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(projectSlug)}/refs`, { cache: 'no-store' });
       const payload = await response.json().catch(() => ({}));
+      if (response.status === 404) {
+        window.location.replace('projects.html');
+        return;
+      }
+      if (payload.setup) {
+        setNote('Dialogue cannot read this repository yet.', 'error');
+        showConnect(payload.setup, retry);
+        return;
+      }
       if (!response.ok) throw new Error(payload.error || 'Could not read the repository.');
+      window.DialogueConnect?.close();
+      showProject(payload.project);
 
       const groups = [];
       if (payload.branches?.length) groups.push(buildGroup('Branches', payload.branches, 'branch'));
       if (payload.tags?.length) groups.push(buildGroup('Tags', payload.tags, 'tag'));
       grid.replaceChildren(...groups);
       if (!groups.length) setNote('This repository has no branches yet.');
-      else if (payload.fetchError) setNote(`Showing the last known branches — GitHub could not be reached (${payload.fetchError}).`, 'error');
+      else if (payload.fetchError) setNote(`Showing the last known branches — ${payload.project?.repo?.host || 'the repository host'} could not be reached (${payload.fetchError}).`, 'error');
       else setNote('');
     } catch (error) {
       setNote(error.message || 'Could not read the repository.', 'error');
     }
   };
+
+  // Title and link first, so the page is not blank while cloning.
+  fetch(`/api/projects/${encodeURIComponent(projectSlug)}`, { cache: 'no-store' })
+    .then((response) => response.json())
+    .then((payload) => showProject(payload.project))
+    .catch(() => {});
 
   load();
 })();

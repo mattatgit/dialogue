@@ -6,7 +6,8 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 
 const git = require('./server/git.js');
-const { DeployKeys, hostingSetup, pushUrl } = require('./server/deploy-key.js');
+const { DeployKeys, classifyPushError, hostingSetup, pushUrl } = require('./server/deploy-key.js');
+const { ProjectError, ProjectStore } = require('./server/projects.js');
 const { TerminalManager, TerminalError } = require('./server/terminal.js');
 const { WatchRegistry } = require('./server/watch.js');
 
@@ -19,7 +20,7 @@ const REPOS_ROOT = path.join(DATA_ROOT, 'repos');
 const WORKSPACES_ROOT = path.join(DATA_ROOT, 'workspaces');
 const KEYS_ROOT = path.join(DATA_ROOT, 'keys');
 const COMMIT_PROMPT_PATH = path.join(ROOT, 'omp', 'commit-prompt.md');
-const SCHEMA_VERSION = 2;
+const SEED_PATH = process.env.DIALOGUE_SEED ? path.resolve(process.env.DIALOGUE_SEED) : null;
 const FETCH_TTL_MS = 10 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -61,47 +62,44 @@ const repos = new Map();
 
 // --- data -------------------------------------------------------------------
 
-function initialData() {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    projects: [
-      {
-        id: 'project-landline',
-        slug: 'landline',
-        name: 'Landline',
-        description: 'A simpler way for households to stay in touch.',
-        createdAt: new Date().toISOString(),
-        repo: { url: 'https://github.com/mattatgit/landline', prototypePath: 'prototypes/app' }
-      }
-    ]
-  };
-}
+const projects = new ProjectStore(DB_PATH);
 
 async function ensureData() {
   await fsp.mkdir(DATA_ROOT, { recursive: true });
   await fsp.mkdir(REPOS_ROOT, { recursive: true });
   await fsp.mkdir(WORKSPACES_ROOT, { recursive: true });
-  let current = null;
-  try {
-    current = JSON.parse(await fsp.readFile(DB_PATH, 'utf8'));
-  } catch {
-    // missing or unreadable: reseed below
+  await projects.load();
+  if (SEED_PATH) {
+    let entries = [];
+    try {
+      entries = JSON.parse(await fsp.readFile(SEED_PATH, 'utf8'));
+    } catch (error) {
+      console.error(`Could not read DIALOGUE_SEED ${SEED_PATH}: ${error.message}`);
+    }
+    if (Array.isArray(entries)) await projects.seed(entries);
   }
-  if (!current || current.schemaVersion !== SCHEMA_VERSION) {
-    if (current) console.log(`Replacing db.json schema ${current.schemaVersion} with ${SCHEMA_VERSION}.`);
-    await fsp.writeFile(DB_PATH, `${JSON.stringify(initialData(), null, 2)}\n`);
-  }
-}
-
-async function loadData() {
-  return JSON.parse(await fsp.readFile(DB_PATH, 'utf8'));
 }
 
 async function findProject(slug) {
-  const data = await loadData();
-  const project = data.projects.find((item) => item.slug === slug);
-  if (!project) throw new HttpError(404, 'Project not found.');
-  return project;
+  try {
+    return await projects.find(slug);
+  } catch (error) {
+    if (error instanceof ProjectError) throw new HttpError(error.status, error.message);
+    throw error;
+  }
+}
+
+// The connect-panel payload for a project whose deploy key the host rejects.
+function setupFor(project, repo, detail) {
+  return { slug: project.slug, publicKey: repo.publicKey, repository: `${project.repo.owner}/${project.repo.repo}`, ...hostingSetup(project.repo.url), detail };
+}
+
+class CloneError extends HttpError {
+  constructor(project, repo, reason, message) {
+    super(502, message);
+    this.reason = reason;
+    this.setup = reason === 'key' && repo.publicKey ? setupFor(project, repo, message) : null;
+  }
 }
 
 async function repoFor(project) {
@@ -133,9 +131,24 @@ async function repoFor(project) {
     await repo.ready;
   } catch (error) {
     repos.delete(project.slug);
-    throw new HttpError(502, `Could not clone ${project.repo.url}: ${error.message}`);
+    const stderr = error.stderr || error.message || '';
+    throw new CloneError(project, repo, classifyPushError(stderr), stderr.trim() || 'Could not clone the repository.');
   }
   return repo;
+}
+
+// Drop the in-memory repo and everything on disk for a project.
+async function discardRepo(project) {
+  const repo = repos.get(project.slug);
+  repos.delete(project.slug);
+  const instance = repo || new git.ProjectRepo({ slug: project.slug, url: project.repo.url, reposRoot: REPOS_ROOT, workspacesRoot: WORKSPACES_ROOT });
+  for (const workspace of await instance.openWorkspaces().catch(() => [])) {
+    const id = git.workspaceId(project.slug, workspace.ref);
+    terminals.stop(id);
+    watchers.drop(id);
+  }
+  await instance.destroy();
+  await deployKeys.remove(project.slug);
 }
 
 async function fetchIfStale(repo) {
@@ -149,7 +162,7 @@ async function fetchIfStale(repo) {
 }
 
 async function publicWorkspace(project, workspace) {
-  const prototypeDir = path.join(workspace.dir, project.repo.prototypePath);
+  const prototypeDir = path.join(workspace.dir, project.repo.prototypePath || '');
   const hasEntry = await fsp.stat(path.join(prototypeDir, 'index.html')).then((s) => s.isFile(), () => false);
   return {
     id: workspace.id,
@@ -159,7 +172,7 @@ async function publicWorkspace(project, workspace) {
     head: workspace.head,
     dirty: workspace.dirty,
     ahead: workspace.ahead,
-    prototypePath: project.repo.prototypePath,
+    prototypePath: project.repo.prototypePath || '',
     entryPoint: hasEntry ? 'index.html' : null,
     terminal: workspace.kind === 'branch',
     viewerUrl: `workspace.html?id=${encodeURIComponent(workspace.id)}`,
@@ -174,7 +187,7 @@ async function resolveWorkspace(id) {
   const repo = await repoFor(project);
   const workspace = await repo.findWorkspace(parsed.ref);
   if (!workspace) throw new HttpError(404, 'Workspace not found.');
-  workspace.prototypePath = project.repo.prototypePath;
+  workspace.prototypePath = project.repo.prototypePath || '';
   return { project, repo, workspace };
 }
 
@@ -231,7 +244,7 @@ function streamFile(res, absolute, stat, extraHeaders = {}) {
 
 async function serveWorkspaceFile(res, id, requestedRelativePath) {
   const { project, workspace } = await resolveWorkspace(id);
-  const baseDir = path.resolve(workspace.dir, project.repo.prototypePath);
+  const baseDir = path.resolve(workspace.dir, project.repo.prototypePath || '');
 
   let relativePath;
   try {
@@ -287,7 +300,7 @@ async function serveAppFile(res, pathname) {
 
 async function serveEvents(req, res, id) {
   const { project, repo, workspace } = await resolveWorkspace(id);
-  const roots = await repo.watchRoots(workspace, project.repo.prototypePath);
+  const roots = await repo.watchRoots(workspace, project.repo.prototypePath || '');
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-store',
@@ -327,16 +340,64 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && pathname === '/api/projects') {
-    const data = await loadData();
-    sendJson(res, 200, { projects: data.projects });
+    sendJson(res, 200, { projects: await projects.list() });
     return true;
   }
 
-  let match = /^\/api\/projects\/([^/]+)\/refs$/.exec(pathname);
+  // Add a repository. The mirror is cloned before answering so a wrong or
+  // unreachable address fails right in the dialog; on failure the record is
+  // kept only when the problem is a missing deploy key (SSH URL to a private
+  // repository), because the connect panel needs the project to exist.
+  if (req.method === 'POST' && pathname === '/api/projects') {
+    const body = await readJsonBody(req);
+    let stored;
+    try {
+      stored = await projects.add(body.url);
+    } catch (error) {
+      if (error instanceof ProjectError) throw new HttpError(error.status, error.message);
+      throw error;
+    }
+    const project = await findProject(stored.slug);
+    let repo;
+    try {
+      repo = await repoFor(project);
+    } catch (error) {
+      if (!(error instanceof CloneError && error.reason === 'key')) {
+        await discardRepo(project).catch(() => {});
+        await projects.remove(project.slug).catch(() => {});
+      }
+      throw error;
+    }
+    const prototypePath = await repo.detectPrototypePath();
+    await projects.update(project.slug, { prototypePath });
+    sendJson(res, 201, { project: await findProject(project.slug) });
+    return true;
+  }
+
+  let match = /^\/api\/projects\/([^/]+)$/.exec(pathname);
+  if (req.method === 'GET' && match) {
+    sendJson(res, 200, { project: await findProject(decodeURIComponent(match[1])) });
+    return true;
+  }
+  if (req.method === 'DELETE' && match) {
+    const project = await findProject(decodeURIComponent(match[1]));
+    await discardRepo(project);
+    await projects.remove(project.slug);
+    sendJson(res, 200, { removed: project.slug });
+    return true;
+  }
+
+  match = /^\/api\/projects\/([^/]+)\/refs$/.exec(pathname);
   if (req.method === 'GET' && match) {
     const project = await findProject(decodeURIComponent(match[1]));
     const repo = await repoFor(project);
     const fetchError = await fetchIfStale(repo);
+    // A project added by SSH URL whose key was registered after the clone
+    // failed: it has no prototype path yet, so detect it on first success.
+    if (project.repo.prototypePath === null) {
+      project.repo.prototypePath = await repo.detectPrototypePath();
+      await projects.update(project.slug, { prototypePath: project.repo.prototypePath });
+    }
     const [refs, open] = await Promise.all([repo.refs(), repo.openWorkspaces()]);
     const openRefs = new Set(open.map((item) => item.ref));
     const decorate = (ref) => ({ ...ref, open: openRefs.has(ref.name), workspaceId: git.workspaceId(project.slug, ref.name) });
@@ -401,7 +462,7 @@ async function handleApi(req, res, url) {
       if (check.reason === 'key' && repo.publicKey) {
         sendJson(res, 409, {
           error: 'Dialogue is not connected to this repository yet.',
-          setup: { publicKey: repo.publicKey, repository: project.repo.url, ...hostingSetup(project.repo.url), detail: check.message }
+          setup: setupFor(project, repo, check.message)
         });
         return true;
       }
@@ -444,7 +505,7 @@ async function requestHandler(req, res) {
     const status = error instanceof HttpError ? error.status : 500;
     const message = error instanceof HttpError ? error.message : 'Unexpected local server error.';
     if (!res.headersSent) {
-      if ((req.url || '').startsWith('/api/')) sendJson(res, status, { error: message });
+      if ((req.url || '').startsWith('/api/')) sendJson(res, status, { error: message, ...(error.reason ? { reason: error.reason } : {}), ...(error.setup ? { setup: error.setup } : {}) });
       else sendText(res, status, message);
     } else {
       res.destroy();

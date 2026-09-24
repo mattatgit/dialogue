@@ -36,6 +36,24 @@ in
       description = "systemd EnvironmentFile (missing file tolerated) with secrets such as OPENROUTER_API_KEY for the embedded omp.";
     };
 
+    seedProjects = lib.mkOption {
+      type = lib.types.listOf (lib.types.submodule {
+        options = {
+          url = lib.mkOption {
+            type = lib.types.str;
+            description = "Git repository URL (HTTPS, git@host:owner/repo or ssh://).";
+          };
+          prototypePath = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Directory inside the repository holding the prototype's index.html; detected when null.";
+          };
+        };
+      });
+      default = [ ];
+      description = "Projects added on startup when not present yet (DIALOGUE_SEED). Users can add more from the UI.";
+    };
+
     nginx = {
       enable = lib.mkEnableOption "an nginx virtual host proxying to Dialogue";
 
@@ -60,6 +78,7 @@ in
         # omp keeps its profile, sessions and credentials here; run /login in
         # the web terminal on first use.
         HOME = "${cfg.dataDir}/home";
+        DIALOGUE_SEED = toString (pkgs.writeText "dialogue-seed.json" (builtins.toJSON cfg.seedProjects));
       };
       preStart = "mkdir -p ${cfg.dataDir}/home";
       serviceConfig = {

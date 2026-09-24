@@ -18,9 +18,12 @@ let
       #                            open tabs when html/css/js/assets change
       #
       # PORT overrides the public port; OPEN=0 skips launching the browser.
-      # omp is taken from your own PATH (or DIALOGUE_OMP).
+      # omp is taken from your own PATH (or DIALOGUE_OMP). DIALOGUE_SEED
+      # defaults to the repo's seed.json (Landline) so a fresh data dir has
+      # a project to open.
       port="''${PORT:-8080}"
       upstream=4173
+      export DIALOGUE_SEED="''${DIALOGUE_SEED:-seed.json}"
       PORT="$upstream" node --watch server.js &
       server=$!
       trap 'kill "$server" 2>/dev/null' EXIT

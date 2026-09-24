@@ -46,8 +46,6 @@
 .terminal-overlay-text{max-width:360px;padding:12px 18px;border-radius:12px;border:1px solid var(--term-line-strong);background:#1f1f1f;color:var(--term-muted);font-size:12px;line-height:18px;text-align:center}
 
 /* project page ref groups */
-.ref-note{margin:-24px 0 24px;color:var(--mid);font-size:12px;line-height:18px;min-height:18px}
-.ref-note.is-error{color:#c83a35}
 .ref-groups{display:grid;gap:48px;padding-bottom:96px}
 .ref-group-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin:0 0 16px;color:var(--ink)}
 .ref-group-count{color:var(--mid);font-weight:500}

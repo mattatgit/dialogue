@@ -229,51 +229,6 @@
     reader.readAsDataURL(file);
   };
 
-  const projectBadgeInput = document.querySelector('[data-project-badge-input]');
-  const projectBadgeTrigger = document.querySelector('[data-project-badge-trigger]');
-  const projectBadgePreview = document.querySelector('[data-project-badge-preview]');
-  let projectBadgeDataUrl = '';
-
-  if (projectBadgeInput && projectBadgeTrigger && projectBadgePreview) {
-    projectBadgeTrigger.addEventListener('click', () => projectBadgeInput.click());
-    projectBadgeInput.addEventListener('change', () => {
-      readImageFile(projectBadgeInput.files?.[0], (dataUrl) => {
-        projectBadgeDataUrl = dataUrl;
-        projectBadgePreview.src = dataUrl;
-        toast('Project badge uploaded');
-      });
-    });
-  }
-
-  const form = document.querySelector('[data-new-project-form]');
-  if (form) {
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const name = form.querySelector('[name="projectName"]')?.value.trim() || 'Untitled project';
-      const desc = form.querySelector('[name="projectDescription"]')?.value.trim() || 'New Dialogue project';
-      const grid = document.querySelector('[data-project-grid]');
-      if (grid) {
-        const initials = name.split(/\s+/).slice(0,2).map(s=>s[0]?.toUpperCase()).join('') || 'NP';
-        const card = document.createElement('a');
-        card.href = 'project-landline.html';
-        card.className = 'project-card';
-        const badgeMarkup = projectBadgeDataUrl
-          ? `<img class="project-badge-img uploaded-project-badge" alt="${initials}">`
-          : `<div class="project-badge">${initials}</div>`;
-        card.innerHTML = `${badgeMarkup}<div class="project-heart">♡</div><div class="project-name"></div><p class="project-desc"></p><div class="project-divider"></div><div class="project-meta"><div class="meta-item"><div class="meta-label">Updated</div><div class="meta-value">just now</div></div><div class="meta-item"><div class="meta-label">Prototypes</div><div class="meta-value">0</div></div></div>`;
-        card.querySelector('.project-name').textContent = name;
-        card.querySelector('.project-desc').textContent = desc;
-        if (projectBadgeDataUrl) card.querySelector('.uploaded-project-badge').src = projectBadgeDataUrl;
-        grid.appendChild(card);
-      }
-      closeHashModal(document.getElementById('new-project'));
-      toast(`${name} created`);
-      form.reset();
-      projectBadgeDataUrl = '';
-      if (projectBadgePreview) projectBadgePreview.src = 'assets/upload.svg';
-    });
-  }
-
   const profileAvatarInput = document.querySelector('[data-profile-avatar-input]');
   const profileAvatarTrigger = document.querySelector('[data-profile-avatar-trigger]');
   const profileAvatarPreview = document.querySelector('[data-profile-avatar-preview]');

@@ -72,7 +72,7 @@ function sshCommand(privateKeyPath, knownHostsPath) {
 function classifyPushError(stderr) {
   const text = String(stderr || '');
   if (/Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/i.test(text)) return 'key';
-  if (/Repository not found|does not appear to be a git repository/i.test(text)) return 'repo';
+  if (/Repository not found|does not appear to be a git repository|Authentication failed|could not read Username/i.test(text)) return 'repo';
   if (/Could not resolve hostname|Connection (timed out|refused)|Network is unreachable|timed out/i.test(text)) return 'network';
   return 'unknown';
 }
@@ -108,6 +108,12 @@ class DeployKeys {
       publicKey: (await fsp.readFile(publicPath, 'utf8')).trim(),
       sshCommand: sshCommand(privatePath, this.knownHostsPath)
     };
+  }
+
+  async remove(slug) {
+    const privatePath = this.privatePath(slug);
+    await fsp.rm(privatePath, { force: true });
+    await fsp.rm(`${privatePath}.pub`, { force: true });
   }
 
   async ensureKnownHost(host, port) {
