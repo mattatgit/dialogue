@@ -7,8 +7,9 @@ const path = require('node:path');
 const DEBOUNCE_MS = 150;
 
 class WorkspaceWatcher {
-  // roots[0] is the prototype directory; a change there means the preview
-  // must reload. Other roots (git dirs) only move head/dirty/ahead.
+  // roots: [{ path, recursive, files }]. A change under a `files` root may
+  // mean the preview must reload; other roots (git dirs) only move
+  // head/dirty/ahead.
   constructor(roots) {
     this.roots = roots;
     this.clients = new Set();
@@ -19,15 +20,15 @@ class WorkspaceWatcher {
   }
 
   start() {
-    this.roots.forEach((root, index) => {
+    for (const root of this.roots) {
       try {
-        const watcher = fs.watch(root, { recursive: true }, () => this.schedule(index === 0));
+        const watcher = fs.watch(root.path, { recursive: root.recursive }, () => this.schedule(root.files));
         watcher.on('error', () => {});
         this.watchers.push(watcher);
       } catch {
-        // Missing path (e.g. prototypePath absent on this ref): nothing to watch.
+        // Missing path: nothing to watch.
       }
-    });
+    }
   }
 
   schedule(files) {

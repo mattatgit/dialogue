@@ -11,7 +11,9 @@ The repository currently contains two layers of work:
 
 The functional build is git-backed. A project points at a git repository (Landline: `https://github.com/mattatgit/landline`, prototype at `prototypes/app`). Dialogue fetches the repository's branches and tags, and opening one creates a **workspace**: a git worktree for that ref under `.dialogue-data/`.
 
-A branch workspace is a split screen: on the left, a web terminal running the oh-my-pi coding agent (`omp`) inside that branch's checkout; on the right, a live preview of the prototype in a sandboxed iframe that reloads on every file change. The designer asks the agent for a change, sees the result immediately, and presses COMMIT: the agent commits and pushes the branch over a per-project SSH deploy key that Dialogue generates and asks the designer to add to the repository once. Git is the revision model. Tag and commit workspaces are read-only previews without a terminal.
+Dialogue can preview any web project, from a folder of HTML files to an app with its own dev server. After a project is added, the agent works out how to run it and writes a recipe, `.dialogue/preview.json`; Dialogue proves the recipe by starting the preview and taking a screenshot (retrying with the agent up to three times), then commits it on the local default branch so it goes out with the next COMMIT. The project card shows the setup's progress, and a failed setup offers Retry, Fix with agent and the log. Setup waits until an AI model is signed in (Settings).
+
+A branch workspace is a split screen: on the left, a web terminal running the oh-my-pi coding agent (`omp`) inside that branch's checkout; on the right, a live preview of the prototype in a sandboxed iframe on its own origin (`http://<token>.preview.localhost:<port>/`), which Dialogue serves from the recipe — static files, or the project's dev server proxied with its hot reload — and reloads on file changes. The designer asks the agent for a change, sees the result immediately, and presses COMMIT: the agent commits and pushes the branch over a per-project SSH deploy key that Dialogue generates and asks the designer to add to the repository once. Git is the revision model. Tag and commit workspaces are read-only previews without a terminal.
 
 The three earlier functional milestones (Landline V22, V23, V24 on Matt's Mac) are superseded by this model; `docs/CURRENT.md` records them.
 
@@ -24,6 +26,7 @@ Requirements:
 - Node.js 22 or newer
 - `git`, `ttyd` and `tmux` on PATH (the Nix devshell provides these)
 - `omp` (oh-my-pi) on PATH — the developer's own install; the devshell deliberately does not provide it
+- whatever the previewed projects need, typically `node`/`npm`; Chromium (optional) for card and tile screenshots — the devshell provides both
 
 Start Dialogue in one of these ways:
 
@@ -35,7 +38,7 @@ nix run .#vm                 # headless NixOS demo VM with nginx; console prints
 cp .env.example .env         # then set OPENROUTER_API_KEY; picked up by dev, npm start and the VM
 ```
 
-Local application data — the bare git mirrors, worktrees and (in the VM) the omp home directory — is stored in `.dialogue-data/`. That folder is deliberately excluded from Git.
+Local application data — the bare git mirrors, worktrees, preview setup trees and logs, screenshots and (in the VM) the omp home directory — is stored in `.dialogue-data/`. That folder is deliberately excluded from Git.
 
 See `docs/LOCAL_BUILD.md` for the workflow, data layout and limitations, and `docs/DEVELOPMENT.md` for the devshell, environment overrides and VM.
 

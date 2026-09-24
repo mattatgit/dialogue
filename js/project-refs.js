@@ -68,6 +68,13 @@
       image.loading = 'lazy';
       image.addEventListener('error', () => { image.remove(); preview.classList.add('is-empty'); });
       preview.appendChild(image);
+      // No image of its own yet: main's stands in until the branch is opened.
+      if (ref.previewExact === false) {
+        const from = document.createElement('span');
+        from.className = 'ref-shot-source';
+        from.textContent = 'from main';
+        preview.appendChild(from);
+      }
     } else {
       preview.classList.add('is-empty');
     }
@@ -149,8 +156,19 @@
     });
   };
 
-  const load = async (retry = false) => {
-    setNote('Fetching branches…');
+  // While the preview is being set up, re-read quietly so screenshots
+  // appear as soon as the setup finishes.
+  let pollTimer = null;
+  const setupMessage = (setup) => {
+    if (setup?.status === 'queued' || setup?.status === 'running') return 'Setting up the preview for this project… screenshots appear when it is done.';
+    if (setup?.status === 'waiting-for-agent') return 'The preview is waiting for an AI model to be connected (see Settings).';
+    if (setup?.status === 'failed') return 'Dialogue could not set up a preview for this project. See the Projects page to retry or fix it.';
+    return '';
+  };
+
+  const load = async (retry = false, quiet = false) => {
+    clearTimeout(pollTimer);
+    if (!quiet) setNote('Fetching branches…');
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(projectSlug)}/refs`, { cache: 'no-store' });
       const payload = await response.json().catch(() => ({}));
@@ -171,9 +189,13 @@
       if (payload.branches?.length) groups.push(buildGroup('Branches', payload.branches, 'branch'));
       if (payload.tags?.length) groups.push(buildGroup('Tags', payload.tags, 'tag'));
       grid.replaceChildren(...groups);
+      const setupNote = setupMessage(payload.project?.previewSetup);
       if (!groups.length) setNote('This repository has no branches yet.');
       else if (payload.fetchError) setNote(`Showing the last known branches — ${payload.project?.repo?.host || 'the repository host'} could not be reached (${payload.fetchError}).`, 'error');
-      else setNote('');
+      else setNote(setupNote, payload.project?.previewSetup?.status === 'failed' ? 'error' : '');
+      if (['queued', 'running'].includes(payload.project?.previewSetup?.status)) {
+        pollTimer = window.setTimeout(() => load(false, true), 3000);
+      }
     } catch (error) {
       setNote(error.message || 'Could not read the repository.', 'error');
     }

@@ -19,7 +19,7 @@ in
     # Provided by the host: `nix run .#vm` stages the project's .env into the
     # directory named by $DIALOGUE_VM_ENV_DIR, shared below via 9p.
     environmentFile = "/run/dialogue-env/env";
-    seedProjects = [ { url = "https://github.com/mattatgit/landline"; prototypePath = "prototypes/app"; } ];
+    seedProjects = [ { url = "https://github.com/mattatgit/landline"; } ];
   };
   # omp's browser tool needs a Chromium it can run on NixOS; a downloaded
   # Chrome would fail to link, so point Puppeteer at the packaged one.

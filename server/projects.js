@@ -4,7 +4,11 @@
 const fsp = require('node:fs/promises');
 const { parseRemote } = require('./deploy-key.js');
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
+
+function queuedSetup() {
+  return { status: 'queued', attempt: 0, error: null, finishedAt: null };
+}
 
 class ProjectError extends Error {
   constructor(status, message) {
@@ -26,7 +30,8 @@ function webUrlFor(remote) {
 }
 
 // Build a project record from a pasted URL. Throws ProjectError(400).
-function projectFromUrl(url, prototypePath = null, now = new Date()) {
+// Every new project starts with its preview setup queued.
+function projectFromUrl(url, now = new Date()) {
   const remote = parseRemote(String(url || '').trim());
   if (!remote) throw new ProjectError(400, 'That does not look like a git repository address.');
   const slug = slugFor(remote);
@@ -38,9 +43,9 @@ function projectFromUrl(url, prototypePath = null, now = new Date()) {
       url: String(url).trim(),
       host: remote.host,
       owner: remote.owner,
-      repo: remote.repo,
-      prototypePath: prototypePath || null
-    }
+      repo: remote.repo
+    },
+    previewSetup: queuedSetup()
   };
 }
 
@@ -59,7 +64,9 @@ function withNames(projects) {
   }));
 }
 
-// Older db.json layouts: v2 stored { id, slug, name, description, repo: { url, prototypePath } }.
+// Older db.json layouts: v2 stored { id, slug, name, description, repo: { url, prototypePath } };
+// v3 stored a detected prototypePath. Both are rebuilt from the URL, which
+// drops prototypePath and queues the preview setup that replaces it.
 function migrate(data) {
   if (!data || typeof data !== 'object') return { schemaVersion: SCHEMA_VERSION, projects: [] };
   if (data.schemaVersion === SCHEMA_VERSION) return data;
@@ -68,7 +75,7 @@ function migrate(data) {
     const url = old?.repo?.url;
     if (!url) continue;
     try {
-      const fresh = projectFromUrl(url, old.repo.prototypePath || null, new Date(old.createdAt || Date.now()));
+      const fresh = projectFromUrl(url, new Date(old.createdAt || Date.now()));
       if (!projects.some((p) => p.slug === fresh.slug)) projects.push(fresh);
     } catch {
       // unparseable legacy entry: drop it
@@ -113,8 +120,8 @@ class ProjectStore {
   }
 
   // Returns the stored (nameless) record; caller decorates via list()/find().
-  async add(url, prototypePath = null) {
-    const project = projectFromUrl(url, prototypePath);
+  async add(url) {
+    const project = projectFromUrl(url);
     const data = await this.load();
     if (data.projects.some((item) => item.slug === project.slug)) throw new ProjectError(409, 'This repository has already been added.');
     data.projects.push(project);
@@ -122,13 +129,13 @@ class ProjectStore {
     return project;
   }
 
-  async update(slug, patch) {
+  async setPreviewSetup(slug, patch) {
     const data = await this.load();
     const project = data.projects.find((item) => item.slug === slug);
     if (!project) throw new ProjectError(404, 'Project not found.');
-    Object.assign(project.repo, patch);
+    project.previewSetup = { ...queuedSetup(), ...project.previewSetup, ...patch };
     await this.save(data);
-    return project;
+    return project.previewSetup;
   }
 
   async remove(slug) {
@@ -140,14 +147,14 @@ class ProjectStore {
     return removed;
   }
 
-  // Add every seed entry not present yet. Seeds: [{ url, prototypePath? }].
+  // Add every seed entry not present yet. Seeds: [{ url }].
   async seed(entries) {
     const data = await this.load();
     let changed = false;
     for (const entry of entries) {
       let project;
       try {
-        project = projectFromUrl(entry.url, entry.prototypePath || null);
+        project = projectFromUrl(entry.url);
       } catch (error) {
         console.error(`Ignoring seed project ${JSON.stringify(entry)}: ${error.message}`);
         continue;

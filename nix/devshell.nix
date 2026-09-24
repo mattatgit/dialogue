@@ -25,6 +25,9 @@ let
       port="''${PORT:-8080}"
       upstream=4173
       export DIALOGUE_SEED="''${DIALOGUE_SEED:-seed.json}"
+      # Preview origins (<token>.preview.localhost) go straight to the Node
+      # server: browser-sync would rewrite the Host header they are routed by.
+      export DIALOGUE_PREVIEW_PORT="$upstream"
       PORT="$upstream" node --watch server.js &
       server=$!
       trap 'kill "$server" 2>/dev/null' EXIT

@@ -58,3 +58,52 @@
 .ref-shot{display:block;width:135px;height:264px;object-fit:cover;object-position:top;border-radius:12px;background:#111;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .ref-preview.is-empty{background:linear-gradient(180deg,#2a2a2a,#1a1a1a)}
 .ref-preview.is-empty::after{content:"";width:135px;height:264px;border-radius:12px;background:#111;opacity:.6}
+
+/* AI model sign-in (Settings section, modal from the connect banner) */
+.agent-section{width:640px}
+.agent-flow{font-size:14px;line-height:20px;color:#171717}
+.agent-status{margin:0 0 8px;padding:12px 16px;border-radius:12px;background:#f8f8f8;font-weight:600}
+.agent-status[data-tone=ok]{background:#e9f9ee;color:#0f6b2a}
+.agent-status[data-tone=error]{background:#fff1e6;color:#8a3b00}
+.agent-status[data-tone=pending]{color:#555}
+.agent-intro{margin:16px 0 20px;color:#555}
+.agent-intro[hidden]{display:none}
+.agent-providers{display:grid;gap:8px}
+.agent-provider{display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:12px;border:1px solid #e8e8e8}
+.agent-provider-name{flex:1;font-weight:600}
+.agent-provider-state{font-size:12px;color:#0f6b2a}
+.agent-more{margin-top:12px;color:var(--mid)}
+.agent-more[hidden]{display:none}
+.agent-more>summary{cursor:pointer;margin-bottom:10px}
+.agent-signin{margin-top:28px;padding:24px;border-radius:16px;background:#f8f8f8}
+.agent-signin[hidden]{display:none}
+.agent-signin h3{margin:0 0 16px;font-size:18px}
+.agent-signin .setup-key-row,.agent-paste-row{display:flex;gap:12px;align-items:center;margin-top:10px}
+.agent-paste-row .form-field{flex:1;min-width:0;height:36px;box-sizing:border-box}
+.agent-progress{margin:16px 0 0;color:#555}
+.agent-progress[hidden]{display:none}
+.agent-actions{margin-top:20px;display:flex;justify-content:flex-end}
+.agent-tools{margin-top:28px;padding-top:20px;border-top:1px solid #e8e8e8;display:grid;gap:10px}
+.agent-model-label{font-weight:600;font-size:14px}
+.agent-model{height:36px;width:100%;box-sizing:border-box}
+.agent-model-note{margin:0;color:var(--mid);font-size:12px;line-height:18px}
+.agent-tools .pill{justify-self:start}
+.agent-banner{display:flex;align-items:center;gap:16px;margin:-24px 0 24px;padding:12px 16px;border-radius:12px;background:#fff1e6;color:#8a3b00;font-size:14px;line-height:20px;max-width:640px}
+.agent-banner[hidden]{display:none}
+.agent-banner-text{flex:1}
+.agent-modal .agent-flow{margin-top:12px}
+
+/* preview setup status on project cards */
+.project-card.has-setup-failure{height:400px}
+.setup-failure{position:absolute;left:24px;right:24px;top:272px;display:grid;gap:12px}
+.setup-failure p{margin:0;color:#c0392b;font-size:13px;line-height:18px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.setup-actions{display:flex;gap:6px;flex-wrap:nowrap}
+.setup-actions .pill{height:30px;padding:0 10px;font-size:12px;white-space:nowrap}
+
+/* branch tile showing main's image until the branch has its own */
+.ref-preview{position:relative}
+.ref-shot-source{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;border-radius:999px;padding:3px 9px;font-size:11px;white-space:nowrap}
+
+/* crashed preview: log tail under the message */
+.prototype-log{text-align:left;max-height:260px;overflow:auto;margin:12px 0;padding:10px;background:#111;color:#ccc;border-radius:8px;font:11px/15px "JetBrains Mono",ui-monospace,monospace;white-space:pre-wrap}
+.prototype-load-state .pill{margin-top:4px}

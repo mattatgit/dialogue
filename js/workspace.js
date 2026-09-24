@@ -13,8 +13,13 @@
   const terminalHost = document.querySelector('[data-terminal-host]');
   const overlay = document.querySelector('[data-terminal-overlay]');
   const overlayText = document.querySelector('[data-terminal-overlay-text]');
-  const workspaceId = new URLSearchParams(window.location.search).get('id');
+  const params = new URLSearchParams(window.location.search);
+  const workspaceId = params.get('id');
+  let wantsFix = params.get('fix') === '1';
   let currentSource = '';
+  let previewUrl = '';
+  let reloadMode = 'dialogue';
+  let setupStatus = '';
   let terminal = null;
   let canCommit = false;
   let committing = false;
@@ -28,12 +33,73 @@
     frameShell.hidden = true;
   };
 
+  const showState = (message) => {
+    state.replaceChildren(document.createTextNode(message));
+    state.classList.remove('is-error');
+    state.hidden = false;
+    frameShell.hidden = true;
+  };
+
   const reloadPrototype = () => {
     if (!currentSource) return;
     frame.src = 'about:blank';
     window.setTimeout(() => {
       frame.src = currentSource;
     }, 0);
+  };
+
+  const restartPreview = async () => {
+    showState('Restarting the preview…');
+    await fetch(`/api/workspaces/${workspaceId}/preview/restart`, { method: 'POST', cache: 'no-store' }).catch(() => {});
+  };
+
+  // The preview server's lifecycle, pushed over SSE as `runner` events.
+  const renderRunner = (runner) => {
+    reloadMode = runner.reload || reloadMode;
+    if (runner.state === 'ready') {
+      const firstLoad = !currentSource;
+      currentSource = previewUrl;
+      state.hidden = true;
+      frameShell.hidden = false;
+      if (firstLoad || runner.restarted) reloadPrototype();
+      return;
+    }
+    currentSource = '';
+    if (runner.state === 'crashed') {
+      showError(runner.message || 'The preview stopped.');
+      if (runner.log) {
+        const log = document.createElement('pre');
+        log.className = 'prototype-log';
+        log.textContent = runner.log;
+        state.append(log);
+      }
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'pill';
+      retry.textContent = 'Restart preview';
+      retry.addEventListener('click', restartPreview);
+      state.append(retry);
+      return;
+    }
+    // Opened while the project's preview is still being set up: it starts
+    // here by itself when the setup finishes.
+    if (runner.state === 'no-recipe' && ['queued', 'running'].includes(setupStatus)) {
+      showState('Dialogue is setting up the preview for this project. It appears here as soon as it is ready.');
+      return;
+    }
+    showState(runner.message || 'Starting the preview…');
+  };
+
+  // Arrived from "Fix with agent": hand the agent the failure once its
+  // terminal is up.
+  const requestFix = async () => {
+    if (!wantsFix) return;
+    wantsFix = false;
+    const response = await fetch(`/api/workspaces/${workspaceId}/fix-preview`, { method: 'POST', cache: 'no-store' }).catch(() => null);
+    if (response && !response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      showError(payload.error || 'Could not hand the problem to the agent.');
+    }
   };
 
   const renderCommitButton = (dirty, ahead) => {
@@ -112,7 +178,10 @@
     body.classList.add('has-terminal');
     terminal = window.DialogueTerminal.mount(terminalHost, workspaceId, {
       onStatus: (kind, detail) => {
-        if (kind === 'connected') setOverlay('');
+        if (kind === 'connected') {
+          setOverlay('');
+          requestFix();
+        }
         else if (kind === 'connecting') setOverlay('Connecting…');
         else if (kind === 'reconnecting') setOverlay('Reconnecting…');
         else if (kind === 'error') setOverlay(detail || 'The agent terminal could not be started.');
@@ -123,6 +192,13 @@
 
   const subscribe = () => {
     const events = new EventSource(`/api/workspaces/${workspaceId}/events`);
+    events.addEventListener('runner', (event) => {
+      try {
+        renderRunner(JSON.parse(event.data));
+      } catch {
+        // ignore malformed frames
+      }
+    });
     events.addEventListener('change', (event) => {
       let files = true;
       try {
@@ -132,7 +208,8 @@
       } catch {
         // ignore malformed frames
       }
-      if (files) reloadPrototype();
+      // Dev servers with their own live reload handle file changes.
+      if (files && reloadMode === 'dialogue') reloadPrototype();
     });
   };
 
@@ -154,15 +231,10 @@
       canCommit = Boolean(workspace.terminal);
       renderStatus(workspace.head, workspace.dirty, workspace.ahead);
 
-      if (workspace.entryPoint) {
-        currentSource = `${workspace.filesUrl}${workspace.entryPoint}`;
-        frame.title = `${workspace.project?.name || 'Prototype'} · ${workspace.ref}`;
-        frame.src = currentSource;
-        state.hidden = true;
-        frameShell.hidden = false;
-      } else {
-        showError(`This branch has no prototype at ${workspace.prototypePath}/index.html yet.`);
-      }
+      previewUrl = workspace.previewUrl || '';
+      setupStatus = workspace.project?.previewSetup?.status || '';
+      frame.title = `${workspace.project?.name || 'Prototype'} · ${workspace.ref}`;
+      renderRunner(workspace.runner || { state: 'starting' });
 
       if (workspace.terminal) mountTerminal();
       subscribe();
@@ -171,7 +243,7 @@
     }
   };
 
-  restartButton?.addEventListener('click', reloadPrototype);
+  restartButton?.addEventListener('click', () => (currentSource ? reloadPrototype() : restartPreview()));
   document.addEventListener('keydown', (event) => {
     if (event.key.toLowerCase() === 'r' && !event.metaKey && !event.ctrlKey && !event.altKey
       && !/input|textarea/i.test(document.activeElement?.tagName || '')

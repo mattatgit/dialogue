@@ -81,13 +81,79 @@
     added.className = 'meta-item';
     added.innerHTML = '<div class="meta-label">Added</div><div class="meta-value"></div>';
     added.querySelector('.meta-value').textContent = new Date(project.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-    const proto = document.createElement('div');
-    proto.className = 'meta-item';
-    proto.innerHTML = '<div class="meta-label">Prototype</div><div class="meta-value"></div>';
-    proto.querySelector('.meta-value').textContent = project.repo.prototypePath === null ? 'no index.html found' : project.repo.prototypePath || 'repository root';
+    const preview = document.createElement('div');
+    preview.className = 'meta-item';
+    preview.innerHTML = '<div class="meta-label">Preview</div><div class="meta-value"></div>';
+    preview.querySelector('.meta-value').textContent = setupLabel(project.previewSetup);
 
+    meta.append(added, preview);
     card.append(badge, remove, name, desc, divider, meta);
+    if (project.previewSetup?.status === 'failed') {
+      card.classList.add('has-setup-failure');
+      card.append(buildSetupFailure(project));
+    }
     return card;
+  };
+
+  const setupLabel = (setup) => {
+    switch (setup?.status) {
+      case 'ready': return 'Ready';
+      case 'running': return setup.attempt > 1 ? `Setting up… (try ${setup.attempt} of 3)` : 'Setting up…';
+      case 'waiting-for-agent': return 'Waiting for an AI model';
+      case 'failed': return 'Setup failed';
+      default: return 'Waiting to set up';
+    }
+  };
+
+  // Setup gave up: say why and offer a retry, the log, or the agent.
+  const buildSetupFailure = (project) => {
+    const box = document.createElement('div');
+    box.className = 'setup-failure';
+    const reason = document.createElement('p');
+    reason.textContent = project.previewSetup.error || 'Dialogue could not work out how to show this project.';
+    const actions = document.createElement('div');
+    actions.className = 'setup-actions';
+    const action = (label, handler) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pill outline';
+      button.textContent = label;
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        button.disabled = true;
+        try {
+          await handler();
+        } catch (error) {
+          setNote(error.message, 'error');
+        } finally {
+          button.disabled = false;
+        }
+      });
+      return button;
+    };
+    const base = `/api/projects/${encodeURIComponent(project.slug)}/setup`;
+    const post = async (url) => {
+      const response = await fetch(url, { method: 'POST' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'That did not work.');
+      return payload;
+    };
+    actions.append(
+      action('Retry', async () => { await post(`${base}/retry`); await load(); }),
+      action('Fix with agent', async () => { window.location.href = (await post(`${base}/fix`)).viewerUrl; }),
+      action('Show log', async () => { window.open(`${base}/log`, '_blank', 'noopener'); })
+    );
+    box.append(reason, actions);
+    return box;
+  };
+
+  // Setups in progress change on their own; poll until they settle.
+  let pollTimer = null;
+  const pollWhileBusy = (list) => {
+    clearTimeout(pollTimer);
+    const busy = list.some((project) => ['queued', 'running'].includes(project.previewSetup?.status));
+    if (busy) pollTimer = window.setTimeout(load, 3000);
   };
 
   const load = async () => {
@@ -96,6 +162,7 @@
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Could not load projects.');
       grid.replaceChildren(...payload.projects.map(buildCard));
+      pollWhileBusy(payload.projects);
       setNote(payload.projects.length ? '' : 'No projects yet. Add one with the address of its Git repository.');
     } catch (error) {
       setNote(error.message || 'Could not load projects.', 'error');

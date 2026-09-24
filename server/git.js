@@ -5,6 +5,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { classifyPushError } = require('./deploy-key.js');
+const { RECIPE_PATH } = require('./recipe.js');
 
 const execFileAsync = promisify(execFile);
 const GIT_BIN = process.env.DIALOGUE_GIT || 'git';
@@ -93,21 +94,6 @@ function workspaceDir(workspacesRoot, slug, ref) {
   return dir;
 }
 
-// Prefer the conventional prototypes/app, then the shallowest index.html
-// (ties: alphabetical). Returns the directory ('' for the repo root).
-function pickPrototypePath(paths) {
-  const candidates = paths
-    .filter((p) => p === 'index.html' || p.endsWith('/index.html'))
-    .map((p) => p.slice(0, -'index.html'.length).replace(/\/$/, ''));
-  if (!candidates.length) return null;
-  if (candidates.includes('prototypes/app')) return 'prototypes/app';
-  candidates.sort((a, b) => {
-    const depth = (a.match(/\//g) || []).length + (a ? 1 : 0) - ((b.match(/\//g) || []).length + (b ? 1 : 0));
-    return depth || a.localeCompare(b);
-  });
-  return candidates[0];
-}
-
 // --- repository operations -------------------------------------------------
 
 class ProjectRepo {
@@ -159,17 +145,86 @@ class ProjectRepo {
     }
   }
 
-  // Where the prototype lives on the default branch. `null` when the
-  // repository has no index.html at all.
-  async detectPrototypePath() {
-    const listing = await this.git(['ls-tree', '-r', '--name-only', 'HEAD']).catch(() => '');
-    return pickPrototypePath(listing.split('\n'));
+  // The preview recipe for a workspace: its own file (committed or not)
+  // wins; otherwise the default branch's, local first because the setup
+  // pipeline commits there before anything is pushed.
+  async readRecipe(dir = null) {
+    if (dir) {
+      const text = await fsp.readFile(path.join(dir, RECIPE_PATH), 'utf8').catch(() => null);
+      if (text !== null) return { text, source: 'workspace' };
+    }
+    const name = await this.defaultBranchName();
+    const local = await this.localDefault();
+    for (const ref of [local, `refs/remotes/origin/${name}`].filter(Boolean)) {
+      const text = await this.git(['show', `${ref}:${RECIPE_PATH}`]).catch(() => null);
+      if (text !== null) return { text, source: 'default' };
+    }
+    return null;
+  }
+
+  async defaultBranchName() {
+    const ref = (await this.git(['symbolic-ref', '--quiet', 'HEAD']).catch(() => '')).trim();
+    return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : 'main';
+  }
+
+  // Sha of the local default branch when it carries commits origin lacks
+  // (e.g. the unpushed recipe commit). A bare clone leaves a clone-time
+  // copy of every branch in refs/heads; that stale copy is not local work.
+  async localDefault() {
+    const name = await this.defaultBranchName();
+    const sha = await this.localBranchSha(name);
+    if (!sha) return null;
+    const unique = await this.git(['rev-list', '--count', `refs/remotes/origin/${name}..${sha}`]).then((s) => Number(s.trim()), () => 1);
+    return unique > 0 ? sha : null;
+  }
+
+  async localBranchSha(name) {
+    return (await this.git(['rev-parse', '--verify', '--quiet', `refs/heads/${name}^{commit}`]).catch(() => '')).trim() || null;
+  }
+
+  // A detached worktree outside the workspaces root, kept between runs so
+  // ignored files (node_modules) survive and repeat installs are cheap.
+  async checkoutSetupTree(dir, rev) {
+    const known = (await this.worktrees()).some((tree) => tree.dir === dir);
+    if (!known) {
+      await fsp.rm(dir, { recursive: true, force: true });
+      await this.git(['worktree', 'prune']);
+      await fsp.mkdir(path.dirname(dir), { recursive: true });
+      await this.git(['worktree', 'add', '--quiet', '--force', '--detach', dir, rev]);
+      return;
+    }
+    await run(['-C', dir, 'checkout', '--quiet', '--force', '--detach', rev]);
+    await run(['-C', dir, 'clean', '-fdq']);
+  }
+
+  // Commit just the recipe file in `dir`. Returns the new sha, or null when
+  // the file matches HEAD.
+  async commitRecipe(dir, message) {
+    await run(['-C', dir, 'add', '--', RECIPE_PATH]);
+    const unchanged = await run(['-C', dir, 'diff', '--cached', '--quiet', 'HEAD', '--', RECIPE_PATH]).then(() => true, () => false);
+    if (unchanged) return null;
+    await run(['-C', dir, 'commit', '--quiet', '--no-verify', '-m', message, '--', RECIPE_PATH]);
+    return (await run(['-C', dir, 'rev-parse', 'HEAD'])).trim();
+  }
+
+  // Point the local default branch at `sha`, only if it is still at
+  // `expected` (null: no local work yet), and track origin so the next
+  // COMMIT pushes it.
+  async advanceDefault(sha, expected) {
+    const name = await this.defaultBranchName();
+    let old = expected;
+    if (!old) {
+      if (await this.localDefault()) throw new GitError(`The local ${name} branch has moved; not overwriting it.`);
+      old = (await this.localBranchSha(name)) || '0'.repeat(40);
+    }
+    await this.git(['update-ref', `refs/heads/${name}`, sha, old]);
+    await this.git(['config', `branch.${name}.remote`, 'origin']);
+    await this.git(['config', `branch.${name}.merge`, `refs/heads/${name}`]);
   }
 
   // Name and current remote sha of the default branch (bare HEAD symref).
   async defaultBranch() {
-    const ref = (await this.git(['symbolic-ref', '--quiet', 'HEAD']).catch(() => '')).trim();
-    const name = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : 'main';
+    const name = await this.defaultBranchName();
     const sha = (await this.git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${name}^{commit}`]).catch(() => '')).trim();
     return sha ? { name, sha } : null;
   }
@@ -270,8 +325,12 @@ class ProjectRepo {
 
     await fsp.mkdir(path.dirname(dir), { recursive: true });
     if (target.kind === 'branch') {
-      const hasLocal = await this.git(['show-ref', '--verify', '--quiet', `refs/heads/${ref}`]).then(() => true, () => false);
-      if (hasLocal) {
+      const local = await this.localBranchSha(ref);
+      if (local) {
+        // A local branch with nothing origin lacks (clone-time copy, or
+        // already pushed) is fast-forwarded so the workspace starts current.
+        const unique = await this.git(['rev-list', '--count', `origin/${ref}..${local}`]).then((s) => Number(s.trim()), () => 1);
+        if (!unique) await this.git(['update-ref', `refs/heads/${ref}`, target.sha, local]);
         await this.git(['worktree', 'add', '--quiet', dir, ref]);
         // A local branch left by an earlier workspace may lack its upstream;
         // `ahead` and the agent's push both rely on it.
@@ -315,12 +374,28 @@ class ProjectRepo {
     };
   }
 
-  // Directories whose changes mean the workspace's head/dirty/ahead state
-  // may have moved: prototype files, the worktree's own git dir (HEAD, index)
-  // and the mirror's remote-tracking refs (updated by push and fetch).
-  async watchRoots(workspace, prototypePath) {
+  // What to watch for a workspace. `files` roots are the project's own files
+  // (a change may mean the preview reloads); the others only move
+  // head/dirty/ahead. Ignored and dot directories are skipped so a
+  // recursive watch never walks node_modules or build output; `.dialogue`
+  // stays so a rewritten recipe is noticed.
+  async watchRoots(workspace) {
     const gitDir = (await run(['-C', workspace.dir, 'rev-parse', '--absolute-git-dir'])).trim();
-    return [path.join(workspace.dir, prototypePath), gitDir, path.join(this.bareDir, 'refs', 'remotes')];
+    const entries = await fsp.readdir(workspace.dir, { withFileTypes: true }).catch(() => []);
+    const dirs = entries
+      .filter((entry) => entry.isDirectory() && (entry.name === '.dialogue' || !entry.name.startsWith('.')))
+      .map((entry) => entry.name);
+    let ignored = new Set();
+    if (dirs.length) {
+      const out = await run(['-C', workspace.dir, 'check-ignore', '--', ...dirs.map((name) => `${name}/`)]).catch((error) => error.stdout || '');
+      ignored = new Set(String(out).split('\n').filter(Boolean).map((line) => line.replace(/\/$/, '')));
+    }
+    return [
+      { path: workspace.dir, recursive: false, files: true },
+      ...dirs.filter((name) => !ignored.has(name)).map((name) => ({ path: path.join(workspace.dir, name), recursive: true, files: true })),
+      { path: gitDir, recursive: true, files: false },
+      { path: path.join(this.bareDir, 'refs', 'remotes'), recursive: true, files: false }
+    ];
   }
 
   async findWorkspace(ref) {
@@ -336,7 +411,6 @@ module.exports = {
   isValidRefName,
   parseRefs,
   parseWorkspaceId,
-  pickPrototypePath,
   workspaceDir,
   workspaceId
 };

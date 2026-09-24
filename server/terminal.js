@@ -69,8 +69,9 @@ function waitForSocket(socketPath, child) {
 }
 
 class TerminalManager {
-  constructor({ appRoot }) {
+  constructor({ appRoot, agentAuth }) {
     this.appRoot = appRoot;
+    this.agentAuth = agentAuth;
     this.terminals = new Map();
     this.socketDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dialogue-term-'));
   }
@@ -99,7 +100,9 @@ class TerminalManager {
 
     // ttyd runs omp/attach.sh per client; the script owns the tmux session
     // (own server via -L so it inherits Dialogue's environment, e.g. API
-    // keys) and rotates the session whenever the omp overlay changes.
+    // keys) and rotates the session whenever the omp overlay or the model
+    // arguments change. DIALOGUE_OMP_ARGS is word-split by the shell: model
+    // ids never contain whitespace.
     const ttydArgs = [
       '-i', socketPath, '-W', '-b', this.basePath(workspace.id), '-T', 'xterm-256color',
       '-t', 'disableLeaveAlert=true',
@@ -110,12 +113,13 @@ class TerminalManager {
       cwd: workspace.dir,
       env: {
         ...process.env,
+        ...this.agentAuth.ompEnv(),
+        DIALOGUE_OMP_ARGS: this.agentAuth.ompArgs().join(' '),
         COLORTERM: 'truecolor',
         DIALOGUE_APP: this.appRoot,
         DIALOGUE_WORKSPACE: workspace.id,
         DIALOGUE_WORKSPACE_DIR: workspace.dir,
         DIALOGUE_SESSION: prefix,
-        DIALOGUE_PROTOTYPE_PATH: workspace.prototypePath,
         DIALOGUE_TMUX: TMUX_BIN,
         DIALOGUE_OMP: OMP_BIN
       },
@@ -139,6 +143,10 @@ class TerminalManager {
     record.child?.kill('SIGTERM');
   }
 
+  stopAll() {
+    for (const id of [...this.terminals.keys()]) this.stop(id);
+  }
+
   // Type `text` into the workspace's omp session as if the user had entered
   // it. attach.sh names sessions `<prefix>-<overlay checksum>`; the live one
   // is whichever currently exists under the prefix.
@@ -159,7 +167,7 @@ class TerminalManager {
   }
 
   shutdown() {
-    for (const id of [...this.terminals.keys()]) this.stop(id);
+    this.stopAll();
     fs.rmSync(this.socketDir, { recursive: true, force: true });
   }
 }

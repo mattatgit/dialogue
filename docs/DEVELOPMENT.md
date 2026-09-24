@@ -12,7 +12,7 @@ The immediate goal is still not a production framework/database/hosting migratio
 
 ## Local development (Nix)
 
-The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js, browser-sync, `git`, `ttyd`, `tmux` and the live-reloading `dev` command. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
+The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium (screenshots) and the live-reloading `dev` command. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
 
 `omp` is deliberately **not** in the devshell: Dialogue uses the developer's own `omp` on PATH so the agent, its profiles and its login are the ones you already use.
 
@@ -24,23 +24,27 @@ PORT=3000 dev    # alternative port
 OPEN=0 dev       # don't launch a browser
 ```
 
-`dev` runs `node --watch server.js` on 4173 and puts browser-sync in front of it on `PORT`: edits to HTML/CSS/JS/assets reload open tabs (CSS is injected in place); edits to `server.js` restart the server, then reload. Both listeners are bound to localhost only. Restarting the server does not kill agent sessions: they live in tmux.
+`dev` runs `node --watch server.js` on 4173 and puts browser-sync in front of it on `PORT`: edits to HTML/CSS/JS/assets reload open tabs (CSS is injected in place); edits to `server.js` restart the server, then reload. Both listeners are bound to localhost only. Restarting the server does not kill agent sessions: they live in tmux. Preview servers are children of the Node server and are stopped with it; they start again when a workspace is viewed. `dev` also sets `DIALOGUE_PREVIEW_PORT=4173`: preview origins (`http://<token>.preview.localhost:4173/`) go straight to Node, because browser-sync rewrites the Host header they are routed by.
 
-`npm start` still works inside the devshell for a plain server without reload. `node --test test/` runs the unit tests (`test/git.test.js`: ref parsing, workspace-id/path safety).
+`npm start` still works inside the devshell for a plain server without reload. `npm test` (`node --test test/*.test.js`) runs the unit tests and the preview end-to-end test.
 
 ### Environment overrides
 
 - `DIALOGUE_DATA` — data directory; default `.dialogue-data/` next to the code
 - `DIALOGUE_GIT`, `DIALOGUE_TTYD`, `DIALOGUE_TMUX`, `DIALOGUE_OMP` — paths to the binaries; default is whatever PATH resolves
+- `DIALOGUE_SEED` — JSON file `[{ url }]` of projects added on start (`dev` defaults it to `seed.json`)
+- `DIALOGUE_CHROMIUM` / `PUPPETEER_EXECUTABLE_PATH` — Chromium for screenshots; default is PATH
+- `DIALOGUE_PREVIEW_DOMAIN` — parent domain for preview origins (`<token>.<domain>`); default `<token>.preview.localhost`
+- `DIALOGUE_PREVIEW_PORT` — port written into `*.preview.localhost` URLs instead of the browser's (set by `dev`)
 - `PORT` — server port (default 4173; `dev` sets it for the upstream and uses its own `PORT` for browser-sync)
 
 ### Hosted build: NixOS module and demo VM
 
-Nix files live under `nix/`: `package.nix` (the app + `bin/dialogue-server`; the wrapper prefixes PATH with `git`, `ttyd`, `tmux` and, when given, `omp`), `module.nix` (NixOS module), `vm.nix` (demo VM), `devshell.nix`.
+Nix files live under `nix/`: `package.nix` (the app + `bin/dialogue-server`; the wrapper prefixes PATH with `nodejs` (so preview servers find `node`/`npm`), `git`, `ttyd`, `tmux`, `openssh` and, when given, `omp`), `module.nix` (NixOS module), `vm.nix` (demo VM), `devshell.nix`.
 
 `flake.nix` has an input `llm-agents` (`git+https://github.com/numtide/llm-agents.nix?shallow=1`, nixpkgs follows) which provides the `omp` package for the VM.
 
-`nixosModules.default` provides `services.dialogue`: a systemd service (`DynamicUser`, data in `/var/lib/dialogue` via `DIALOGUE_DATA`, `HOME=/var/lib/dialogue/home`, Node bound to `127.0.0.1:<port>`), an optional `services.dialogue.environmentFile` (systemd `EnvironmentFile`, missing file tolerated) for secrets such as `OPENROUTER_API_KEY`, and with `services.dialogue.nginx.enable` an nginx virtual host proxying to it with WebSockets enabled, buffering off and a 1 h read timeout. No authentication yet.
+`nixosModules.default` provides `services.dialogue`: a systemd service (`DynamicUser`, data in `/var/lib/dialogue` via `DIALOGUE_DATA`, `HOME=/var/lib/dialogue/home`, Node bound to `127.0.0.1:<port>`), an optional `services.dialogue.environmentFile` (systemd `EnvironmentFile`, missing file tolerated) for secrets such as `OPENROUTER_API_KEY`, `services.dialogue.seedProjects` (`[{ url }]`, written to `DIALOGUE_SEED`), `services.dialogue.previewDomain` (sets `DIALOGUE_PREVIEW_DOMAIN`; needs wildcard DNS, and a wildcard certificate for HTTPS; when null previews use `<token>.preview.localhost`, which only works from the host or through a forwarded localhost port such as the demo VM's), and with `services.dialogue.nginx.enable` an nginx virtual host proxying to it with WebSockets enabled, buffering off, a 1 h read timeout, `proxy_set_header Host $http_host` and `X-Forwarded-Proto`, and `serverAliases` `*.preview.localhost` (plus `*.<previewDomain>`) so preview origins reach Node. No authentication yet.
 
 ```sh
 nix run .#vm    # headless VM with the module + nginx; the console prints the URL (http://127.0.0.1:8483) once Dialogue is up
@@ -85,21 +89,32 @@ Requirements:
 
 Start with `dev`, `npm start` or `Start Dialogue.command` (which checks for `git`/`ttyd`/`tmux`/`omp` before starting). Open `http://127.0.0.1:8080` (`dev`) or `http://127.0.0.1:4173`.
 
-Runtime data — bare mirrors, worktrees and the VM home — is written to `.dialogue-data/` and must not be committed.
+Runtime data — bare mirrors, worktrees, preview setup trees and logs, install stamps, screenshots and the VM home — is written to `.dialogue-data/` and must not be committed.
 
 See `docs/LOCAL_BUILD.md`.
 
 ## Relevant files
 
-- `server.js` — http routing, static files, `/workspace-files`, SSE, WebSocket proxy
-- `server/git.js` — bare repo ensure/fetch, ref listing, worktree add/list/remove, HEAD/dirty status, exec wrapper
-- `server/terminal.js` — ttyd lifecycle per branch workspace
+- `server.js` — http routing, static files, preview-origin dispatch, SSE, WebSocket proxy, setup/preview routes
+- `server/git.js` — bare repo ensure/fetch, ref listing, worktree add/list/remove, HEAD/dirty status, recipe lookup (`readRecipe`), setup tree and recipe commit (`checkoutSetupTree`, `commitRecipe`, `advanceDefault`, `localDefault`), watch roots, exec wrapper
+- `server/projects.js` — `db.json` store (schemaVersion 4, v2/v3 migration, `previewSetup`)
+- `server/recipe.js` — `.dialogue/preview.json` parser
+- `server/runner.js` — `Runner` (install stamp, dev server in its own process group, readiness probe) and `RunnerPool` (idle stop)
+- `server/preview-proxy.js` — per-workspace preview origins: HTTP/WebSocket proxy, static file serving, status pages
+- `server/live-preview.js` — runners per viewed workspace, SSE `runner` payloads, branch screenshots
+- `server/setup.js` — preview setup pipeline (agent run, validation, retries, recipe commit, refresh)
+- `server/preview.js` — headless-Chromium screenshots and the per-commit / `main.png` cache
+- `server/agent-auth.js` — AI model readiness, model selection, web sign-in
+- `server/terminal.js` — ttyd lifecycle per branch workspace, prompt injection
 - `server/watch.js` — debounced `fs.watch` → SSE fan-out
-- `workspace.html`, `js/workspace.js` — split-screen workspace page
+- `projects.html`, `js/projects.js` — Projects page, card Preview status line and setup failure actions
+- `project.html`, `js/project-refs.js` — branch/tag tiles, "from main" screenshot label
+- `workspace.html`, `js/workspace.js` — split-screen workspace page, preview iframe on the preview origin, runner states, Restart preview, "Fix with agent" hand-off
 - `js/terminal.js`, `js/vendor/xterm*.js`, `css/terminal.css` — terminal pane
 - `omp/config.yml`, `omp/system-prompt.md`, `omp/tmux.conf`, `omp/dialogue-theme.json` — agent runtime config
+- `omp/preview-setup-prompt.md`, `omp/preview-fix-prompt.md`, `omp/commit-prompt.md` — prompts Dialogue hands the agent
 - `assets/fonts/JetBrainsMono-*.woff2` — terminal typeface (OFL)
-- `test/git.test.js` — unit tests
+- `test/*.test.js` — unit tests per module plus `preview-e2e.test.js` and `agent-auth.e2e.test.js`
 
 ## Repository hygiene
 
@@ -129,17 +144,24 @@ When touching git/workspace/terminal/preview behaviour, preserve:
 - localhost server startup
 - static Dialogue pages
 - `GET /api/projects/:slug/refs` lists branches and tags after a fetch, and still lists local refs with `fetchError` when offline
+- adding a project queues its preview setup; the card goes Waiting to set up → Setting up… → Ready, commits `.dialogue/preview.json` on the local default branch ("Add Dialogue preview recipe") and shows a screenshot
+- with no AI model signed in, the card says Waiting for an AI model and setup resumes by itself after signing in
+- a failing setup ends as Setup failed after 3 tries, with a reason, Retry, Fix with agent and Show log; the log is at `.dialogue-data/setup/<slug>/log.txt`
 - opening a branch creates a worktree under `.dialogue-data/workspaces/<slug>/<encoded-ref>/` and is idempotent on reopen
+- the preview iframe loads from `http://<token>.preview.localhost:<port>/`, never from Dialogue's own origin; installing/starting messages show while a server recipe comes up
+- a dev server's own HMR works through the preview origin (`reload: "self"`); with `reload: "dialogue"` saving a file reloads the iframe
+- editing `.dialogue/preview.json` restarts the preview; killing the dev server shows the crash log and **Restart preview** brings it back
 - the terminal connects and omp starts inside the worktree
 - closing and reopening the tab reattaches to the same tmux session
-- editing a file under the prototype path reloads the preview and flips the chip to uncommitted changes; committing flips it back
+- editing a project file flips the chip to uncommitted changes; committing flips it back
 - a tag workspace renders full-width with no terminal and no ttyd is spawned
-- `DELETE /api/workspaces/:id` stops the terminal and removes the worktree
-- `/workspace-files/:id/*` refuses paths outside the prototype path
-- prototype interaction inside the sandbox
+- `DELETE /api/workspaces/:id` stops the terminal and preview server and removes the worktree
+- a static preview refuses paths outside the recipe's `root`
+- prototype interaction inside the sandboxed iframe
+- branch tiles without their own screenshot show the main image labelled "from main"
 - Restart / `R`
 - runtime files remaining outside Git
-- `node --test test/` passes
+- `npm test` passes
 
 ## Near-term build sequence
 

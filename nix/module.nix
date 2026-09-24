@@ -43,15 +43,23 @@ in
             type = lib.types.str;
             description = "Git repository URL (HTTPS, git@host:owner/repo or ssh://).";
           };
-          prototypePath = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = "Directory inside the repository holding the prototype's index.html; detected when null.";
-          };
         };
       });
       default = [ ];
       description = "Projects added on startup when not present yet (DIALOGUE_SEED). Users can add more from the UI.";
+    };
+
+    previewDomain = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "preview.dialogue.example.com";
+      description = ''
+        Parent domain for per-workspace preview origins (<token>.<previewDomain>),
+        which needs wildcard DNS (and a wildcard certificate for HTTPS). When
+        null, previews use <token>.preview.localhost on the port the browser
+        used, which only works when the browser runs on the same machine (or
+        reaches it through a forwarded localhost port, as with the demo VM).
+      '';
     };
 
     nginx = {
@@ -81,6 +89,9 @@ in
         DIALOGUE_SEED = toString (pkgs.writeText "dialogue-seed.json" (builtins.toJSON cfg.seedProjects));
         # Prototype preview screenshots for project cards and branch tiles.
         DIALOGUE_CHROMIUM = lib.getExe pkgs.chromium;
+      }
+      // lib.optionalAttrs (cfg.previewDomain != null) {
+        DIALOGUE_PREVIEW_DOMAIN = cfg.previewDomain;
       };
       preStart = "mkdir -p ${cfg.dataDir}/home";
       serviceConfig = {
@@ -102,11 +113,16 @@ in
     services.nginx = lib.mkIf cfg.nginx.enable {
       enable = true;
       virtualHosts.${cfg.nginx.hostName} = {
+        # Preview origins arrive under other host names; route them here too.
+        serverAliases = [ "*.preview.localhost" ] ++ lib.optional (cfg.previewDomain != null) "*.${cfg.previewDomain}";
         locations."/" = {
           proxyPass = "http://127.0.0.1:${toString cfg.port}";
           proxyWebsockets = true;
-          # Long-lived SSE and terminal WebSocket connections.
+          # Long-lived SSE and terminal WebSocket connections. Dialogue picks
+          # the preview to serve from the Host header, so pass the browser's.
           extraConfig = ''
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Forwarded-Proto $scheme;
             proxy_buffering off;
             proxy_read_timeout 1h;
             proxy_send_timeout 1h;

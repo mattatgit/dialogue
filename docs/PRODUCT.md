@@ -30,7 +30,7 @@ The product should be designer-first: a designer should be able to review, comme
 ## Core product flow
 
 1. Sign in to Dialogue.
-2. Create or open a project. A project is backed by a git repository that contains the prototype.
+2. Create or open a project. A project is backed by a git repository that contains the prototype. The first time, Dialogue works out by itself (with the connected agent) how to show that prototype live, and says so on the project's card.
 3. Open a branch of that repository as a workspace.
 4. Ask the connected agent, in the workspace, for a change; the agent edits the branch's checkout.
 5. Dialogue shows the live prototype beside the agent and reloads it on every change.
@@ -64,7 +64,9 @@ This allows an LLM to receive a much more precise revision request than a screen
 
 ## Prototype and revisions
 
-A prototype lives in a git repository at a known path (`repo.prototypePath`), as `index.html`, CSS, optional JavaScript, images/fonts/other assets. Git is the revision model: a commit is a revision, a branch is a line of work, a tag is a named release. Dialogue does not keep its own package or revision store.
+A prototype lives in a git repository. It can be anything a browser can show: a folder of `index.html`, CSS, optional JavaScript, images/fonts/other assets, or a real web app with its own build tools and dev server. Dialogue does not need to be told where it is or how it is built. When a project is added, the agent looks through the repository and writes a short recipe, `.dialogue/preview.json`, saying how to show it; Dialogue tries the recipe, gives the agent another go if it does not work (up to three tries), and saves it in the repository alongside the prototype, so it travels with the project and reaches the shared repository the next time the main branch is committed from Dialogue. The project card shows how this is going — waiting to set up, setting up, waiting for an AI model to be connected, ready, or failed with the reason and a way to retry, ask the agent to fix it, or see what happened.
+
+Git is the revision model: a commit is a revision, a branch is a line of work, a tag is a named release. Dialogue does not keep its own package or revision store.
 
 This supports, without extra machinery:
 
@@ -102,7 +104,7 @@ These proved that a revisioned prototype could be held and machine-published. Th
 
 ## Current build
 
-`develop` provides git-backed workspaces: a project page listing the repository's branches and tags, and a split-screen workspace per branch with a connected agent terminal on the left and a live-reloading prototype preview on the right. Tags and commits open as read-only previews.
+`develop` provides git-backed workspaces: a project page listing the repository's branches and tags with screenshots, and a split-screen workspace per branch with a connected agent terminal on the left and a live prototype preview on the right. Any web project works — Dialogue's agent sets up how to preview it once, and Dialogue then runs the preview itself (including the project's own dev server, with its hot reload) on a separate, isolated web address. Tags and commits open as read-only previews.
 
 ## Near-term capabilities
 
@@ -112,10 +114,10 @@ Next:
 - learn what context the agent and designer need from that test
 - a designed conversation UI to replace the raw terminal pane
 - workspace management (close/clean up, see open branches)
-- thumbnails/screenshots
+- screenshots for every branch without opening it first
 - authentication when the workflow moves beyond a single user
 - public sharing
-- broader project management (adding projects with their repositories)
+- broader project management
 
 Later:
 
@@ -133,7 +135,7 @@ The current milestone is the first **real designer-driven change** in the web te
 
 Success means:
 
-1. open a Landline branch in Dialogue;
+1. open a Landline branch in Dialogue once its card says the preview is ready;
 2. ask the connected agent for one small visible HTML/CSS/JS change;
 3. see the preview reload with the change and the status chip show uncommitted changes;
 4. commit and push from the same terminal and open a pull request;
