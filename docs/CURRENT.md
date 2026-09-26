@@ -240,6 +240,19 @@ Verified:
 
 This closes the manual smoke-test gate for PR #5.
 
+## Product direction clarified — 2026-09-26
+
+Dialogue's longer-term product direction now includes two primary human workflows over a shared project/workspace engine:
+
+- a prompt-first workflow for non-designers and developers, where work is primarily directed through natural-language requests; and
+- a designer workflow that begins from design context (most likely Figma), moves through reviewable prototypes, and can continue toward working application code.
+
+The broader goal is seamless project handoff between roles: for example, a non-designer can start a project, hand it to a designer for UI/UX work, and then hand the same project/workspace to a developer for production cleanup and deployment. Git/workspace history can underpin code state, but Dialogue will also need its own human-workflow context (feedback, tasks, design references, activity and eventual handoff/ownership metadata).
+
+This should be delivered in stages. The immediate Stage 1 priority is still a strong prototype workflow for Matt and Saori. Dave's `self-host` branch is being evaluated as a substantially stronger runtime foundation: git-backed workspaces, live previews, OMP-based multi-model agent connectivity, commit/push and self-hosting. The main unresolved product/architecture question is how to use that engine without making the raw OMP terminal the primary designer interface, and how to connect the Figma-driven Feedback/Activity UI to a structured agent-session layer.
+
+No merge or architecture replacement has been approved yet; keep `main` unchanged while this integration direction is reviewed.
+
 ## Product direction
 
 The intended long-term loop remains:
