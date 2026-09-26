@@ -1,0 +1,34 @@
+/* Figma UI update, September 24. Scope shared rules to new/revised app surfaces. */
+:root{--review-blue:#138ed5;--review-selection:#51b0e6;--review-grid:#bae6ff;--review-dust:#ebebeb;--hover-duration:100ms;--hover-easing:ease-out;--hover-scale:1.05}
+[hidden]{display:none!important}
+.icon{width:16px;height:16px;display:block;flex:none;fill:none;color:inherit}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.review-view button,.updated-ui button,.updated-ui .pill,.review-view summary,.hover-target{transition:transform var(--hover-duration) var(--hover-easing),background-color var(--hover-duration) var(--hover-easing);transform-origin:center;--hover-scale:1.05}
+.review-view .hover-small,.updated-ui .hover-small{--hover-scale:1.1}
+@media(hover:hover) and (pointer:fine){.review-view button:not(:disabled):hover,.updated-ui button:not(:disabled):hover,.updated-ui .pill:hover,.hover-target:hover{transform:scale(var(--hover-scale,1.05))}}
+.review-view :focus-visible,.updated-ui :focus-visible{outline:2px solid var(--review-blue);outline-offset:3px}
+.review-view button:disabled,.updated-ui button:disabled{cursor:default;opacity:.45;transform:none}
+.review-button{border:0;border-radius:8px;background:var(--review-dust);height:32px;padding:8px;gap:8px;font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;line-height:16px}
+.review-button .icon{width:12px;height:12px}.review-button.primary{background:var(--ink);color:white;padding:8px 16px}
+.updated-ui .sidebar{background:var(--ice);width:216px}.updated-ui .brand{height:104px;align-items:flex-start;padding-top:24px}.updated-ui .brand .icon{width:32px;height:32px}
+.updated-ui .main{margin-left:216px;padding:0 8px 8px 0}.updated-ui .page-head{height:80px;padding:0 24px 0 3px}.updated-ui .page-title{font-size:16px}.updated-ui .pill{border-radius:8px}
+.updated-ui .page-surface{min-height:calc(100vh - 88px);background:white;border-radius:16px;padding:40px 56px;position:relative}
+.updated-ui .side-link{height:40px;padding:0 8px;gap:12px}.updated-ui .side-link .icon{width:16px;height:16px}.updated-ui .side-link.active{background:#f3f3f3}
+.updated-ui .grid{gap:32px}.updated-ui .project-card{background:var(--ice)}
+.empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;gap:16px;color:var(--mid);pointer-events:none}
+.empty-state .empty-art{width:176px;height:176px;display:grid;place-items:center;color:#cdd1cd}.empty-state .empty-art .icon{width:72px;height:72px;stroke-width:.8}
+.empty-state p{margin:0;font-size:14px}.empty-state small{max-width:360px;font-size:12px;color:var(--mid)}
+.grid-settings{width:424px;max-width:100%}.grid-settings h2{font-size:16px;margin:0 0 16px}.settings-group{padding-bottom:24px;margin-bottom:24px;border-bottom:1px solid var(--review-dust)}
+.settings-row{min-height:40px;display:flex;align-items:center;justify-content:space-between;gap:24px;font-size:14px}.settings-row input[type=number],.settings-row select,.grid-color-field{width:96px;height:32px;background:var(--ice);border:0;border-radius:8px;padding:0 8px;font-size:12px;color:var(--ink)}
+.grid-color-field{display:flex;align-items:center;gap:8px}.grid-color-field input{width:16px;height:20px;border:0;padding:0;background:none;cursor:pointer}.grid-color-field output{font-size:11px}
+.settings-note{font-size:12px;color:var(--mid);line-height:18px;margin:16px 0 0}.planned-label{font-size:11px;color:var(--mid);margin-left:12px;font-weight:400}
+.placeholder-toggle{width:32px;height:20px;border:0;border-radius:12px;background:#171717;position:relative}.placeholder-toggle:after{content:'';position:absolute;right:3px;top:3px;width:14px;height:14px;border-radius:50%;background:white}
+.settings-row .placeholder-toggle:disabled{opacity:.25}.updated-ui .profile-link{width:216px}.updated-ui .profile-inner{padding:8px 0}
+@media(max-width:760px){.updated-ui .sidebar{width:72px}.updated-ui .side-nav{padding:0 8px}.updated-ui .side-link{width:56px;justify-content:center}.updated-ui .side-link>span:not(.nav-icon){display:none}.updated-ui .profile-link{width:72px;padding:8px 16px}.updated-ui .profile-copy,.updated-ui .chev{display:none}.updated-ui .main{margin-left:72px}.updated-ui .page-surface{padding:24px}.updated-ui .brand{padding-left:20px}.updated-ui .grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.updated-ui .project-card{width:100%}}
+@media(prefers-reduced-motion:reduce){.review-view *,.updated-ui *{transition:none!important;animation:none!important;scroll-behavior:auto!important}.review-view button:hover,.updated-ui button:hover,.updated-ui .pill:hover{transform:none!important}}
+
+.grid-size-field{display:flex;align-items:center;width:96px;border-radius:8px;background:var(--ice);padding-right:8px;font-size:12px}.grid-size-field input[type=number]{width:65px;padding:0 8px}.project-list-status{font-size:12px;color:#6b6b6b;margin:0 0 20px}.project-list-status button{margin-left:8px}.empty-art{object-fit:contain}.updated-ui .project-badge{width:64px;height:64px}.updated-ui .project-meta{font-size:12px}.updated-ui .project-card:focus-visible{outline:2px solid var(--review-blue)}
+
+.updated-ui .modal-close,.updated-ui .side-link{transition:transform 100ms ease-out;transform-origin:center}
+@media(hover:hover) and (pointer:fine){.updated-ui .modal-close:hover,.updated-ui .side-link:hover{transform:scale(1.05)}}
+@media(prefers-reduced-motion:reduce){.updated-ui .modal-close:hover,.updated-ui .side-link:hover{transform:none}}

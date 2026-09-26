@@ -2,6 +2,24 @@
 
 This is the concise continuity record for active Dialogue work. Update it whenever a meaningful milestone, decision, known issue or next step changes.
 
+## Active UI branch — 2026-09-24
+
+`feature/prototype-feedback-ui` is the new first-review UI build from `main`. It is NOT merged into `main` and is not a completed live LLM integration.
+
+Two parallel workstreams are now active: Matt's developer colleague is building an easier LLM connection, while Matt and Saori's updated Figma defines the prototype feedback/review UI. This branch implements the UI against a clearly labelled simulated adapter so the connection can be replaced later without redesigning the viewer.
+
+Implemented here: Test/Comment mode, Select/Area/Arrow anchors, comment composer, activity/history navigation, output-version badges, explicit Load/Cancel, green/black Reload arrow status, and a canvas-local grid toggle. Grid defaults are 8 design pixels, `#BAE6FF`, and 50% opacity, with Settings controls. Hover uses 110% for <=24px controls and 105% for normal >=32px controls, 100ms ease-out. Design systems navigation/empty state is a placeholder for the later import milestone; Projects distinguishes empty data from a connection failure.
+
+Saved revisions and navigation are real. Sending feedback only creates browser-local simulated requests and labelled `Demo N` previews of the unchanged base. It does not call an LLM or publish/modify any prototype files. The iframe sandbox is retained; response-only inspection metadata provides element selection without adding `allow-same-origin`.
+
+Twelve Node checks passed, including disposable HTTP import/restart persistence and verification that review instrumentation does not modify stored prototype bytes. Full browser interaction testing was blocked by the implementation environment's browser navigation policy; an offline viewer-layout/hover check was performed instead. Safari review on Matt/Saori's actual prototypes remains necessary. Empty-state clay illustrations are still line-icon placeholders, and some utility icons need the final asset pass.
+
+Next: switch the existing checkout to this branch, use the app-only `Start Dialogue.command`, and review the interactions before merging. No tunnel, new setup, data reset or re-import is required for the simulated UI. See `docs/PROTOTYPE_FEEDBACK_UI.md` for the adapter contract, test commands, limitations and designer review checklist. Keep `main` unchanged during review.
+
+**Figma export preflight (required before future Figma-driven build work):** re-check the target Figma node and confirm intended SVG/PNG assets are actually exportable before implementing or refining the UI. On 2026-09-24 this preflight confirmed that the Folder and Suitcase clay empty-state illustrations are now available as PNG exports, and Dialogue/Grid/Share/Reload have SVG exports. The current first-review commit predates that asset availability and still uses line-icon placeholders for the clay illustrations; replace/verify those assets during the post-browser-review fidelity pass rather than rebuilding the branch before Matt's interaction review.
+
+The earlier local data-loss trigger remains unproven; the prior external-cleanup theory was not a confirmed diagnosis. This UI branch does not reset or migrate `.dialogue-data`.
+
 ## Current status
 
 Four lightweight functional milestones are now proven:
@@ -221,6 +239,19 @@ Verified:
 - ChatGPT listed Landline and returned V23.18 with the matching revision ID and 28 files.
 
 This closes the manual smoke-test gate for PR #5.
+
+## Product direction clarified — 2026-09-26
+
+Dialogue's longer-term product direction now includes two primary human workflows over a shared project/workspace engine:
+
+- a prompt-first workflow for non-designers and developers, where work is primarily directed through natural-language requests; and
+- a designer workflow that begins from design context (most likely Figma), moves through reviewable prototypes, and can continue toward working application code.
+
+The broader goal is seamless project handoff between roles: for example, a non-designer can start a project, hand it to a designer for UI/UX work, and then hand the same project/workspace to a developer for production cleanup and deployment. Git/workspace history can underpin code state, but Dialogue will also need its own human-workflow context (feedback, tasks, design references, activity and eventual handoff/ownership metadata).
+
+This should be delivered in stages. The immediate Stage 1 priority is still a strong prototype workflow for Matt and Saori. Dave's `self-host` branch is being evaluated as a substantially stronger runtime foundation: git-backed workspaces, live previews, OMP-based multi-model agent connectivity, commit/push and self-hosting. The main unresolved product/architecture question is how to use that engine without making the raw OMP terminal the primary designer interface, and how to connect the Figma-driven Feedback/Activity UI to a structured agent-session layer.
+
+No merge or architecture replacement has been approved yet; keep `main` unchanged while this integration direction is reviewed.
 
 ## Product direction
 
