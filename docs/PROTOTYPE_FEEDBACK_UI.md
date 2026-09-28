@@ -80,6 +80,19 @@ Before any future build or fidelity pass sourced from Figma, first re-check the 
 
 Re-checked 2026-09-24: the Folder and Suitcase clay empty-state illustrations are now available as PNG exports; Dialogue, Grid, Share and Reload expose SVG exports. The current first-review commit was created before those exports were available, so its line-icon empty-state placeholders remain a known fidelity gap to replace/verify after the first local interaction review.
 
+## Activity timeline / version model
+
+For the intended post-simulation integration, Activity remains both the work log and the primary non-destructive navigation surface. Every successful agent step is navigable, but only explicit saves become numbered versions.
+
+- **Draft** badge: the newest unsaved working state.
+- **Edited** badge: an intermediate successful activity checkpoint that can be revisited without being promoted to a saved version.
+- **Vn** badge: an explicitly saved version/checkpoint.
+- Draft, Edited and Version cards all use consistent friendly timestamps.
+- Browsing an Edited checkpoint or older Version must not destroy or silently replace the current Draft.
+- Default cards should use a consistent fixed height for easier scanning. Overflowing content is truncated at rest and expands on hover.
+- The current green/black Reload-as-new-result behavior belongs to the simulation only. In the intended live-agent flow, the top-right control becomes **Restart**, which resets/restarts the prototype to its initial state; live Draft changes appear directly without requiring Reload.
+- Detailed Draft → Version save interaction is pending Saori's reference prototype and should not be finalized before that review.
+
 ## Remaining before merge
 
 - Matt/Saori review of the real browser interactions and Figma fidelity.
