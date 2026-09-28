@@ -28,9 +28,11 @@
   const usable = el => el instanceof Element && !['SCRIPT', 'STYLE', 'LINK', 'META'].includes(el.tagName)
     && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
   function root() {
-    // Explicit annotation wins. Otherwise use a visible app root, then the sole
-    // meaningful body child. Multiple-root documents use their viewport origin.
-    for (const selector of ['[data-dialogue-root]', '#app', '#root', 'main', '.landline-device', '.app']) {
+    // Explicit annotation wins. A known device root comes before generic app/page
+    // wrappers so a full-viewport backdrop is not mistaken for the prototype UI.
+    // Otherwise use a visible app root, then the sole meaningful body child.
+    // Multiple-root documents use their viewport origin.
+    for (const selector of ['[data-dialogue-root]', '.landline-device', '#app', '#root', '.app', 'main']) {
       const named = document.querySelector(selector); if (usable(named)) return named;
     }
     const children = [...(document.body?.children || [])].filter(usable);
