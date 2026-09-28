@@ -1,5 +1,16 @@
 import { readGrid, writeGrid, preferencesPersisted } from './review-preferences.mjs';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LANDLINE_DESCRIPTION = 'A simple push-to-talk peer to peer walkie talkie app';
+const LEGACY_LANDLINE_DESCRIPTIONS = new Set([
+  'A simpler way for households to stay in touch',
+  'A simpler way for households to stay in touch.'
+]);
+const projectDescription = project => {
+  const description = String(project?.description || '').trim();
+  return project?.slug === 'landline' && LEGACY_LANDLINE_DESCRIPTIONS.has(description)
+    ? LANDLINE_DESCRIPTION
+    : description;
+};
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="assets/review-icons.svg#${name}"/></svg>`;
 const navIcon = (name, selected) => `<img class="side-nav-icon" src="assets/${name}-icon-${selected ? 'selected' : 'default'}.svg" alt="" aria-hidden="true">`;
 const nav = document.querySelector('.side-nav');
@@ -30,7 +41,7 @@ if (grid) {
         // Only the Landline project route is implemented in the current local app.
         if (project.slug !== 'landline') { link.href = '#'; link.addEventListener('click', e => { e.preventDefault(); status.hidden = false; status.textContent = 'Only the Landline project is connected in this local build.'; }); }
         const initials = String(project.name || 'Project').split(/\s+/).slice(0,2).map(s => s[0]).join('').toUpperCase();
-        link.innerHTML = `<div class="project-badge">${esc(initials)}</div><div class="project-name">${esc(project.name)}</div><p class="project-desc">${esc(project.description)}</p><div class="project-divider"></div><div class="project-meta"><div><div class="meta-label">Created</div><div class="meta-value">${esc(new Date(project.createdAt).toLocaleDateString())}</div></div><div class="meta-item"><div class="meta-label">Prototypes</div><div class="meta-value">${esc(project.prototypes ?? 0)}</div></div></div>`;
+        link.innerHTML = `<div class="project-badge">${esc(initials)}</div><div class="project-name">${esc(project.name)}</div><p class="project-desc">${esc(projectDescription(project))}</p><div class="project-divider"></div><div class="project-meta"><div><div class="meta-label">Created</div><div class="meta-value">${esc(new Date(project.createdAt).toLocaleDateString())}</div></div><div class="meta-item"><div class="meta-label">Prototypes</div><div class="meta-value">${esc(project.prototypes ?? 0)}</div></div></div>`;
         grid.append(link);
       }
       empty.hidden = projects.length !== 0;
