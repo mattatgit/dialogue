@@ -119,7 +119,7 @@ def run():
                 close_box=close.bounding_box(); page.mouse.down()
                 assert close.evaluate("el=>getComputedStyle(el).backgroundColor")=='rgb(205, 209, 205)'
                 page.mouse.move(close_box['x']-10,close_box['y']-10); page.mouse.up()
-                feedback.fill('Make this heading smaller')
+                feedback.fill('Make this heading smaller. ' * 12)
                 assert composer.get_attribute('data-state')=='typing'
                 send=page.locator('.composer-send')
                 assert send.locator('.enter-icon-default').get_attribute('src')=='assets/comment-enter-default.svg'
@@ -142,6 +142,9 @@ def run():
                 draft=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='Draft')).first
                 assert draft.get_attribute('aria-current')=='true'
                 assert abs(draft.bounding_box()['height']-256)<1
+                draft.hover(); page.wait_for_timeout(50)
+                assert draft.bounding_box()['height']>256
+                page.locator('[data-reload]').hover()
                 assert 'has-update' not in (page.locator('[data-reload]').get_attribute('class') or '')
                 live.locator('#talk').click(); assert live.locator('#talk').inner_text()=='1'
                 page.locator('[data-reload]').click(); page.wait_for_timeout(200)
