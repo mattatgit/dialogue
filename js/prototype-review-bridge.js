@@ -11,6 +11,20 @@
     const r = el.getBoundingClientRect();
     return { x: r.x, y: r.y, width: r.width, height: r.height };
   };
+  const cornerRadius = el => {
+    const style = getComputedStyle(el);
+    const px = value => {
+      const parts = String(value || '').trim().split(/\s+/);
+      if (!parts.length || parts.some(part => !/^-?\d+(?:\.\d+)?px$/.test(part))) return 0;
+      return Math.max(0, Math.min(...parts.map(part => Number.parseFloat(part))));
+    };
+    return {
+      topLeft: px(style.borderTopLeftRadius),
+      topRight: px(style.borderTopRightRadius),
+      bottomRight: px(style.borderBottomRightRadius),
+      bottomLeft: px(style.borderBottomLeftRadius)
+    };
+  };
   const usable = el => el instanceof Element && !['SCRIPT', 'STYLE', 'LINK', 'META'].includes(el.tagName)
     && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
   function root() {
@@ -24,7 +38,12 @@
   }
   function layout() {
     const el = root();
-    send('layout', { origin: el ? rect(el) : { x: 0, y: 0, width: innerWidth, height: innerHeight }, viewport: { width: innerWidth, height: innerHeight }, scroll: { x: scrollX, y: scrollY } });
+    send('layout', {
+      origin: el ? rect(el) : { x: 0, y: 0, width: innerWidth, height: innerHeight },
+      radius: el ? cornerRadius(el) : { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+      viewport: { width: innerWidth, height: innerHeight },
+      scroll: { x: scrollX, y: scrollY }
+    });
   }
   function selectorFor(el) {
     const parts = [];
