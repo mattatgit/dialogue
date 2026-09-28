@@ -1,4 +1,4 @@
-import { chronological, stageGeometry, rectFromPoints, validRect, safeSelection, reloadTarget, clamp } from './review-model.mjs';
+import { chronological, stageGeometry, rootClipPath, rectFromPoints, validRect, safeSelection, reloadTarget, clamp } from './review-model.mjs';
 import { readGrid, writeGrid } from './review-preferences.mjs';
 import { MockReviewAdapter } from './review-adapter.mjs';
 
@@ -12,7 +12,7 @@ const feedback = $('#review-comment'), send = $('.composer-send'), loadState = $
 const shape = $('[data-selection-rect]'), arrow = $('[data-selection-arrow]');
 const viewport = { width: 370, height: 722 };
 let viewScroll = { x: 0, y: 0 };
-let grid = readGrid(), origin = { x: 0, y: 0 }, geometry, mode = 'test', tool = 'selection';
+let grid = readGrid(), origin = { x: 0, y: 0 }, rootRadius = {}, geometry, mode = 'test', tool = 'selection';
 let realRevisions = [], active = null, selectedId = null, adapter = null, anchor = null, drag = null;
 let channel = '', bridgeReady = false, loadSequence = 0, probeId = 0, selectedProbe = 0;
 let loadTimer, pollTimer, toastTimer, hoverPending = false, unavailableWarning = false;
@@ -38,7 +38,8 @@ function updateGeometry() {
   plane.style.width = `${contentWidth}px`; plane.style.height = `${contentHeight}px`;
   geometry = stageGeometry(contentWidth, contentHeight, viewport, origin);
   Object.assign(host.style, { width: `${viewport.width}px`, height: `${viewport.height}px`,
-    left: `${geometry.x}px`, top: `${geometry.y}px`, transform: `scale(${geometry.scale})` });
+    left: `${geometry.x}px`, top: `${geometry.y}px`, transform: `scale(${geometry.scale})`,
+    clipPath: rootClipPath(viewport, origin, rootRadius) });
   const overlay = $('.review-grid');
   overlay.hidden = !grid.enabled;
   overlay.style.setProperty('--grid-color', grid.color);
@@ -74,9 +75,26 @@ function drawAnchor(value) {
 }
 function positionComposer() {
   if (!anchor || composer.hidden || !geometry) return;
-  const p = anchor.type === 'arrow' ? anchor.end : { x: anchor.rect.x, y: anchor.rect.y + anchor.rect.height };
-  const target = planePoint(p);
   const width = composer.offsetWidth, height = composer.offsetHeight;
+  if (anchor.type === 'arrow') {
+    // Arrow gestures begin where the comment belongs and end at the target.
+    // Keep that start point canvas-wide (it may sit outside the prototype).
+    const terminal = planePoint(anchor.start);
+    const terminalX = terminal.x - scroll.scrollLeft;
+    const terminalY = terminal.y - scroll.scrollTop;
+    const fitsRight = terminalX + width <= canvas.clientWidth - 8;
+    const fitsLeft = terminalX - width >= 8;
+    let x = fitsRight || !fitsLeft ? terminalX : terminalX - width;
+    x = clamp(x, 8, Math.max(8, canvas.clientWidth - width - 8));
+    const y = clamp(terminalY - 30, 8, Math.max(8, canvas.clientHeight - height - 8));
+    composer.style.left = `${x}px`; composer.style.top = `${y}px`;
+    composer.style.setProperty('--arrow-terminal-x', `${terminalX - x}px`);
+    composer.style.setProperty('--arrow-terminal-y', `${terminalY - y}px`);
+    return;
+  }
+  composer.style.removeProperty('--arrow-terminal-x');
+  composer.style.removeProperty('--arrow-terminal-y');
+  const target = planePoint({ x: anchor.rect.x, y: anchor.rect.y + anchor.rect.height });
   const x = clamp(target.x - scroll.scrollLeft, 8, Math.max(8, canvas.clientWidth - width - 8));
   let y = target.y - scroll.scrollTop + 8;
   if (y + height > canvas.clientHeight - 72) y = target.y - scroll.scrollTop - height - 16;
@@ -90,11 +108,14 @@ function openComment(value) {
   if (anchor.rect) anchor.normalizedRect = { x: anchor.rect.x / viewport.width, y: anchor.rect.y / viewport.height,
     width: anchor.rect.width / viewport.width, height: anchor.rect.height / viewport.height };
   $('[data-anchor-label]').textContent = { selection: 'Selection', area: 'Area', arrow: 'Arrow' }[anchor.type];
+  composer.dataset.anchorType = anchor.type;
   composer.hidden = false; drawAnchor(anchor); positionComposer(); feedback.focus();
 }
 function closeComment({ discard = false } = {}) {
   if (!discard && feedback.value.trim() && !confirm('Discard this unsent comment?')) return false;
-  composer.hidden = true; feedback.value = ''; send.disabled = true; anchor = null; clearShapes(); return true;
+  composer.hidden = true; feedback.value = ''; send.disabled = true; delete composer.dataset.anchorType;
+  composer.style.removeProperty('--arrow-terminal-x'); composer.style.removeProperty('--arrow-terminal-y');
+  anchor = null; clearShapes(); return true;
 }
 function mayNavigate() { return composer.hidden || closeComment(); }
 function setMode(next) {
@@ -168,7 +189,7 @@ function updateReload() {
 async function loadRevision(revision, { replace = false } = {}) {
   if (!revision || !mayNavigate()) return;
   const sequence = ++loadSequence;
-  selectedId = null; active = revision; viewScroll = { x: 0, y: 0 }; origin = { x: 0, y: 0 }; bridgeReady = false; unavailableWarning = false;
+  selectedId = null; active = revision; viewScroll = { x: 0, y: 0 }; origin = { x: 0, y: 0 }; rootRadius = {}; bridgeReady = false; unavailableWarning = false;
   channel = [...crypto.getRandomValues(new Uint8Array(16))].map(n => n.toString(16).padStart(2, '0')).join('');
   $('[data-review-title]').textContent = revision.title || `${revision.prototype?.name || 'Prototype'} ${revision.version}`;
   document.title = `Dialogue - ${$('[data-review-title]').textContent}`;
@@ -213,6 +234,7 @@ addEventListener('message', event => {
     viewScroll = { x: clamp(m.scroll?.x, 0, 100000), y: clamp(m.scroll?.y, 0, 100000) };
     origin = { x: clamp(m.origin.x, -viewport.width, viewport.width), y: clamp(m.origin.y, -viewport.height, viewport.height),
       width: clamp(m.origin.width, 0, viewport.width * 4), height: clamp(m.origin.height, 0, viewport.height * 4) };
+    rootRadius = m.radius && typeof m.radius === 'object' ? m.radius : {};
     updateGeometry();
   } else if (m.type === 'selection' && mode === 'comment' && tool === 'selection' && composer.hidden) {
     const selection = safeSelection(m.selection); if (!selection) return;
@@ -244,7 +266,9 @@ hit.addEventListener('pointermove', event => {
   if (!geometry || !composer.hidden) return;
   const p = framePoint(event);
   if (drag) {
-    drag.end = { x: clamp(p.x, 0, viewport.width), y: clamp(p.y, 0, viewport.height) };
+    drag.end = tool === 'arrow'
+      ? p
+      : { x: clamp(p.x, 0, viewport.width), y: clamp(p.y, 0, viewport.height) };
     drawAnchor(tool === 'arrow' ? { type: tool, start: drag.start, end: drag.end } : { type: tool, rect: rectFromPoints(drag.start, drag.end) });
   } else if (tool === 'selection' && inFrame(p) && !hoverPending) {
     hoverPending = true; requestAnimationFrame(() => { hoverPending = false; probe(p, 'hover'); });
@@ -252,8 +276,15 @@ hit.addEventListener('pointermove', event => {
 });
 hit.addEventListener('pointerdown', event => {
   if (event.button !== 0 || !geometry || !composer.hidden) return;
-  const p = framePoint(event); if (!inFrame(p)) return;
-  if (tool === 'selection') { probe(p, 'select'); return; }
+  const p = framePoint(event);
+  if (tool === 'selection') {
+    if (inFrame(p)) probe(p, 'select');
+    return;
+  }
+  if (tool === 'area' && !inFrame(p)) return;
+  // Arrow starts anywhere on the review canvas, including beyond the
+  // prototype viewport. Coordinates remain relative to that viewport so
+  // they continue to follow the prototype when the canvas recentres.
   drag = { start: p, end: p }; hit.setPointerCapture(event.pointerId);
 });
 hit.addEventListener('pointerup', event => {
