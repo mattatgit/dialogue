@@ -4,6 +4,12 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
+Activity/history model clarified for the future real-agent integration: every successful activity step should remain directly navigable without becoming a formal numbered version. The timeline uses three user-facing badge types: **Draft** for the latest unsaved working state, **Edited** for intermediate successful activity checkpoints, and **Vn** for deliberately saved versions. All three card types should also show the same friendly timestamp treatment so the rail stays visually consistent. Viewing an Edited checkpoint or older Version is non-destructive; the current Draft remains available to return to.
+
+The current Reload concept is no longer part of the intended real-agent navigation model. Live agent changes should update the Draft/preview directly, while the top-right control becomes **Restart** for now, meaning reset/restart the prototype back to its initial state rather than loading a newly generated revision.
+
+Default activity cards should have a consistent fixed height to make timeline scanning/navigation easier. Long card content should be truncated in the default state, with the fuller/expanded content revealed on hover. Saori is preparing a reference prototype for the Draft → Version save interaction; defer detailed implementation of that transition until the prototype is reviewed.
+
 Comment dismissal is now intentionally low-friction: closing a composer, changing mode/tool, or navigating away silently discards any unsent text rather than opening a browser-level confirmation. The native `title` tooltip has been removed from the submit control. Figma now names the component **Send button**; the long-hover/clicked label is **Send** while Enter remains the keyboard shortcut for submitting (Shift+Enter still inserts a new line).
 
 Safari 26.5 exposed the shared review `:focus-visible` outline on the comment textarea, producing an unintended heavy blue rectangle inside the composer. The textarea now explicitly suppresses browser/shared focus outlines and box shadows (including Safari/WebKit appearance) while the composer itself retains the intended light Summer Sky focused border as the visible focus state.
