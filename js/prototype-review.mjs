@@ -15,7 +15,7 @@ let viewScroll = { x: 0, y: 0 };
 let grid = readGrid(), origin = { x: 0, y: 0 }, rootRadius = {}, geometry, mode = 'test', tool = 'selection';
 let realRevisions = [], active = null, selectedId = null, adapter = null, anchor = null, drag = null;
 let channel = '', bridgeReady = false, loadSequence = 0, probeId = 0, selectedProbe = 0;
-let loadTimer, pollTimer, toastTimer, hoverPending = false, unavailableWarning = false;
+let loadTimer, pollTimer, toastTimer, sendHoverTimer, hoverPending = false, unavailableWarning = false;
 
 function toast(message) {
   const el = $('.review-toast'); el.textContent = message; el.hidden = false;
@@ -111,6 +111,17 @@ function positionComposer() {
   y = clamp(y, 40, Math.max(40, canvas.clientHeight - height - 72));
   composer.style.left = `${x}px`; composer.style.top = `${y}px`;
 }
+function resetSendState() {
+  clearTimeout(sendHoverTimer);
+  send.classList.remove('is-hovered', 'is-long-hover', 'is-clicked');
+}
+function updateComposerState() {
+  if (composer.hidden) return;
+  const hasText = feedback.value.length > 0;
+  composer.dataset.state = hasText ? 'typing' : document.activeElement === feedback ? 'focused' : 'default';
+  send.disabled = !feedback.value.trim();
+  if (send.disabled) resetSendState();
+}
 function openComment(value) {
   if (adapter?.isBusy) { toast('Wait for the simulation to finish, or cancel it in the activity card.'); return; }
   anchor = { ...structuredClone(value), baseRevisionId: active.id, sourceRevisionId: sourceId(active),
@@ -119,11 +130,12 @@ function openComment(value) {
     width: anchor.rect.width / viewport.width, height: anchor.rect.height / viewport.height };
   $('[data-anchor-label]').textContent = { selection: 'Selection', area: 'Area', arrow: 'Arrow' }[anchor.type];
   composer.dataset.anchorType = anchor.type;
-  composer.hidden = false; drawAnchor(anchor); positionComposer(); feedback.focus();
+  composer.dataset.state = 'default';
+  composer.hidden = false; drawAnchor(anchor); positionComposer(); feedback.focus(); updateComposerState();
 }
 function closeComment({ discard = false } = {}) {
   if (!discard && feedback.value.trim() && !confirm('Discard this unsent comment?')) return false;
-  composer.hidden = true; feedback.value = ''; send.disabled = true; delete composer.dataset.anchorType;
+  composer.hidden = true; feedback.value = ''; send.disabled = true; resetSendState(); composer.dataset.state = 'default'; delete composer.dataset.anchorType;
   composer.style.removeProperty('--arrow-terminal-x'); composer.style.removeProperty('--arrow-terminal-y');
   anchor = null; clearShapes(); return true;
 }
@@ -259,7 +271,23 @@ $('[data-grid-toggle]').addEventListener('click', () => { grid = writeGrid({ ...
 addEventListener('storage', () => { grid = readGrid(); gridButton(); updateGeometry(); });
 $('[data-reload]').addEventListener('click', reload);
 $('[data-close-comment]').addEventListener('click', () => closeComment());
-feedback.addEventListener('input', () => { send.disabled = !feedback.value.trim(); positionComposer(); });
+feedback.addEventListener('focus', updateComposerState);
+feedback.addEventListener('blur', updateComposerState);
+feedback.addEventListener('input', () => { updateComposerState(); positionComposer(); });
+send.addEventListener('pointerenter', () => {
+  if (send.disabled) return;
+  resetSendState(); send.classList.add('is-hovered');
+  sendHoverTimer = setTimeout(() => {
+    if (!send.disabled && send.matches(':hover')) send.classList.add('is-long-hover');
+  }, 300);
+});
+send.addEventListener('pointerleave', resetSendState);
+send.addEventListener('pointerdown', () => {
+  if (send.disabled) return;
+  clearTimeout(sendHoverTimer); send.classList.add('is-clicked');
+});
+send.addEventListener('pointerup', () => send.classList.remove('is-clicked'));
+send.addEventListener('pointercancel', () => send.classList.remove('is-clicked'));
 feedback.addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!send.disabled) composer.requestSubmit(); }
 });
@@ -270,7 +298,7 @@ composer.addEventListener('submit', async event => {
     await adapter.createRequest({ base: active, feedback: feedback.value, anchor, scenario: $('[data-simulation-scenario]').value });
     closeComment({ discard: true }); rail.scrollTop = 0;
     if (adapter.storageAvailable === false) toast('Browser storage is unavailable. Simulation history is session-only.');
-  } catch (error) { toast(error.message); send.disabled = false; }
+  } catch (error) { toast(error.message); updateComposerState(); }
 });
 hit.addEventListener('pointermove', event => {
   if (!geometry || !composer.hidden) return;
