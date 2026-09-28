@@ -1,16 +1,18 @@
 { pkgs }:
 let
+  # Tools the app shells out to. nixpkgs' Chromium is Linux-only; on macOS
+  # server/preview.js falls back to /Applications/{Google Chrome,Chromium}.app.
+  tools = [
+    pkgs.nodejs
+    pkgs.browser-sync
+    pkgs.git
+    pkgs.ttyd
+    pkgs.tmux
+    pkgs.openssh
+  ] ++ pkgs.lib.optional (pkgs.lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.chromium) pkgs.chromium;
   dev = pkgs.writeShellApplication {
     name = "dev";
-    runtimeInputs = [
-      pkgs.nodejs
-      pkgs.browser-sync
-      pkgs.git
-      pkgs.ttyd
-      pkgs.tmux
-      pkgs.openssh
-      pkgs.chromium
-    ];
+    runtimeInputs = tools;
     text = ''
       # Run the Dialogue Node server with live reload in the browser.
       #
@@ -49,14 +51,5 @@ let
   };
 in
 pkgs.mkShell {
-  packages = [
-    dev
-    pkgs.nodejs
-    pkgs.browser-sync
-    pkgs.git
-    pkgs.ttyd
-    pkgs.tmux
-    pkgs.openssh
-    pkgs.chromium
-  ];
+  packages = [ dev ] ++ tools;
 }

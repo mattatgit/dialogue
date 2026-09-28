@@ -185,7 +185,9 @@ class ProjectRepo {
   // A detached worktree outside the workspaces root, kept between runs so
   // ignored files (node_modules) survive and repeat installs are cheap.
   async checkoutSetupTree(dir, rev) {
-    const known = (await this.worktrees()).some((tree) => tree.dir === dir);
+    // git lists worktrees by real path (macOS: /tmp is /private/tmp).
+    const real = await fsp.realpath(dir).catch(() => dir);
+    const known = (await this.worktrees()).some((tree) => tree.dir === real);
     if (!known) {
       await fsp.rm(dir, { recursive: true, force: true });
       await this.git(['worktree', 'prune']);

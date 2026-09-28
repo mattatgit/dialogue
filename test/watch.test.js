@@ -32,6 +32,9 @@ test('file roots report file changes; meta roots only state changes; non-recursi
     { path: path.join(dir, 'git'), recursive: true, files: false }
   ], res, (_watcher, files) => changes.emit('change', files));
   try {
+    // macOS FSEvents reports the fixture's own mkdirs just after the watch
+    // starts; let them pass before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 400));
     let change = nextChange(changes);
     await fsp.writeFile(path.join(dir, 'git', 'HEAD'), 'x');
     assert.equal(await change, false);

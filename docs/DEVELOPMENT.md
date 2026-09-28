@@ -12,7 +12,7 @@ The immediate goal is still not a production framework/database/hosting migratio
 
 ## Local development (Nix)
 
-The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium (screenshots) and the live-reloading `dev` command. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
+The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium (screenshots; Linux only — on macOS Dialogue uses `/Applications/Google Chrome.app` or `Chromium.app` if installed) and the live-reloading `dev` command. The shell works on `x86_64-linux`, `aarch64-linux`, `x86_64-darwin` and `aarch64-darwin`. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
 
 `omp` is deliberately **not** in the devshell: Dialogue uses the developer's own `omp` on PATH so the agent, its profiles and its login are the ones you already use.
 
