@@ -4,11 +4,13 @@ Status: first review build, not merged into main. Branch: `feature/prototype-fee
 
 This is the Figma-driven UI track, separate from the easier LLM connection being developed by Matt's colleague. The current app's import/storage/MCP pipeline is retained. No new provider integration is claimed.
 
-Design source: Dialogue Figma file `YXlBjYhWIS1sfu8cffH5un`, section `1:283`; viewer `16:2255`, grid-on `26:4944`, settings `15:2536`.
+Design source: Dialogue Figma file `YXlBjYhWIS1sfu8cffH5un`, section `1:283`; viewer `16:2255`, arrow-comment reference `16:3477`, grid-on `26:4944`, settings `15:2536`.
 
 ## Implemented surfaces
 
 - Prototype Test/Comment switch, Select/Area/Arrow tools, anchored composer, activity/history rail, and explicit Load/Cancel for history navigation.
+- Prototype display is clipped to the measured UI root (including its reported corner radii), so an imported page's outer backdrop/gutter is not presented as part of the prototype. The bridge prefers an explicit `data-dialogue-root`; Landline's device root is preferred over a generic full-page wrapper.
+- Arrow starts are canvas-wide rather than prototype-bounded: press where the comment should connect, drag to the target, release to place the arrowhead. The comment composer sits at the start point with the Figma-style red terminal ball. Select and Area remain bounded to the prototype viewport.
 - Only Reload and Share at the top right. Grid control is 24px, inside the canvas at its top left.
 - Reload's arrow is green when a later revision/labelled demo result is available. Without an update, Reload restarts the currently loaded prototype. `R` is supported outside editable fields.
 - A version badge names the OUTPUT of a completed request, never its base. Pending/failed requests have status labels rather than invented output versions.
