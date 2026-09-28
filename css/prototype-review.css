@@ -3,8 +3,8 @@
 .review-home{position:absolute;left:8px;top:8px;width:32px;height:32px;color:var(--ink)}.review-home .icon{width:32px;height:32px}
 .review-crumb{position:absolute;left:48px;top:0;height:48px;max-width:40%;display:flex;align-items:center;gap:3px;white-space:nowrap;font-weight:600;overflow:hidden}
 .review-crumb a,.review-crumb>span:not(:last-child){color:var(--mid)}.review-crumb>span:last-child{overflow:hidden;text-overflow:ellipsis}.review-crumb a:hover{color:var(--ink)}
-.review-mode-switch{position:absolute;left:50%;transform:translateX(-50%);height:48px;padding:8px;display:flex;align-items:center;gap:8px;background:white;border-radius:16px;z-index:1}
-.review-mode-switch button{height:32px;border:0;border-radius:8px;background:transparent;color:var(--mid);padding:8px;gap:6px;font-size:12px;font-weight:600}.review-mode-switch button .icon{width:12px;height:12px}.review-mode-switch button[aria-pressed=true]{background:#323232;color:white}
+.review-mode-switch{position:absolute;left:50%;transform:translateX(-50%);width:200px;height:48px;padding:8px;display:flex;align-items:center;gap:8px;background:white;border-radius:16px;z-index:1}
+.review-mode-switch button{width:88px;height:32px;flex:0 0 88px;border:0;border-radius:8px;background:transparent;color:var(--mid);padding:8px;gap:6px;font-size:12px;font-weight:600}.review-mode-switch button .icon{width:12px;height:12px}.review-mode-switch button[aria-pressed=true]{background:#323232;color:white}
 .review-top-actions{position:absolute;right:8px;top:8px;display:flex;gap:10px}.reload-icon{color:var(--ink)}[data-reload].has-update .reload-icon{color:var(--green)}
 .review-canvas{position:absolute;inset:80px 8px 8px;background:white;border-radius:16px;overflow:hidden;transition:left 100ms ease-out,bottom 100ms ease-out;will-change:left,bottom}.review-view[data-mode=comment] .review-canvas{left:280px}
 .review-scroll{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain}.review-plane{position:relative;min-width:100%;min-height:100%}
