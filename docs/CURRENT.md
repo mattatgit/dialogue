@@ -4,7 +4,7 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
-Prototype tiles have been polished after the project-detail background change: the 72px information/footer area now uses Ice `#F8F8F8` instead of white so it remains distinct from the white project surface. Revision timestamps are now explicitly exposed by the local API as `editedAt` (falling back to the immutable revision `createdAt`/`importedAt` timestamps), and the tile UI renders those real timestamps as live, locale-aware labels such as **Edited just now**, **Edited 2:35pm yesterday**, a weekday for recent revisions, or an absolute date for older revisions. The labels refresh every minute while the page is open and expose the exact local timestamp on hover.
+Prototype tiles have been polished after the project-detail background change: the 72px information/footer area now uses Ice `#F8F8F8` instead of white so it remains distinct from the white project surface. Revision timestamps are now explicitly exposed by the local API as `editedAt`, with `importedAt` preferred over legacy/source `createdAt` when no explicit edit timestamp exists, and the tile UI renders those real timestamps as live, locale-aware labels such as **Edited just now**, **Edited 2:35pm yesterday**, a weekday for recent revisions, or an absolute date for older revisions. The labels refresh every minute while the page is open and expose the exact local timestamp on hover.
 
 The Design systems empty state has now been updated from Figma node `15:1873`: the provisional line icon is replaced by the exact 176×176 **Suitcase** artwork from node `19:3794`, stored locally as `assets/design-system-empty-suitcase.png` and rendered at its native design size.
 
