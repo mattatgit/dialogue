@@ -77,7 +77,10 @@ def run():
                 assert abs(canvas_before['x']-canvas_test['x'])<1
                 page.locator('[data-mode-button=comment]').click(); page.wait_for_timeout(160)
                 assert page.locator('.review-history').is_visible()
-                print('PASS fixed header/prototype and 100ms ease-out canvas transition')
+                prototype_root=live.locator('.landline').bounding_box()
+                tools=page.locator('.review-tools').bounding_box()
+                assert abs((tools['x']+tools['width']/2)-(prototype_root['x']+prototype_root['width']/2))<1
+                print('PASS fixed header/prototype, centred comment toolbar and 100ms ease-out canvas transition')
                 # Grid origin matches the actual UI root, not the iframe margin.
                 geo=page.evaluate('''() => {const g=document.querySelector('.review-grid');return {x:parseFloat(g.style.getPropertyValue('--grid-x')),y:parseFloat(g.style.getPropertyValue('--grid-y')),plane:document.querySelector('.review-plane').getBoundingClientRect().toJSON()}}''')
                 box=live.locator('.landline').bounding_box()
