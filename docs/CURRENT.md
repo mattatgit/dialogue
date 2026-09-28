@@ -4,6 +4,8 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
+The Design systems empty state has now been updated from Figma node `15:1873`: the provisional line icon is replaced by the exact 176×176 **Suitcase** artwork from node `19:3794`, stored locally as `assets/design-system-empty-suitcase.png` and rendered at its native design size.
+
 The project-management sidebar icon pass has now been reconciled with Figma node `1:2284`. The shared shell uses the exact exported Project, Design systems and Settings SVGs in both Default (`#9EA39E`) and Selected (`#171717`) states, with the 32px icon frames and 8px icon-to-label spacing from the Figma components. These replace the provisional `review-icons.svg` sidebar symbols across Projects, project detail, Design systems and Settings views.
 
 A second Safari grid-alignment pass followed Matt's screenshot review. Figma node `26:4944` confirms the intended 8pt grid runs through both the prototype outer edge and internal 8pt-spaced controls. The earlier geometry used ideal floating-point transform coordinates; Safari can rasterize the transformed iframe/clip edge at slightly different subpixels. The viewer now measures the browser's final rendered iframe box after applying the transform and derives grid phase and spacing from that rendered geometry, so the visible prototype edge and its 8pt internal offsets should coincide with the visible grid lines rather than only agreeing mathematically before rasterization.
