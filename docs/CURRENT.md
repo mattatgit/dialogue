@@ -2,6 +2,14 @@
 
 This is the concise continuity record for active Dialogue work. Update it whenever a meaningful milestone, decision, known issue or next step changes.
 
+## Review UI polish — 2026-09-28
+
+Figma node `16:3477` ("Comment Arrow") was re-checked before this polish pass. The feature branch now clips the imported prototype iframe to the measured prototype UI root (including reported corner radii), so page/background gutters such as Landline's black outer box are not shown in Dialogue. The review bridge prefers an explicit `data-dialogue-root`, then the known `.landline-device` root, before generic page wrappers.
+
+Arrow annotations now follow the reference interaction: the user presses anywhere on the review canvas (including outside the prototype viewport), drags toward the thing they want to point at, and releases to set the arrowhead. The comment composer is anchored to the arrow's press/origin point rather than its release point, with a red terminal ball at the connection point. Arrow coordinates remain relative to the prototype viewport and may be outside its bounds, so they track the prototype when it recentres.
+
+The existing Area and Select tools remain prototype-bounded. No runtime prototype/revision data is migrated or reset by these changes.
+
 ## Active UI branch — 2026-09-24
 
 `feature/prototype-feedback-ui` is the new first-review UI build from `main`. It is NOT merged into `main` and is not a completed live LLM integration.
