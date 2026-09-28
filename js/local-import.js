@@ -55,7 +55,7 @@
   });
 
   const editedTimestamp = (revision) =>
-    revision.editedAt || revision.importedAt || revision.createdAt || '';
+    revision.importedAt || revision.editedAt || revision.createdAt || '';
 
   const editedLabel = (isoDate, now = new Date()) => {
     const date = new Date(isoDate);
