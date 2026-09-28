@@ -133,8 +133,9 @@ function openComment(value) {
   composer.dataset.state = 'default';
   composer.hidden = false; drawAnchor(anchor); positionComposer(); feedback.focus(); updateComposerState();
 }
-function closeComment({ discard = false } = {}) {
-  if (!discard && feedback.value.trim() && !confirm('Discard this unsent comment?')) return false;
+function closeComment() {
+  // Commenting is intentionally low-friction: closing, changing tools/modes or
+  // navigating away discards an unsent draft without a browser confirmation.
   composer.hidden = true; feedback.value = ''; send.disabled = true; resetSendState(); composer.dataset.state = 'default'; delete composer.dataset.anchorType;
   composer.style.removeProperty('--arrow-terminal-x'); composer.style.removeProperty('--arrow-terminal-y');
   anchor = null; clearShapes(); return true;
@@ -296,7 +297,7 @@ composer.addEventListener('submit', async event => {
   try {
     send.disabled = true;
     await adapter.createRequest({ base: active, feedback: feedback.value, anchor, scenario: $('[data-simulation-scenario]').value });
-    closeComment({ discard: true }); rail.scrollTop = 0;
+    closeComment(); rail.scrollTop = 0;
     if (adapter.storageAvailable === false) toast('Browser storage is unavailable. Simulation history is session-only.');
   } catch (error) { toast(error.message); updateComposerState(); }
 });
