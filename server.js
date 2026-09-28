@@ -210,6 +210,7 @@ function joinedRevision(data, revision) {
   const project = prototype && data.projects.find((item) => item.id === prototype.projectId);
   return {
     ...revision,
+    editedAt: revision.editedAt || revision.createdAt || revision.importedAt || null,
     prototype: prototype
       ? { id: prototype.id, name: prototype.name, slug: prototype.slug }
       : null,
