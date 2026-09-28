@@ -4,6 +4,8 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
+The prototype-tile **New** badge has been reconciled with Figma node `15:835` / badge node `16:1900`: it is now positioned 8px from the tile's top/left edges, uses an 8px corner radius, 24px height with 10px horizontal padding, Lime `#CCFF00`, and live **Inter Tight SemiBold 12px** text. The previous outlined `badge-new.svg` rendering is no longer used by prototype tiles.
+
 Prototype tile date sourcing was corrected again after live-app verification. The browser now prefers the stored revision `importedAt` timestamp directly, ahead of API-derived `editedAt`, so an already-running older server process cannot mask the true Dialogue import/publish time with a legacy `createdAt` value. In the current immutable revision model this import/publish timestamp is the authoritative source for the tile's user-facing **Edited** date.
 
 Prototype tiles have been polished after the project-detail background change: the 72px information/footer area now uses Ice `#F8F8F8` instead of white so it remains distinct from the white project surface. Revision timestamps are now explicitly exposed by the local API as `editedAt`, with `importedAt` preferred over legacy/source `createdAt` when no explicit edit timestamp exists, and the tile UI renders those real timestamps as live, locale-aware labels such as **Edited just now**, **Edited 2:35pm yesterday**, a weekday for recent revisions, or an absolute date for older revisions. The labels refresh every minute while the page is open and expose the exact local timestamp on hover.
