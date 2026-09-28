@@ -54,8 +54,30 @@ def run():
                 page.locator('[data-grid-toggle]').click()
                 assert page.locator('.review-grid').is_visible()
                 live.locator('#talk').click(); assert live.locator('#talk').inner_text()=='1'
-                page.locator('[data-mode-button=comment]').click(); page.wait_for_timeout(200)
+                switch_before=page.locator('.review-mode-switch').bounding_box()
+                prototype_before=page.locator('.review-frame-host').bounding_box()
+                canvas_before=page.locator('.review-canvas').bounding_box()
+                page.locator('[data-mode-button=comment]').click(); page.wait_for_timeout(160)
                 assert page.locator('.review-history').is_visible()
+                switch_comment=page.locator('.review-mode-switch').bounding_box()
+                prototype_comment=page.locator('.review-frame-host').bounding_box()
+                canvas_comment=page.locator('.review-canvas').bounding_box()
+                motion=page.locator('.review-canvas').evaluate("""el=>({duration:getComputedStyle(el).transitionDuration,easing:getComputedStyle(el).transitionTimingFunction})""")
+                assert abs(switch_before['x']-switch_comment['x'])<1
+                assert abs(prototype_before['x']-prototype_comment['x'])<1
+                assert abs(canvas_comment['x']-280)<1
+                assert abs((canvas_before['width']-canvas_comment['width'])-272)<1
+                assert '0.1s' in motion['duration'] and 'ease-out' in motion['easing']
+                page.locator('[data-mode-button=test]').click(); page.wait_for_timeout(160)
+                switch_test=page.locator('.review-mode-switch').bounding_box()
+                prototype_test=page.locator('.review-frame-host').bounding_box()
+                canvas_test=page.locator('.review-canvas').bounding_box()
+                assert abs(switch_before['x']-switch_test['x'])<1
+                assert abs(prototype_before['x']-prototype_test['x'])<1
+                assert abs(canvas_before['x']-canvas_test['x'])<1
+                page.locator('[data-mode-button=comment]').click(); page.wait_for_timeout(160)
+                assert page.locator('.review-history').is_visible()
+                print('PASS fixed header/prototype and 100ms ease-out canvas transition')
                 # Grid origin matches the actual UI root, not the iframe margin.
                 geo=page.evaluate('''() => {const g=document.querySelector('.review-grid');return {x:parseFloat(g.style.getPropertyValue('--grid-x')),y:parseFloat(g.style.getPropertyValue('--grid-y')),plane:document.querySelector('.review-plane').getBoundingClientRect().toJSON()}}''')
                 box=live.locator('.landline').bounding_box()
