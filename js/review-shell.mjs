@@ -1,11 +1,12 @@
 import { readGrid, writeGrid, preferencesPersisted } from './review-preferences.mjs';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="assets/review-icons.svg#${name}"/></svg>`;
+const navIcon = (name, selected) => `<img class="side-nav-icon" src="assets/${name}-icon-${selected ? 'selected' : 'default'}.svg" alt="" aria-hidden="true">`;
 const nav = document.querySelector('.side-nav');
 const page = location.pathname.split('/').pop();
-if (nav) nav.innerHTML = [['projects.html','folder','Projects'],['design-systems.html','system','Design systems'],['settings.html','settings','Settings']].map(([href, image, title]) => {
+if (nav) nav.innerHTML = [['projects.html','project','Projects'],['design-systems.html','ds','Design systems'],['settings.html','settings','Settings']].map(([href, image, title]) => {
   const current = page === href || (href === 'projects.html' && page === 'project-landline.html');
-  return `<a class="side-link${current ? ' active' : ''}" href="${href}" ${current ? 'aria-current="page"' : ''} title="${title}">${icon(image)}<span>${title}</span></a>`;
+  return `<a class="side-link${current ? ' active' : ''}" href="${href}" ${current ? 'aria-current="page"' : ''} title="${title}">${navIcon(image, current)}<span>${title}</span></a>`;
 }).join('');
 const brand = document.querySelector('.brand');
 if (brand) brand.innerHTML = `<a href="projects.html" aria-label="Dialogue projects">${icon('mark')}</a>`;
