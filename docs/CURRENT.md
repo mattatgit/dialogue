@@ -4,7 +4,7 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
-The top review mode switch now follows the updated Figma component at `33:3592`: the visible Test label is renamed **Interact**, the switch is 200×48px, and both Interact and Comment segments are fixed at 88×32px with 8px outer padding, an 8px segment gap, and 6px icon/label spacing. Internal `data-mode="test"` naming remains implementation-only for now; the user-facing term is Interact.
+The top review mode switch now follows the updated Figma component at `33:3592`: the visible Test label is renamed **Interact**, the switch is 200×48px, and both Interact and Comment segments are fixed at 88×32px with 8px outer padding, an 8px segment gap, and 6px icon/label spacing. The switch now also uses the exact exported Figma SVG assets `interact-grey`, `interact-white`, `comment-grey`, and `comment-white` rather than the earlier provisional symbols. Internal `data-mode="test"` naming remains implementation-only for now; the user-facing term is Interact.
 
 Figma node `16:3477` ("Comment Arrow") was re-checked before this polish pass. The feature branch now clips the imported prototype iframe to the measured prototype UI root (including reported corner radii), so page/background gutters such as Landline's black outer box are not shown in Dialogue. The review bridge prefers an explicit `data-dialogue-root`, then known prototype/device roots. Landline's actual imported structure is `.stage > .landline`; `.landline` is now selected before the generic full-viewport `main.stage`, so its dark presentation backdrop is excluded.
 
