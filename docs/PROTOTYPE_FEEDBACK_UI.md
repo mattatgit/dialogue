@@ -4,11 +4,11 @@ Status: first review build, not merged into main. Branch: `feature/prototype-fee
 
 This is the Figma-driven UI track, separate from the easier LLM connection being developed by Matt's colleague. The current app's import/storage/MCP pipeline is retained. No new provider integration is claimed.
 
-Design source: Dialogue Figma file `YXlBjYhWIS1sfu8cffH5un`, section `1:283`; viewer `16:2255`, arrow-comment reference `16:3477`, updated mode switch `33:3592`, grid-on `26:4944`, settings `15:2536`.
+Design source: Dialogue Figma file `YXlBjYhWIS1sfu8cffH5un`, section `1:283`; viewer `16:2255`, arrow-comment reference `16:3477`, updated mode switch/comment components `33:3592`, Draft → Version prototype `51:3452`, grid-on `26:4944`, settings `15:2536`.
 
 ## Implemented surfaces
 
-- Prototype Interact/Comment switch, Select/Area/Arrow tools, anchored composer, activity/history rail, and explicit Load/Cancel for history navigation.
+- Prototype Interact/Comment switch, Select/Area/Arrow tools, anchored composer, and Activity/history rail with direct navigation between every successful checkpoint.
 - The Interact/Comment switch matches Figma node `33:3592`: 200×48px overall, 8px outer padding, two equal 88×32px segments separated by 8px, with 6px between each 12px icon and label. It uses the exact exported Figma switch icons: `interact-grey.svg`, `interact-white.svg`, `comment-grey.svg`, and `comment-white.svg`. The user-facing Test label is now **Interact**; the internal mode key remains `test` to avoid unnecessary behavioral churn during this review branch.
 - Prototype display is clipped to the measured UI root (including its reported corner radii), so an imported page's outer backdrop/gutter is not presented as part of the prototype. The bridge prefers an explicit `data-dialogue-root`; for Landline it recognizes the actual `.stage > .landline` structure and selects `.landline` before the generic full-page `main.stage` wrapper.
 - Arrow starts are canvas-wide rather than prototype-bounded: press where the comment should connect, drag to the target, release to place the arrowhead. The comment composer sits at the start point with the Figma-style red terminal ball. Select and Area remain bounded to the prototype viewport.
@@ -17,10 +17,10 @@ Design source: Dialogue Figma file `YXlBjYhWIS1sfu8cffH5un`, section `1:283`; vi
 - Unsent comments are deliberately disposable: closing the composer or leaving the current comment flow discards draft text without a browser confirmation. The submit control has no native hover tooltip; its Figma label is **Send**, while the Enter key remains the submit shortcut.
 - Send button states use exact exported SVGs and the Figma prototype timings: Default small Granite icon; Hover after 50ms ease-out = 32×24 Dust background plus larger Main Text icon; after 300ms dwell, Long hover expands to 69×24 and reveals “Send” over 100ms ease-out; Clicked uses Cloud with the full label/icon state. Mouse leave returns over 50ms ease-out.
 - Interact/Comment switching keeps the top mode control and prototype fixed in screen space. Comment mode makes room for history by shrinking the white canvas from the left rather than recentring the prototype; the canvas transition is 100ms ease-out (and respects reduced-motion). The Comment toolbar is positioned from the measured prototype centre rather than the resized canvas centre, so it remains directly underneath the prototype.
-- Only Reload and Share at the top right. Grid control is 24px, inside the canvas at its top left.
-- Reload's arrow is green when a later revision/labelled demo result is available. Without an update, Reload restarts the currently loaded prototype. `R` is supported outside editable fields.
-- A version badge names the OUTPUT of a completed request, never its base. Pending/failed requests have status labels rather than invented output versions.
-- Rewinding scrolls the active card to the top. Chronological order is retained; newer cards remain above the viewport and can be scrolled back into view. Loading is explicit, not triggered by clicking a card alone.
+- Only Restart and Share at the top right. Grid control is 24px, inside the canvas at its top left. Restart resets the currently viewed prototype state to its initial runtime state; `R` is supported outside editable fields.
+- Successful simulated outputs use Activity semantics rather than an automatic version number: newest unsaved output = **Draft**, earlier unsaved checkpoints = **Edited**, explicit save = numbered **Vn**. Pending/failed requests retain status labels.
+- Every successful Activity card is directly navigable by click. Rewinding is non-destructive: newer cards remain above in chronological order, and clicking the Draft returns to the latest working state.
+- When the current Draft is already being viewed, clicking its card expands it from 256px to 304px and reveals **Cancel** + **Save version**. Cancel collapses without changing state. Save shows **Saved version** for 2 seconds, then promotes that same card to the next numbered Version and collapses it.
 - Grid colour, point size and opacity preferences in Settings; defaults `#BAE6FF`, 8 design pixels, 50%. Here "pt" is the design-system spacing label, not the browser's typographic `pt` unit.
 - Grid origin follows the prototype UI's top-left; grid spacing scales with the preview. It overlays the canvas without capturing pointer input.
 - Shared hover rules: <=24px controls scale to 110%; normal >=32px controls scale to 105%; 100ms ease-out in both directions. Intermediate sizes use the normal 105% rule. Reduced-motion preference disables the scale animation.
@@ -32,7 +32,7 @@ Design source: Dialogue Figma file `YXlBjYhWIS1sfu8cffH5un`, section `1:283`; vi
 
 Real: reading saved revisions, loading them in the existing sandbox, resetting their runtime state, annotation coordinates/element metadata, history navigation, preference storage and import behavior.
 
-Simulated: LLM acceptance/work/results. `MockReviewAdapter` creates labelled `Demo N` outcomes which replay the unchanged base revision. It never calls a provider, posts to the import API, changes `.dialogue-data`, or edits prototype files. The explicit "Simulated connection" control also allows testing a connection failure. Retry and cancellation preserve the request text.
+Simulated: LLM acceptance/work/results. `MockReviewAdapter` creates browser-local Draft/Edited checkpoints which replay the unchanged base revision; its Save version action promotes the current Draft to a simulated numbered Version without writing project files or server data. It never calls a provider, posts to the import API, changes `.dialogue-data`, or edits prototype files. The explicit "Simulated connection" control also allows testing a connection failure. Retry and cancellation preserve the request text.
 
 Simulation requests live in browser localStorage, scoped to the prototype ID, with a 100-request limit. They are not server-side, team-shared or production task records. Interrupted requests are marked failed on reopening. A provider adapter must replace this simulation before real feedback execution is advertised.
 
@@ -41,7 +41,7 @@ Simulation requests live in browser localStorage, scoped to the prototype ID, wi
 `js/review-adapter.mjs` is the replacement point. The viewer consumes:
 
 - `createRequest({base, feedback, anchor, scenario})` (`scenario` is simulation-only)
-- `subscribe(listener)`, `listRequests()`, `listRevisions()`
+- `subscribe(listener)`, `listRequests()`, `listRevisions()`, `saveVersion(resultId, version)`
 - `isBusy`, `cancel(requestId)`, `retry(requestId)`, `dispose()`
 
 A request records its ID, timestamp, base revision, feedback, typed anchor, lifecycle status, normalized activity events, optional result revision, and error. Events have IDs, types, timestamps and human-readable messages. A real adapter must expose only observed activity and real completed outputs; do not fabricate tool logs or summaries.
@@ -72,7 +72,7 @@ Twelve checks passed in the implementation environment: grid geometry/defaults/b
 
 An optional Playwright browser smoke test is in `tests/review-browser.py`. It requires Python Playwright and a Chromium executable (`CHROMIUM_PATH`). It was NOT completed end-to-end in this environment: browser network navigation is administratively blocked. An offline visual check of the viewer shell was rendered at 1440x1024, including its 110% grid-button hover. Safari testing against the real imported prototype is still required.
 
-Designer review: stop existing Dialogue/tunnel processes, switch the SAME checkout to this branch, then use `Start Dialogue.command`. A tunnel is not required for this simulated feedback UI. Open an existing revision, switch to Comment, try each annotation type and submit. A demo result should leave the current prototype visible until Reload. Rewind via a history card, then scroll upward to retrieve newer versions. Check Settings, grid registration, and the failure/retry controls.
+Designer review: stop existing Dialogue/tunnel processes, switch the SAME checkout to this branch, then use `Start Dialogue.command`. A tunnel is not required for this simulated feedback UI. Open an existing revision, switch to Comment, try each annotation type and submit. A successful simulated result should appear directly as the current Draft. Click older cards to navigate, click Draft to return, click the active Draft again to test Cancel / Save version / Saved version promotion, and use Restart to reset runtime state. Check Settings, grid registration, and the failure/retry controls.
 
 ## Figma asset preflight
 
@@ -90,8 +90,8 @@ For the intended post-simulation integration, Activity remains both the work log
 - Draft, Edited and Version cards all use consistent friendly timestamps.
 - Browsing an Edited checkpoint or older Version must not destroy or silently replace the current Draft.
 - Default cards should use a consistent fixed height for easier scanning. Overflowing content is truncated at rest and expands on hover.
-- The current green/black Reload-as-new-result behavior belongs to the simulation only. In the intended live-agent flow, the top-right control becomes **Restart**, which resets/restarts the prototype to its initial state; live Draft changes appear directly without requiring Reload.
-- Detailed Draft → Version save interaction is pending Saori's reference prototype and should not be finalized before that review.
+- The top-right control is now **Restart**, which resets/restarts the currently viewed prototype state; successful simulated Draft changes appear directly without requiring Reload.
+- Saori's Figma prototype at `51:3452` defines the implemented save flow: current Draft click → expanded Cancel / Save version; Cancel returns to Draft; Save version → Saved version confirmation for 2 seconds → same card becomes the next numbered Version.
 
 ## Remaining before merge
 
