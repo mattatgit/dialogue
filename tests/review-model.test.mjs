@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GRID_DEFAULTS, gridSettings, stageGeometry, rectFromPoints, safeSelection, reloadTarget, chronological } from '../js/review-model.mjs';
+import { GRID_DEFAULTS, gridSettings, stageGeometry, rootClipPath, rectFromPoints, safeSelection, reloadTarget, chronological } from '../js/review-model.mjs';
 import { MockReviewAdapter } from '../js/review-adapter.mjs';
 const memory = () => { const entries = new Map(); return { getItem:k=>entries.get(k), setItem:(k,v)=>entries.set(k,v) }; };
 const base = {id:'real-revision',version:'V23.18',createdAt:'2026-01-01',entryPoint:'index.html',project:{slug:'landline'},prototype:{id:'prototype'}};
@@ -18,6 +18,15 @@ test('grid remains registered to actual UI top-left across viewport changes',()=
     assert.equal(g.gridX,g.x+25*g.scale); assert.equal(g.gridY,g.y+25*g.scale);
     assert.ok(g.scale<=1 && g.scale>=.25);
   }
+});
+test('prototype root clipping removes the iframe gutter and keeps rounded corners',()=>{
+  const clip=rootClipPath(
+    {width:370,height:722},
+    {x:25,y:25,width:320,height:672},
+    {topLeft:24,topRight:24,bottomRight:24,bottomLeft:24}
+  );
+  assert.equal(clip,'inset(25px 25px 25px 25px round 24px 24px 24px 24px)');
+  assert.equal(rootClipPath({width:370,height:722},{x:0,y:0,width:0,height:0}), 'none');
 });
 test('rectangle capture works in every drag direction',()=>assert.deepEqual(rectFromPoints({x:90,y:70},{x:10,y:20}),{x:10,y:20,width:80,height:50}));
 test('untrusted selection rejects nonfinite geometry and bounds text',()=>{
