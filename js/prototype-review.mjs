@@ -47,6 +47,9 @@ function updateGeometry() {
   Object.assign(host.style, { width: `${viewport.width}px`, height: `${viewport.height}px`,
     left: `${geometry.x}px`, top: `${geometry.y}px`, transform: `scale(${geometry.scale})`,
     clipPath: rootClipPath(viewport, origin, rootRadius) });
+  const rootWidth = origin.width > 0 ? origin.width : viewport.width;
+  const prototypeCenterX = geometry.gridX + rootWidth * geometry.scale / 2;
+  $('.review-tools').style.left = `${prototypeCenterX}px`;
   const overlay = $('.review-grid');
   overlay.hidden = !grid.enabled;
   overlay.style.setProperty('--grid-color', grid.color);
