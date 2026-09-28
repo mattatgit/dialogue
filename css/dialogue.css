@@ -81,7 +81,7 @@ button,.pill,.signin-button,.apply,.viewer-restart{
 @media (hover:hover) and (pointer:fine){.proto-tile:hover{box-shadow:0 16px 34px -14px rgba(0,0,0,.22);transform:scale(1.02)}}
 .proto-preview{height:208px;display:flex;align-items:flex-start;justify-content:center;padding-top:16px;overflow:hidden}
 .landline-proto-img{display:block;width:135px;height:264px;object-fit:contain}
-.proto-info{position:absolute;display:block;left:0;right:0;bottom:0;height:72px;background:#fff;padding:18px 16px}
+.proto-info{position:absolute;display:block;left:0;right:0;bottom:0;height:72px;background:var(--ice);padding:18px 16px}
 .proto-name{display:block;font-weight:600;margin-bottom:5px}.proto-time{display:block;font-size:12px;color:var(--mid)}
 .new-badge{position:absolute;z-index:2;top:16px;left:16px;background:var(--lime);color:#000;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700}
 
