@@ -20,7 +20,7 @@ class PreviewError extends Error {}
 function findChromium() {
   const candidates = [process.env.DIALOGUE_CHROMIUM, process.env.PUPPETEER_EXECUTABLE_PATH].filter(Boolean);
   for (const candidate of candidates) return candidate;
-  const names = ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'chrome'];
+  const names = ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'chrome', 'chrome-headless-shell'];
   for (const dir of (process.env.PATH || '').split(path.delimiter)) {
     for (const name of names) {
       const full = path.join(dir, name);

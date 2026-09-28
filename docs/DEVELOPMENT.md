@@ -12,7 +12,7 @@ The immediate goal is still not a production framework/database/hosting migratio
 
 ## Local development (Nix)
 
-The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium (screenshots; Linux only — on macOS Dialogue uses `/Applications/Google Chrome.app` or `Chromium.app` if installed) and the live-reloading `dev` command. The shell works on `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
+The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium for screenshots (`chromium` on Linux; on macOS Playwright's `chrome-headless-shell`, because nixpkgs' chromium is Linux-only and full Chrome builds crash headless without a desktop session) and the live-reloading `dev` command. The shell works on `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
 
 The devshell also provides `omp` from the `llm-agents` flake input: the terminal, preview setup, model sign-in and COMMIT all run it. It reads the usual `~/.omp` profiles and login, so an existing setup carries over; `DIALOGUE_OMP` points Dialogue at a different binary. The flake has no `x86_64-darwin` outputs because `llm-agents` has no omp there. On macOS the flake builds omp without its `--smoke-test` install check, which fails inside the Nix build sandbox (the binary passes it outside); `flake.nix` asserts the patched line still exists, so an upstream change fails evaluation instead of silently re-enabling it.
 

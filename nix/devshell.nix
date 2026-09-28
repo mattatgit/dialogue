@@ -1,7 +1,25 @@
 { pkgs, omp }:
 let
-  # Tools the app shells out to. nixpkgs' Chromium is Linux-only; on macOS
-  # server/preview.js falls back to /Applications/{Google Chrome,Chromium}.app.
+  # Headless Chromium for preview screenshots. nixpkgs' chromium is Linux-only,
+  # and on macOS full Chrome/Brave crash headless without a desktop session;
+  # Playwright's chrome-headless-shell (Chromium, BSD) works everywhere.
+  headlessShell =
+    let
+      browsers = pkgs.playwright-driver.browsers.override {
+        withChromium = false;
+        withFirefox = false;
+        withWebkit = false;
+        withFfmpeg = false;
+      };
+    in
+    pkgs.runCommand "chrome-headless-shell" { } ''
+      bin=$(echo ${browsers}/chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell)
+      [ -x "$bin" ] || { echo "chrome-headless-shell not found in ${browsers}" >&2; exit 1; }
+      mkdir -p $out/bin
+      # A wrapper, not a symlink: Chrome finds its framework next to argv[0].
+      printf '#!/bin/sh\nexec %s "$@"\n' "$bin" > $out/bin/chrome-headless-shell
+      chmod +x $out/bin/chrome-headless-shell
+    '';
   tools = [
     pkgs.nodejs
     pkgs.browser-sync
@@ -10,7 +28,7 @@ let
     pkgs.tmux
     pkgs.openssh
     omp
-  ] ++ pkgs.lib.optional (pkgs.lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.chromium) pkgs.chromium;
+  ] ++ (if pkgs.stdenv.hostPlatform.isLinux then [ pkgs.chromium ] else [ headlessShell ]);
   dev = pkgs.writeShellApplication {
     name = "dev";
     runtimeInputs = tools;
