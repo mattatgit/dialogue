@@ -57,11 +57,13 @@
   </main>
   <div class="review-toast" role="status" aria-live="polite" hidden></div>
   <dialog class="review-share-dialog" aria-labelledby="review-share-title">
-    <button class="dialog-close hover-small" type="button" aria-label="Close share dialog"><svg class="icon"><use href="assets/review-icons.svg#close"/></svg></button>
+    <button class="dialog-close" type="button" aria-label="Close share dialog"><img src="assets/share-modal-close.svg" alt="" aria-hidden="true"></button>
     <h1 id="review-share-title">Share this prototype</h1>
-    <div class="review-share-row"><input readonly aria-label="Local prototype link" data-share-url><button class="review-button primary" type="button" data-copy-local>Copy</button></div>
-    <p>Local link only. This opens on this Mac; public sharing is not connected yet.</p>
-    <label class="review-share-option"><span>Allow access to all prototypes in the project</span><input type="checkbox" disabled title="Public sharing is not connected yet"></label>
+    <div class="review-share-row"><input readonly aria-label="Local prototype link" data-share-url><button class="review-share-copy" type="button" data-copy-local>Copy</button></div>
+    <label class="review-share-option">
+      <span>Allow access to all prototypes in the project</span>
+      <span class="review-share-checkbox"><input type="checkbox" disabled title="Public sharing is not connected yet"><span aria-hidden="true"></span></span>
+    </label>
   </dialog>
   <script type="module" src="js/prototype-review.mjs"></script>
 </body>
