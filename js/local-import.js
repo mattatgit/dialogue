@@ -42,17 +42,47 @@
     else window.setTimeout(finish, 100);
   };
 
-  const relativeEditedLabel = (isoDate) => {
-    const time = new Date(isoDate).getTime();
-    if (!Number.isFinite(time)) return 'Edited recently';
-    const seconds = Math.max(0, Math.round((Date.now() - time) / 1000));
-    if (seconds < 60) return 'Edited just now';
-    const minutes = Math.round(seconds / 60);
-    if (minutes < 60) return `Edited ${minutes}m ago`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return `Edited ${hours}h ago`;
-    const days = Math.round(hours / 24);
-    return `Edited ${days}d ago`;
+  const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+  const weekdayFormatter = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
+  const shortDateFormatter = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' });
+  const longDateFormatter = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const exactDateFormatter = new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+
+  const editedTimestamp = (revision) =>
+    revision.editedAt || revision.createdAt || revision.importedAt || '';
+
+  const editedLabel = (isoDate, now = new Date()) => {
+    const date = new Date(isoDate);
+    if (!Number.isFinite(date.getTime())) return 'Edited recently';
+
+    const elapsed = Math.max(0, now.getTime() - date.getTime());
+    const minutes = Math.floor(elapsed / 60000);
+    if (minutes < 1) return 'Edited just now';
+    if (minutes < 60) return `Edited ${minutes} min${minutes === 1 ? '' : 's'} ago`;
+
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfEditedDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dayDifference = Math.round((startOfToday - startOfEditedDay) / 86400000);
+    const time = timeFormatter.format(date).replace(/\s+(am|pm)$/i, '$1').toLowerCase();
+
+    if (dayDifference <= 0) return `Edited ${time} today`;
+    if (dayDifference === 1) return `Edited ${time} yesterday`;
+    if (dayDifference < 7) return `Edited ${time} ${weekdayFormatter.format(date)}`;
+    if (date.getFullYear() === now.getFullYear()) return `Edited ${shortDateFormatter.format(date)}`;
+    return `Edited ${longDateFormatter.format(date)}`;
+  };
+
+  const refreshEditedLabels = () => {
+    const now = new Date();
+    grid.querySelectorAll('.proto-time[data-edited-at]').forEach((element) => {
+      element.textContent = editedLabel(element.dataset.editedAt, now);
+    });
   };
 
   const buildTile = (revision, isNewest) => {
@@ -84,9 +114,18 @@
     const title = document.createElement('span');
     title.className = 'proto-name';
     title.textContent = revision.title || `${revision.prototype?.name || 'Prototype'} ${revision.version || ''}`.trim();
-    const time = document.createElement('span');
+    const time = document.createElement('time');
     time.className = 'proto-time';
-    time.textContent = relativeEditedLabel(revision.createdAt);
+    const editedAt = editedTimestamp(revision);
+    if (editedAt) {
+      time.dateTime = editedAt;
+      time.dataset.editedAt = editedAt;
+      time.textContent = editedLabel(editedAt);
+      const editedDate = new Date(editedAt);
+      if (Number.isFinite(editedDate.getTime())) time.title = exactDateFormatter.format(editedDate);
+    } else {
+      time.textContent = 'Edited recently';
+    }
     const menu = document.createElement('img');
     menu.className = 'tile-menu';
     menu.src = 'assets/tile-menu.svg';
@@ -117,6 +156,7 @@
       if (revisions.length) {
         grid.replaceChildren(...revisions.map((revision, index) => buildTile(revision, index === 0)));
         updateSuggestedVersion(revisions);
+        refreshEditedLabels();
       }
       return true;
     } catch {
@@ -203,4 +243,5 @@
   });
 
   loadRevisions();
+  window.setInterval(refreshEditedLabels, 60000);
 })();
