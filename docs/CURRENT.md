@@ -240,6 +240,12 @@ Verified:
 
 This closes the manual smoke-test gate for PR #5.
 
+## GitHub project-creation UX clarified — 2026-09-28
+
+For the intended product UX, users should not normally paste Git repository URLs into Dialogue. During setup they should connect/install Dialogue's GitHub integration once. Dialogue should then be able to list accessible repositories and create a new repository from inside the app, subject to the user's and organization's GitHub permissions. Dave's current repository-address/deploy-key flow remains useful implementation scaffolding, but the preferred product direction is a GitHub-connected project flow with "New project" and "Open existing" choices.
+
+A new Dialogue project can therefore create its backing Git repository behind the scenes, then create/open the initial workspace and run the same preview/agent setup. Git should remain infrastructure under the product rather than something designers must understand. Organization-owned repositories may still require owner/admin approval depending on GitHub App installation and organization policies.
+
 ## Product direction clarified — 2026-09-26
 
 Dialogue's longer-term product direction now includes two primary human workflows over a shared project/workspace engine:
