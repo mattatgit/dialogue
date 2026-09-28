@@ -91,12 +91,14 @@ def run():
                 assert abs((tools['x']+tools['width']/2)-(prototype_root['x']+prototype_root['width']/2))<1
                 print('PASS fixed header/prototype, centred comment toolbar and 100ms ease-out canvas transition')
                 # Grid origin matches the actual UI root, not the iframe margin.
-                geo=page.evaluate('''() => {const g=document.querySelector('.review-grid');return {x:parseFloat(g.style.getPropertyValue('--grid-x')),y:parseFloat(g.style.getPropertyValue('--grid-y')),plane:document.querySelector('.review-plane').getBoundingClientRect().toJSON()}}''')
+                geo=page.evaluate('''() => {const g=document.querySelector('.review-grid');return {x:parseFloat(g.style.getPropertyValue('--grid-x')),y:parseFloat(g.style.getPropertyValue('--grid-y')),step:parseFloat(g.style.getPropertyValue('--grid-step')),plane:document.querySelector('.review-plane').getBoundingClientRect().toJSON()}}''')
                 box=live.locator('.landline').bounding_box()
-                assert abs(geo['x']+geo['plane']['x']-box['x'])<1
-                assert abs(geo['y']+geo['plane']['y']-box['y'])<1
-                assert abs((box['x']/8)-round(box['x']/8))<0.01
-                assert abs((box['y']/8)-round(box['y']/8))<0.01
+                assert abs(geo['x']+geo['plane']['x']-box['x'])<0.25
+                assert abs(geo['y']+geo['plane']['y']-box['y'])<0.25
+                status=live.locator('.status').bounding_box()
+                assert abs(((status['x']-box['x'])/geo['step'])-round((status['x']-box['x'])/geo['step']))<0.02
+                title=live.locator('#title').bounding_box()
+                assert abs(((title['x']-box['x'])/geo['step'])-round((title['x']-box['x'])/geo['step']))<0.02
                 clip=page.locator('.review-frame-host').evaluate("(el)=>el.style.clipPath")
                 assert clip=='inset(25px 25px 25px 25px round 24px 24px 24px 24px)', clip
                 print('PASS grid origin, prototype root clipping and non-interference')
