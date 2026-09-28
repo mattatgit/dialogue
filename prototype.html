@@ -39,11 +39,11 @@
     </div>
     <button class="grid-toggle hover-small" type="button" data-grid-toggle aria-label="Show grid" aria-pressed="false" title="Show grid"><svg class="icon"><use href="assets/review-icons.svg#grid"/></svg></button>
     <div class="review-load-state" role="status" data-load-state>Loading prototype...</div>
-    <form class="review-composer" aria-label="Prototype comment" data-comment-form hidden>
-      <div class="composer-heading"><span class="anchor-tag" data-anchor-label>Selection</span><button type="button" class="composer-close hover-small" aria-label="Close comment" data-close-comment><svg class="icon"><use href="assets/review-icons.svg#close"/></svg></button></div>
+    <form class="review-composer" aria-label="Prototype comment" data-comment-form data-state="default" hidden>
+      <div class="composer-heading"><span class="anchor-tag" data-anchor-label>Selection</span><button type="button" class="composer-close" aria-label="Close comment" data-close-comment><span class="composer-close-icon" aria-hidden="true"><img class="close-icon-default" src="assets/comment-close-default.svg" alt=""><img class="close-icon-active" src="assets/comment-close-active.svg" alt=""></span></button></div>
       <label class="sr-only" for="review-comment">Add your comment</label>
       <textarea id="review-comment" name="feedback" maxlength="4000" placeholder="Add your comment" rows="3"></textarea>
-      <div class="composer-footer"><small data-composer-status>Simulation - no LLM call</small><button class="composer-send hover-small" type="submit" aria-label="Send comment" title="Send comment (Enter); Shift+Enter for a new line" disabled><span>Enter</span><svg class="icon"><use href="assets/review-icons.svg#enter"/></svg></button></div>
+      <div class="composer-footer"><small data-composer-status>Simulation - no LLM call</small><button class="composer-send" type="submit" aria-label="Send comment" title="Send comment (Enter); Shift+Enter for a new line" disabled><span class="composer-send-label">Enter</span><span class="composer-enter-icon" aria-hidden="true"><img class="enter-icon-default" src="assets/comment-enter-default.svg" alt=""><img class="enter-icon-active" src="assets/comment-enter-active.svg" alt=""></span></button></div>
     </form>
     <div class="review-tools" role="group" aria-label="Comment tools" hidden>
       <button type="button" data-tool="selection" aria-pressed="true"><svg class="icon"><use href="assets/review-icons.svg#select"/></svg>Select</button>
