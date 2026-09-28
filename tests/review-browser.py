@@ -95,6 +95,8 @@ def run():
                 box=live.locator('.landline').bounding_box()
                 assert abs(geo['x']+geo['plane']['x']-box['x'])<1
                 assert abs(geo['y']+geo['plane']['y']-box['y'])<1
+                assert abs((box['x']/8)-round(box['x']/8))<0.01
+                assert abs((box['y']/8)-round(box['y']/8))<0.01
                 clip=page.locator('.review-frame-host').evaluate("(el)=>el.style.clipPath")
                 assert clip=='inset(25px 25px 25px 25px round 24px 24px 24px 24px)', clip
                 print('PASS grid origin, prototype root clipping and non-interference')
