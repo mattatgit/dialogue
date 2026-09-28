@@ -4,7 +4,7 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
-Figma node `16:3477` ("Comment Arrow") was re-checked before this polish pass. The feature branch now clips the imported prototype iframe to the measured prototype UI root (including reported corner radii), so page/background gutters such as Landline's black outer box are not shown in Dialogue. The review bridge prefers an explicit `data-dialogue-root`, then the known `.landline-device` root, before generic page wrappers.
+Figma node `16:3477` ("Comment Arrow") was re-checked before this polish pass. The feature branch now clips the imported prototype iframe to the measured prototype UI root (including reported corner radii), so page/background gutters such as Landline's black outer box are not shown in Dialogue. The review bridge prefers an explicit `data-dialogue-root`, then known prototype/device roots. Landline's actual imported structure is `.stage > .landline`; `.landline` is now selected before the generic full-viewport `main.stage`, so its dark presentation backdrop is excluded.
 
 Arrow annotations now follow the reference interaction: the user presses anywhere on the review canvas (including outside the prototype viewport), drags toward the thing they want to point at, and releases to set the arrowhead. The comment composer is anchored to the arrow's press/origin point rather than its release point, with a red terminal ball at the connection point. Arrow coordinates remain relative to the prototype viewport and may be outside its bounds, so they track the prototype when it recentres.
 
