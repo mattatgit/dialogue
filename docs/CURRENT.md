@@ -8,7 +8,7 @@ Figma node `16:3477` ("Comment Arrow") was re-checked before this polish pass. T
 
 Arrow annotations now follow the reference interaction: the user presses anywhere on the review canvas (including outside the prototype viewport), drags toward the thing they want to point at, and releases to set the arrowhead. The comment composer is anchored to the arrow's press/origin point rather than its release point, with a red terminal ball at the connection point. Arrow coordinates remain relative to the prototype viewport and may be outside its bounds, so they track the prototype when it recentres.
 
-The existing Area and Select tools remain prototype-bounded. No runtime prototype/revision data is migrated or reset by these changes.
+The existing Area and Select tools remain prototype-bounded. Test/Comment mode switching now keeps the top mode control and prototype at the same screen position; opening Comment only reduces the white canvas to make room for the activity rail. The canvas left edge transitions over 100ms with ease-out, and the prototype geometry compensates continuously during that resize so it does not jump sideways. Reduced-motion preferences still disable transitions. No runtime prototype/revision data is migrated or reset by these changes.
 
 ## Active UI branch — 2026-09-24
 
