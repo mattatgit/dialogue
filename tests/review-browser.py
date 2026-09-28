@@ -59,6 +59,10 @@ def run():
                 assert page.locator('[data-mode-button=test]').inner_text().strip()=='Interact'
                 assert abs(page.locator('[data-mode-button=test]').bounding_box()['width']-88)<1
                 assert abs(page.locator('[data-mode-button=comment]').bounding_box()['width']-88)<1
+                assert page.locator('[data-mode-button=test] .mode-icon-active').get_attribute('src')=='assets/interact-white.svg'
+                assert page.locator('[data-mode-button=test] .mode-icon-inactive').get_attribute('src')=='assets/interact-grey.svg'
+                assert page.locator('[data-mode-button=comment] .mode-icon-active').get_attribute('src')=='assets/comment-white.svg'
+                assert page.locator('[data-mode-button=comment] .mode-icon-inactive').get_attribute('src')=='assets/comment-grey.svg'
                 prototype_before=page.locator('.review-frame-host').bounding_box()
                 canvas_before=page.locator('.review-canvas').bounding_box()
                 page.locator('[data-mode-button=comment]').click(); page.wait_for_timeout(160)
