@@ -4,14 +4,15 @@ Status: first review build, not merged into main. Branch: `feature/prototype-fee
 
 This is the Figma-driven UI track, separate from the easier LLM connection being developed by Matt's colleague. The current app's import/storage/MCP pipeline is retained. No new provider integration is claimed.
 
-Design source: Dialogue Figma file `YXlBjYhWIS1sfu8cffH5un`, section `1:283`; viewer `16:2255`, arrow-comment reference `16:3477`, grid-on `26:4944`, settings `15:2536`.
+Design source: Dialogue Figma file `YXlBjYhWIS1sfu8cffH5un`, section `1:283`; viewer `16:2255`, arrow-comment reference `16:3477`, updated mode switch `33:3592`, grid-on `26:4944`, settings `15:2536`.
 
 ## Implemented surfaces
 
-- Prototype Test/Comment switch, Select/Area/Arrow tools, anchored composer, activity/history rail, and explicit Load/Cancel for history navigation.
+- Prototype Interact/Comment switch, Select/Area/Arrow tools, anchored composer, activity/history rail, and explicit Load/Cancel for history navigation.
+- The Interact/Comment switch matches Figma node `33:3592`: 200×48px overall, 8px outer padding, two equal 88×32px segments separated by 8px, with 6px between each 12px icon and label. The user-facing Test label is now **Interact**; the internal mode key remains `test` to avoid unnecessary behavioral churn during this review branch.
 - Prototype display is clipped to the measured UI root (including its reported corner radii), so an imported page's outer backdrop/gutter is not presented as part of the prototype. The bridge prefers an explicit `data-dialogue-root`; for Landline it recognizes the actual `.stage > .landline` structure and selects `.landline` before the generic full-page `main.stage` wrapper.
 - Arrow starts are canvas-wide rather than prototype-bounded: press where the comment should connect, drag to the target, release to place the arrowhead. The comment composer sits at the start point with the Figma-style red terminal ball. Select and Area remain bounded to the prototype viewport.
-- Test/Comment switching keeps the top mode control and prototype fixed in screen space. Comment mode makes room for history by shrinking the white canvas from the left rather than recentring the prototype; the canvas transition is 100ms ease-out (and respects reduced-motion). The Comment toolbar is positioned from the measured prototype centre rather than the resized canvas centre, so it remains directly underneath the prototype.
+- Interact/Comment switching keeps the top mode control and prototype fixed in screen space. Comment mode makes room for history by shrinking the white canvas from the left rather than recentring the prototype; the canvas transition is 100ms ease-out (and respects reduced-motion). The Comment toolbar is positioned from the measured prototype centre rather than the resized canvas centre, so it remains directly underneath the prototype.
 - Only Reload and Share at the top right. Grid control is 24px, inside the canvas at its top left.
 - Reload's arrow is green when a later revision/labelled demo result is available. Without an update, Reload restarts the currently loaded prototype. `R` is supported outside editable fields.
 - A version badge names the OUTPUT of a completed request, never its base. Pending/failed requests have status labels rather than invented output versions.
