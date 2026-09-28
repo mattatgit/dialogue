@@ -210,7 +210,7 @@ function joinedRevision(data, revision) {
   const project = prototype && data.projects.find((item) => item.id === prototype.projectId);
   return {
     ...revision,
-    editedAt: revision.editedAt || revision.createdAt || revision.importedAt || null,
+    editedAt: revision.editedAt || revision.importedAt || revision.createdAt || null,
     prototype: prototype
       ? { id: prototype.id, name: prototype.name, slug: prototype.slug }
       : null,
@@ -539,7 +539,7 @@ async function handleApi(req, res, url) {
     );
     const revisions = data.revisions
       .filter((revision) => prototypeIds.has(revision.prototypeId))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .sort((a, b) => new Date(b.editedAt || b.importedAt || b.createdAt) - new Date(a.editedAt || a.importedAt || a.createdAt))
       .map((revision) => joinedRevision(data, revision));
     sendJson(res, 200, { project, revisions });
     return true;
