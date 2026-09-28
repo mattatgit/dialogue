@@ -28,11 +28,13 @@
   const usable = el => el instanceof Element && !['SCRIPT', 'STYLE', 'LINK', 'META'].includes(el.tagName)
     && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
   function root() {
-    // Explicit annotation wins. A known device root comes before generic app/page
-    // wrappers so a full-viewport backdrop is not mistaken for the prototype UI.
+    // Explicit annotation wins. Known prototype/device roots come before generic
+    // app/page wrappers so a full-viewport stage/backdrop is not mistaken for the
+    // reviewable prototype UI. Landline uses .stage > .landline, with the stage
+    // intentionally carrying the dark presentation background.
     // Otherwise use a visible app root, then the sole meaningful body child.
     // Multiple-root documents use their viewport origin.
-    for (const selector of ['[data-dialogue-root]', '.landline-device', '#app', '#root', '.app', 'main']) {
+    for (const selector of ['[data-dialogue-root]', '.landline-device', '.landline', '#app', '#root', '.app', 'main']) {
       const named = document.querySelector(selector); if (usable(named)) return named;
     }
     const children = [...(document.body?.children || [])].filter(usable);
