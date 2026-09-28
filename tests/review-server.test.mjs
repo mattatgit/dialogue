@@ -43,9 +43,15 @@ test('HTTP instrumentation, real import, manifests and persistence', {timeout:15
   assert.equal((await fetch(base+`/prototype-files/${revision.id}/.dialogue-revision.json`)).status,404);
   assert.equal((await fetch(base+'/api/projects/landline/import?name=Landline&version=V23.18',{method:'POST',body:zip})).status,409);
   child.kill(); await once(child,'exit');
+  // Existing local project metadata is migrated to the current Landline description on restart.
+  const existingDb=JSON.parse(await fs.readFile(path.join(data,'db.json'),'utf8'));
+  existingDb.projects.find(project=>project.slug==='landline').description='A simpler way for households to stay in touch.';
+  await fs.writeFile(path.join(data,'db.json'),JSON.stringify(existingDb,null,2)+'\n');
   // The saved revision remains readable after restart.
   child=spawn(process.execPath,['server.js'],{cwd:dir,env:{...process.env,HOST:'127.0.0.1',PORT:String(port)},stdio:'ignore'});
   for(let i=0;i<50;i++){try {const r=await fetch(base+'/api/health');if(r.ok)break;}catch{} await new Promise(r=>setTimeout(r,50));}
+  const restartedProjects=await (await fetch(base+'/api/projects')).json();
+  assert.equal(restartedProjects.projects.find(project=>project.slug==='landline').description,'A simple push-to-talk peer to peer walkie talkie app');
   assert.equal((await (await fetch(base+'/api/projects/landline/revisions')).json()).revisions[0].id,revision.id);
   child.kill(); await once(child,'exit');
   await fs.unlink(path.join(data,'db.json'));
