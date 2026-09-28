@@ -20,6 +20,16 @@ export function stageGeometry(width, height, viewport, origin = { x: 0, y: 0 }) 
   const y = Math.max(40 - origin.y * scale, (height - rootHeight * scale) / 2 - 36 - origin.y * scale);
   return { x, y, scale, gridX: x + origin.x * scale, gridY: y + origin.y * scale };
 }
+export function rootClipPath(viewport, origin, radius = {}) {
+  if (!validRect(origin) || origin.width <= 0 || origin.height <= 0) return 'none';
+  const left = clamp(origin.x, 0, viewport.width);
+  const top = clamp(origin.y, 0, viewport.height);
+  const right = clamp(viewport.width - (origin.x + origin.width), 0, viewport.width);
+  const bottom = clamp(viewport.height - (origin.y + origin.height), 0, viewport.height);
+  const maxRadius = Math.max(0, Math.min(origin.width, origin.height) / 2);
+  const corner = key => clamp(Number.isFinite(Number(radius?.[key])) ? Number(radius[key]) : 0, 0, maxRadius);
+  return `inset(${top}px ${right}px ${bottom}px ${left}px round ${corner('topLeft')}px ${corner('topRight')}px ${corner('bottomRight')}px ${corner('bottomLeft')}px)`;
+}
 export function rectFromPoints(a, b) {
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y) };
 }
