@@ -4,6 +4,8 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
+The prototype **Share** modal has been reconciled with Figma node `16:1915` / modal `15:1636`: it is 504×344px with 24px corners and the 0/0/20px `#00000014` window shadow, uses two exact 424×72px Ice `#F8F8F8` rows at y=120 and y=216, a 40px-high Copy button with 12px corners, and the Figma 32px close control exported locally as `assets/share-modal-close.svg`. The shared blue `:focus-visible` outline is suppressed specifically for this close control; keyboard focus uses the same light Ice background treatment instead. The extra local-sharing explanatory line that was not present in the Figma modal has been removed while the underlying local-link copy behavior remains connected.
+
 The prototype-tile **New** badge has been reconciled with Figma node `15:835` / badge node `16:1900`: it is now positioned 8px from the tile's top/left edges, uses an 8px corner radius, 24px height with 10px horizontal padding, Lime `#CCFF00`, and live **Inter Tight SemiBold 12px** text. The previous outlined `badge-new.svg` rendering is no longer used by prototype tiles.
 
 Prototype tile date sourcing was corrected again after live-app verification. The browser now prefers the stored revision `importedAt` timestamp directly, ahead of API-derived `editedAt`, so an already-running older server process cannot mask the true Dialogue import/publish time with a legacy `createdAt` value. In the current immutable revision model this import/publish timestamp is the authoritative source for the tile's user-facing **Edited** date.
