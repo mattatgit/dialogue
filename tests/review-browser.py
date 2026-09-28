@@ -129,12 +129,13 @@ def run():
                 assert enter_hover['w']=='32px' and enter_hover['opacity']=='1' and enter_hover['label']=='0'
                 page.wait_for_timeout(420)
                 assert 'is-long-hover' in (send.get_attribute('class') or '')
-                enter_long=send.evaluate("""el=>({w:getComputedStyle(el,'::before').width,label:getComputedStyle(el.querySelector('.composer-send-label')).opacity})""")
+                enter_long=send.evaluate("""el=>({w:getComputedStyle(el,'::before').width,label:getComputedStyle(el.querySelector('.composer-send-label')).opacity,text:el.querySelector('.composer-send-label').textContent,title:el.getAttribute('title')})""")
                 assert enter_long['w']=='69px' and enter_long['label']=='1'
+                assert enter_long['text']=='Send' and enter_long['title'] is None
                 send_box=send.bounding_box(); page.mouse.down()
                 assert send.evaluate("el=>getComputedStyle(el,'::before').backgroundColor")=='rgb(205, 209, 205)'
                 page.mouse.move(send_box['x']-10,send_box['y']-10); page.mouse.up()
-                print('PASS comment default/focus/typing, close states and Enter hover/long-hover/click states')
+                print('PASS comment default/focus/typing, close states and Send hover/long-hover/click states')
                 send.click(); page.wait_for_timeout(2400)
                 assert page.locator('[data-reload]').get_attribute('class').find('has-update')>=0
                 assert page.locator('[data-review-title]').inner_text()=='Landline V23.19'
@@ -179,17 +180,19 @@ def run():
                 page.locator('#review-comment').fill('Arrow feedback'); page.locator('.composer-send').click()
                 page.locator('[data-request-cancel]').click(); page.wait_for_timeout(200)
                 assert page.locator('.activity-card').filter(has_text='Simulation cancelled').count()==1; print('PASS canvas-wide arrow, terminal composer and cancel')
-                # Draft is not dropped by changing mode.
+                # Closing/navigating intentionally discards unsent drafts without a browser warning.
                 page.locator('[data-tool=area]').click(); page.mouse.move(b['x']+5,b['y']+5); page.mouse.down(); page.mouse.move(b['x']+30,b['y']+30); page.mouse.up()
-                page.locator('#review-comment').fill('Keep this draft')
-                page.once('dialog', lambda d:d.dismiss()); page.locator('[data-mode-button=test]').click()
-                assert page.locator('#review-comment').input_value()=='Keep this draft'
-                page.once('dialog', lambda d:d.accept()); page.locator('[data-close-comment]').click()
+                page.locator('#review-comment').fill('Discard this draft')
+                page.locator('[data-mode-button=test]').click()
+                assert page.locator('[data-comment-form]').is_hidden()
+                assert page.locator('#review-comment').input_value()==''
+                assert page.locator('[data-mode-button=test]').get_attribute('aria-pressed')=='true'
+                print('PASS frictionless draft discard with no browser dialog')
                 # Spoofed parent message cannot navigate or create a request.
                 title=page.locator('[data-review-title]').inner_text()
                 page.evaluate("window.postMessage({scope:'dialogue-review',type:'restart-shortcut',channel:'bad'},'*')")
                 assert page.locator('[data-review-title]').inner_text()==title
-                print('PASS draft guard and foreign message rejection')
+                print('PASS foreign message rejection')
                 page.screenshot(path=str(target/'dialogue-review-test.png'))
                 settings=context.new_page(); settings.goto(base+'/settings.html'); settings.locator('[name=gridOpacity]').select_option('20')
                 settings.locator('[name=gridSize]').fill('16'); settings.locator('[name=gridSize]').dispatch_event('change')
