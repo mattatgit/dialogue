@@ -12,13 +12,28 @@ export function gridSettings(value = {}) {
 export function chronological(items) {
   return [...items].sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
 }
+function snapRenderedGrid(value, scale, minimum, base = 8) {
+  const step = base * scale;
+  const min = Math.ceil(minimum / step) * step;
+  return Math.max(min, Math.round(value / step) * step);
+}
 export function stageGeometry(width, height, viewport, origin = { x: 0, y: 0 }) {
   const scale = Math.min(1, Math.max(0.25, (width - 48) / viewport.width), Math.max(0.25, (height - 128) / viewport.height));
   const rootWidth = origin.width > 0 ? origin.width : viewport.width;
   const rootHeight = origin.height > 0 ? origin.height : viewport.height;
-  const x = Math.max(24 - origin.x * scale, (width - rootWidth * scale) / 2 - origin.x * scale);
-  const y = Math.max(40 - origin.y * scale, (height - rootHeight * scale) / 2 - 36 - origin.y * scale);
-  return { x, y, scale, gridX: x + origin.x * scale, gridY: y + origin.y * scale };
+  // Centre the visible UI root, then snap that root—not the hidden iframe
+  // gutter—to the rendered 8pt design grid. This avoids half/sub-grid
+  // placement on viewport sizes that do not divide evenly, which is
+  // particularly visible in Safari.
+  const rawGridX = Math.max(24, (width - rootWidth * scale) / 2);
+  const rawGridY = Math.max(40, (height - rootHeight * scale) / 2 - 36);
+  const gridX = snapRenderedGrid(rawGridX, scale, 24);
+  const gridY = snapRenderedGrid(rawGridY, scale, 40);
+  return {
+    x: gridX - origin.x * scale,
+    y: gridY - origin.y * scale,
+    scale, gridX, gridY
+  };
 }
 export function rootClipPath(viewport, origin, radius = {}) {
   if (!validRect(origin) || origin.width <= 0 || origin.height <= 0) return 'none';
