@@ -105,6 +105,8 @@ def run():
                 composer=page.locator('[data-comment-form]'); feedback=page.locator('#review-comment')
                 assert composer.get_attribute('data-state')=='focused'
                 assert composer.evaluate("el=>getComputedStyle(el).borderColor")=='rgb(186, 230, 255)'
+                focus_style=feedback.evaluate("""el=>({outline:getComputedStyle(el).outlineStyle,shadow:getComputedStyle(el).boxShadow})""")
+                assert focus_style['outline']=='none' and focus_style['shadow']=='none'
                 feedback.evaluate("el=>el.blur()"); page.wait_for_timeout(20)
                 assert composer.get_attribute('data-state')=='default'
                 assert composer.evaluate("el=>getComputedStyle(el).borderColor")=='rgb(235, 235, 235)'
