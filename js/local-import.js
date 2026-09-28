@@ -94,10 +94,9 @@
     surface.className = 'proto-surface';
 
     if (isNewest) {
-      const badge = document.createElement('img');
-      badge.className = 'new-badge-img';
-      badge.src = 'assets/badge-new.svg';
-      badge.alt = 'New';
+      const badge = document.createElement('span');
+      badge.className = 'new-badge';
+      badge.textContent = 'New';
       surface.appendChild(badge);
     }
 
