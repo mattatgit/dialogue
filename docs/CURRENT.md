@@ -274,6 +274,20 @@ For the intended product UX, users should not normally paste Git repository URLs
 
 A new Dialogue project can therefore create its backing Git repository behind the scenes, then create/open the initial workspace and run the same preview/agent setup. Git should remain infrastructure under the product rather than something designers must understand. Organization-owned repositories may still require owner/admin approval depending on GitHub App installation and organization policies.
 
+## Project empty-state and Figma context direction — 2026-09-28
+
+Once a Dialogue project has been created but has no prototype/app yet, the project empty state should become the primary creation entry point. It should explain the two initial creation routes and let the user start without understanding Git/OMP internals.
+
+Preferred product framing: expose the routes by **starting material**, not by hard role labels, so the same person can use either path:
+- **Start from prompt** — prompt-first creation for developers, non-designers, product people or anyone starting from an idea.
+- **Start from Figma** — Figma reference + prompt for designer-led creation.
+
+Both routes should create the same underlying Dialogue workspace/project and feed the same AgentSession/OMP execution layer. The distinction is only the context supplied at task start.
+
+Figma should be treated as Dialogue-owned project/task context rather than as an OMP-specific integration. Dialogue should store the Figma reference(s), resolve file/node metadata, and pass the relevant design context to the agent. This also means Figma references must be attachable after project creation, including from the Comment UI. A comment can therefore carry both spatial prototype context (Select/Area/Arrow) and one or more Figma links/frames as design references.
+
+For Stage 1, keep this lightweight: allow paste/add of a Figma URL (file or specific node/frame) in the new-project empty state and in the comment composer. Dialogue parses/stores the reference and supplies it to the agent; richer browsing, multi-file management and sync/version controls can come later. External ChatGPT/Claude entry points should be able to create the same Dialogue tasks/projects and pass Figma references into this same context model rather than creating a separate workflow.
+
 ## Product direction clarified — 2026-09-26
 
 Dialogue's longer-term product direction now includes two primary human workflows over a shared project/workspace engine:
