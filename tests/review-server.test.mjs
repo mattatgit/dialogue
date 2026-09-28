@@ -31,6 +31,7 @@ test('HTTP instrumentation, real import, manifests and persistence', {timeout:15
   assert.equal(await fs.readFile(stored,'utf8'),html);
   const manifest=JSON.parse(await fs.readFile(path.join(data,revision.storageKey,'.dialogue-revision.json'),'utf8'));
   assert.equal(manifest.revision.id,revision.id); assert.equal(manifest.revision.version,'V23.18');
+  assert.equal(revision.editedAt,revision.createdAt);
   const backup=JSON.parse(await fs.readFile(path.join(data,'db.json.bak'),'utf8')); assert.equal(backup.revisions.length,0);
   const url=base+`/prototype-files/${revision.id}/index.html`;
   const plain=await (await fetch(url)).text(); assert.equal(plain,html);
