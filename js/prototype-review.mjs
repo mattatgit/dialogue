@@ -35,8 +35,15 @@ function updateGeometry() {
   if (!active) return;
   const width = scroll.clientWidth, height = scroll.clientHeight;
   const contentWidth = Math.max(width, 220), contentHeight = Math.max(height, 300);
+  // Comment mode opens the activity rail by moving only the canvas's left edge.
+  // Calculate the prototype against the original full canvas width, then offset
+  // it back by the animated left-edge shift. This keeps the prototype fixed in
+  // the browser while the white canvas smoothly becomes narrower behind it.
+  const canvasShift = Math.max(0, canvas.getBoundingClientRect().left - 8);
+  const layoutWidth = Math.max(contentWidth + canvasShift, 220);
   plane.style.width = `${contentWidth}px`; plane.style.height = `${contentHeight}px`;
-  geometry = stageGeometry(contentWidth, contentHeight, viewport, origin);
+  const baseGeometry = stageGeometry(layoutWidth, contentHeight, viewport, origin);
+  geometry = { ...baseGeometry, x: baseGeometry.x - canvasShift, gridX: baseGeometry.gridX - canvasShift };
   Object.assign(host.style, { width: `${viewport.width}px`, height: `${viewport.height}px`,
     left: `${geometry.x}px`, top: `${geometry.y}px`, transform: `scale(${geometry.scale})`,
     clipPath: rootClipPath(viewport, origin, rootRadius) });
