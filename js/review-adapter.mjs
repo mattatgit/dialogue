@@ -50,16 +50,26 @@ export class MockReviewAdapter {
       request.status = 'working'; request.events.push(activity('request_acknowledged', 'Simulated: request accepted')); this.emit();
       await wait(); request.events.push(activity('tool_called', 'Simulated: inspecting ' + (request.base.entryPoint || 'index.html'))); this.emit();
       await wait();
-      const count = this.requests.filter(r => r.result).length + 1;
       request.result = { ...structuredClone(request.base), id: 'sim-' + request.id, sourceRevisionId: request.base.sourceRevisionId || request.base.id,
-        version: 'Demo ' + count, title: 'Demo ' + count + ' (unchanged preview)', simulated: true,
-        createdAt: new Date().toISOString(), requestId: request.id };
+        version: 'Draft', title: 'Draft (simulated, unchanged preview)', simulated: true,
+        createdAt: new Date().toISOString(), requestId: request.id, savedVersion: null, savedAt: null };
       request.status = 'complete'; request.events.push(activity('revision_ready', 'Simulated: preview ready')); this.emit();
     } catch (error) {
       request.status = controller.signal.aborted ? 'cancelled' : 'failed';
       request.error = controller.signal.aborted ? 'Simulation cancelled. No prototype files changed.' : error.message;
       this.emit();
     } finally { this.runs.delete(request.id); }
+  }
+  saveVersion(resultId, version) {
+    const request = this.requests.find(r => r.result?.id === resultId && r.status === 'complete');
+    if (!request || request.result.savedVersion) return null;
+    request.result.savedVersion = String(version || '').trim() || 'V1';
+    request.result.version = request.result.savedVersion;
+    request.result.savedAt = new Date().toISOString();
+    request.result.title = request.result.savedVersion + ' (simulated, unchanged preview)';
+    request.events.push(activity('version_saved', 'Simulation: saved ' + request.result.savedVersion));
+    this.emit();
+    return structuredClone(request.result);
   }
   cancel(id) { this.runs.get(id)?.abort(); }
   retry(id) {
