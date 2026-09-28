@@ -8,7 +8,7 @@ import hashlib, json, os, shutil, socket, subprocess, tempfile, time, urllib.req
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-HTML = '''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;background:transparent;font-family:Arial;font-size:12px;display:flex;justify-content:center;padding-top:25px}.device{width:320px;height:672px;background:#ababab;border-radius:24px;position:relative;padding:24px;box-shadow:0 0 12px #0001}button{cursor:pointer}.title{height:24px;background:#1d1e1d;color:white;border:0;border-radius:8px;width:160px;margin-left:72px;font-size:11px;letter-spacing:1px}.dial{border-radius:50%;width:272px;height:272px;background:#1d1e1d;margin-top:48px;position:relative}.talk{border:0;border-radius:50%;background:#17b239;width:80px;height:80px;position:absolute;left:96px;top:96px;font-size:28px}.status{height:48px;background:#1d1e1d;color:white;border-radius:16px;margin-top:40px;padding:17px}.volume,.meter{background:#1d1e1d;border-radius:16px;height:80px;margin-top:16px;padding:20px;color:white}.meter{background:repeating-linear-gradient(90deg,#17b239 0 8px,transparent 8px 16px),#1d1e1d;background-size:240px 56px,100%;background-repeat:no-repeat;background-position:center}.volume input{width:100%;accent-color:#17b239;margin-top:12px}.slot{position:absolute;width:48px;height:48px;border-radius:50%;background:#070707;left:112px;top:16px}.slot:nth-child(2){left:197px;top:112px}.slot:nth-child(3){left:112px;top:208px}.slot:nth-child(4){left:26px;top:112px}</style></head><body><main class="device" data-dialogue-root><button id="title" class="title">LANDLINE</button><div class="dial"><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><button id="talk" class="talk">0</button></div><div class="status">Ready to talk</div><div class="volume">Volume<input type="range" value="25" aria-label="Volume"></div><div class="meter"></div></main><script>let count=0;document.querySelector('#talk').onclick=e=>e.target.textContent=++count;</script></body></html>'''
+HTML = '''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;background:#111;font-family:Arial;font-size:12px;display:flex;justify-content:center;padding-top:25px}.device{width:320px;height:672px;background:#ababab;border-radius:24px;position:relative;padding:24px;box-shadow:0 0 12px #0001}button{cursor:pointer}.title{height:24px;background:#1d1e1d;color:white;border:0;border-radius:8px;width:160px;margin-left:72px;font-size:11px;letter-spacing:1px}.dial{border-radius:50%;width:272px;height:272px;background:#1d1e1d;margin-top:48px;position:relative}.talk{border:0;border-radius:50%;background:#17b239;width:80px;height:80px;position:absolute;left:96px;top:96px;font-size:28px}.status{height:48px;background:#1d1e1d;color:white;border-radius:16px;margin-top:40px;padding:17px}.volume,.meter{background:#1d1e1d;border-radius:16px;height:80px;margin-top:16px;padding:20px;color:white}.meter{background:repeating-linear-gradient(90deg,#17b239 0 8px,transparent 8px 16px),#1d1e1d;background-size:240px 56px,100%;background-repeat:no-repeat;background-position:center}.volume input{width:100%;accent-color:#17b239;margin-top:12px}.slot{position:absolute;width:48px;height:48px;border-radius:50%;background:#070707;left:112px;top:16px}.slot:nth-child(2){left:197px;top:112px}.slot:nth-child(3){left:112px;top:208px}.slot:nth-child(4){left:26px;top:112px}</style></head><body><main class="device" data-dialogue-root><button id="title" class="title">LANDLINE</button><div class="dial"><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><button id="talk" class="talk">0</button></div><div class="status">Ready to talk</div><div class="volume">Volume<input type="range" value="25" aria-label="Volume"></div><div class="meter"></div></main><script>let count=0;document.querySelector('#talk').onclick=e=>e.target.textContent=++count;</script></body></html>'''
 
 def stage(target):
     shutil.copy2(ROOT / 'server.js', target / 'server.js')
@@ -61,7 +61,9 @@ def run():
                 box=live.locator('[data-dialogue-root]').bounding_box()
                 assert abs(geo['x']+geo['plane']['x']-box['x'])<1
                 assert abs(geo['y']+geo['plane']['y']-box['y'])<1
-                print('PASS grid origin and non-interference')
+                clip=page.locator('.review-frame-host').evaluate("(el)=>el.style.clipPath")
+                assert clip=='inset(25px 25px 25px 25px round 24px 24px 24px 24px)', clip
+                print('PASS grid origin, prototype root clipping and non-interference')
                 # Click through the parent review overlay, not the live DOM target.
                 b=live.locator('#title').bounding_box(); page.mouse.click(b['x']+b['width']/2,b['y']+b['height']/2)
                 page.wait_for_selector('[data-comment-form]:not([hidden])')
@@ -95,13 +97,23 @@ def run():
                 assert page.locator('[data-request-retry]').count()==1
                 page.locator('[data-request-retry]').click(); page.wait_for_timeout(2400)
                 assert page.locator('[data-request-retry]').count()==0; print('PASS area, failure, retry')
-                # Arrow and cancellation.
+                # Arrow can start outside the prototype, points toward the release
+                # target, and places the comment box/terminal ball at the start.
                 page.locator('[data-tool=arrow]').click()
-                b=live.locator('.dial').bounding_box(); page.mouse.move(b['x']+200,b['y']+130); page.mouse.down(); page.mouse.move(b['x']+100,b['y']+100,steps=4); page.mouse.up()
+                hb=page.locator('.review-frame-host').bounding_box(); b=live.locator('.dial').bounding_box()
+                start={'x':hb['x']+hb['width']+40,'y':b['y']+130}
+                end={'x':b['x']+100,'y':b['y']+100}
+                page.mouse.move(start['x'],start['y']); page.mouse.down(); page.mouse.move(end['x'],end['y'],steps=4); page.mouse.up()
                 assert page.locator('[data-anchor-label]').inner_text()=='Arrow'
+                cb=page.locator('[data-comment-form]').bounding_box()
+                assert abs(cb['x']-start['x'])<2
+                assert abs((cb['y']+30)-start['y'])<2
+                line=page.locator('[data-selection-arrow]').evaluate("""el=>{const p=document.querySelector('.review-plane').getBoundingClientRect();return {x:p.x+Number(el.getAttribute('x1')),y:p.y+Number(el.getAttribute('y1')),x2:p.x+Number(el.getAttribute('x2')),y2:p.y+Number(el.getAttribute('y2'))}}""")
+                assert abs(line['x']-start['x'])<2 and abs(line['y']-start['y'])<2
+                assert abs(line['x2']-end['x'])<2 and abs(line['y2']-end['y'])<2
                 page.locator('#review-comment').fill('Arrow feedback'); page.locator('.composer-send').click()
                 page.locator('[data-request-cancel]').click(); page.wait_for_timeout(200)
-                assert page.locator('.activity-card').filter(has_text='Simulation cancelled').count()==1; print('PASS arrow and cancel')
+                assert page.locator('.activity-card').filter(has_text='Simulation cancelled').count()==1; print('PASS canvas-wide arrow, terminal composer and cancel')
                 # Draft is not dropped by changing mode.
                 page.locator('[data-tool=area]').click(); page.mouse.move(b['x']+5,b['y']+5); page.mouse.down(); page.mouse.move(b['x']+30,b['y']+30); page.mouse.up()
                 page.locator('#review-comment').fill('Keep this draft')
