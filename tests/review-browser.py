@@ -102,8 +102,38 @@ def run():
                 page.wait_for_selector('[data-comment-form]:not([hidden])')
                 assert page.locator('[data-anchor-label]').inner_text()=='Selection'
                 assert not page.locator('[data-selection-rect]').get_attribute('hidden') == ''
-                page.locator('#review-comment').fill('Make this heading smaller')
-                page.locator('.composer-send').click(); page.wait_for_timeout(2400)
+                composer=page.locator('[data-comment-form]'); feedback=page.locator('#review-comment')
+                assert composer.get_attribute('data-state')=='focused'
+                assert composer.evaluate("el=>getComputedStyle(el).borderColor")=='rgb(186, 230, 255)'
+                feedback.evaluate("el=>el.blur()"); page.wait_for_timeout(20)
+                assert composer.get_attribute('data-state')=='default'
+                assert composer.evaluate("el=>getComputedStyle(el).borderColor")=='rgb(235, 235, 235)'
+                feedback.focus(); assert composer.get_attribute('data-state')=='focused'
+                close=page.locator('[data-close-comment]')
+                assert close.locator('.close-icon-default').get_attribute('src')=='assets/comment-close-default.svg'
+                assert close.locator('.close-icon-active').get_attribute('src')=='assets/comment-close-active.svg'
+                close.hover(); assert close.evaluate("el=>getComputedStyle(el).backgroundColor")=='rgb(235, 235, 235)'
+                close_box=close.bounding_box(); page.mouse.down()
+                assert close.evaluate("el=>getComputedStyle(el).backgroundColor")=='rgb(205, 209, 205)'
+                page.mouse.move(close_box['x']-10,close_box['y']-10); page.mouse.up()
+                feedback.fill('Make this heading smaller')
+                assert composer.get_attribute('data-state')=='typing'
+                send=page.locator('.composer-send')
+                assert send.locator('.enter-icon-default').get_attribute('src')=='assets/comment-enter-default.svg'
+                assert send.locator('.enter-icon-active').get_attribute('src')=='assets/comment-enter-active.svg'
+                send.hover(); page.wait_for_timeout(80)
+                assert 'is-hovered' in (send.get_attribute('class') or '') and 'is-long-hover' not in (send.get_attribute('class') or '')
+                enter_hover=send.evaluate("""el=>({w:getComputedStyle(el,'::before').width,opacity:getComputedStyle(el,'::before').opacity,label:getComputedStyle(el.querySelector('.composer-send-label')).opacity})""")
+                assert enter_hover['w']=='32px' and enter_hover['opacity']=='1' and enter_hover['label']=='0'
+                page.wait_for_timeout(420)
+                assert 'is-long-hover' in (send.get_attribute('class') or '')
+                enter_long=send.evaluate("""el=>({w:getComputedStyle(el,'::before').width,label:getComputedStyle(el.querySelector('.composer-send-label')).opacity})""")
+                assert enter_long['w']=='69px' and enter_long['label']=='1'
+                send_box=send.bounding_box(); page.mouse.down()
+                assert send.evaluate("el=>getComputedStyle(el,'::before').backgroundColor")=='rgb(205, 209, 205)'
+                page.mouse.move(send_box['x']-10,send_box['y']-10); page.mouse.up()
+                print('PASS comment default/focus/typing, close states and Enter hover/long-hover/click states')
+                send.click(); page.wait_for_timeout(2400)
                 assert page.locator('[data-reload]').get_attribute('class').find('has-update')>=0
                 assert page.locator('[data-review-title]').inner_text()=='Landline V23.19'
                 page.locator('[data-reload]').click(); page.wait_for_timeout(200)
