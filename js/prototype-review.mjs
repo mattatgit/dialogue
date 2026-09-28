@@ -48,6 +48,23 @@ function updateGeometry() {
   Object.assign(host.style, { width: `${viewport.width}px`, height: `${viewport.height}px`,
     left: `${geometry.x}px`, top: `${geometry.y}px`, transform: `scale(${geometry.scale})`,
     clipPath: rootClipPath(viewport, origin, rootRadius) });
+
+  // Use the browser's *rendered* transform geometry for grid registration.
+  // Safari can quantize a transformed iframe and its clip edge slightly
+  // differently from our ideal floating-point calculation. Reading the final
+  // boxes forces the grid phase/spacing to the exact pixels the user sees.
+  const planeRect = plane.getBoundingClientRect();
+  const hostRect = host.getBoundingClientRect();
+  const renderedScale = hostRect.width > 0 ? hostRect.width / viewport.width : geometry.scale;
+  geometry = {
+    ...geometry,
+    x: hostRect.left - planeRect.left,
+    y: hostRect.top - planeRect.top,
+    scale: renderedScale,
+    gridX: hostRect.left - planeRect.left + origin.x * renderedScale,
+    gridY: hostRect.top - planeRect.top + origin.y * renderedScale
+  };
+
   const rootWidth = origin.width > 0 ? origin.width : viewport.width;
   const prototypeCenterX = geometry.gridX + rootWidth * geometry.scale / 2;
   $('.review-tools').style.left = `${prototypeCenterX}px`;
