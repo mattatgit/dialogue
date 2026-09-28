@@ -12,10 +12,13 @@ test('grid input is bounded and colour cannot inject CSS',()=>{
   const result=gridSettings({size:1000,opacity:-1,color:'url(evil)',enabled:true});
   assert.deepEqual(result,{size:64,opacity:0,color:'#BAE6FF',enabled:true});
 });
-test('grid remains registered to actual UI top-left across viewport changes',()=>{
-  for (const size of [[1152,936],[700,600],[375,500]]) {
+test('grid remains registered to actual UI top-left and root snaps to rendered 8pt grid',()=>{
+  for (const size of [[1152,936],[700,600],[375,500],[1496,857],[1711,1029]]) {
     const g=stageGeometry(...size,{width:370,height:722},{x:25,y:25,width:320,height:672});
-    assert.equal(g.gridX,g.x+25*g.scale); assert.equal(g.gridY,g.y+25*g.scale);
+    assert.ok(Math.abs(g.gridX-(g.x+25*g.scale))<1e-9);
+    assert.ok(Math.abs(g.gridY-(g.y+25*g.scale))<1e-9);
+    assert.ok(Math.abs(g.gridX/(8*g.scale)-Math.round(g.gridX/(8*g.scale)))<1e-9);
+    assert.ok(Math.abs(g.gridY/(8*g.scale)-Math.round(g.gridY/(8*g.scale)))<1e-9);
     assert.ok(g.scale<=1 && g.scale>=.25);
   }
 });
