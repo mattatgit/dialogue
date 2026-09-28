@@ -19,6 +19,8 @@ const PROTOTYPE_ROOT = path.join(DATA_ROOT, 'prototypes');
 const REVISION_MANIFEST_NAME = '.dialogue-revision.json';
 const UNZIP_BIN = process.env.DIALOGUE_UNZIP || '/usr/bin/unzip';
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const LANDLINE_DESCRIPTION = 'A simple push-to-talk peer to peer walkie talkie app';
+const LEGACY_LANDLINE_DESCRIPTION = 'A simpler way for households to stay in touch.';
 
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -57,7 +59,7 @@ function initialData() {
         id: 'project-landline',
         slug: 'landline',
         name: 'Landline',
-        description: 'A simpler way for households to stay in touch.',
+        description: LANDLINE_DESCRIPTION,
         createdAt: new Date().toISOString()
       }
     ],
@@ -117,7 +119,13 @@ async function ensureData() {
 async function loadData() {
   await ensureData();
   const raw = await fsp.readFile(DB_PATH, 'utf8');
-  return JSON.parse(raw);
+  const data = JSON.parse(raw);
+  const landline = data.projects?.find((project) => project.slug === 'landline');
+  if (landline?.description === LEGACY_LANDLINE_DESCRIPTION) {
+    landline.description = LANDLINE_DESCRIPTION;
+    await saveData(data);
+  }
+  return data;
 }
 
 async function saveData(data, { backupExisting = true } = {}) {
