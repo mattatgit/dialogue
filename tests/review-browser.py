@@ -49,8 +49,9 @@ def run():
                 page.wait_for_selector('[data-load-state]', state='hidden')
                 live=page.frame_locator('[data-review-frame]')
                 live.locator('#talk').click(); assert live.locator('#talk').inner_text()=='1'
+                assert page.locator('[data-reload]').inner_text().strip()=='Restart'
                 page.locator('[data-reload]').click(); page.wait_for_timeout(200)
-                assert live.locator('#talk').inner_text()=='0'; print('PASS test mode and reset')
+                assert live.locator('#talk').inner_text()=='0'; print('PASS Interact mode and Restart reset')
                 page.locator('[data-grid-toggle]').click()
                 assert page.locator('.review-grid').is_visible()
                 live.locator('#talk').click(); assert live.locator('#talk').inner_text()=='1'
@@ -137,22 +138,40 @@ def run():
                 page.mouse.move(send_box['x']-10,send_box['y']-10); page.mouse.up()
                 print('PASS comment default/focus/typing, close states and Send hover/long-hover/click states')
                 send.click(); page.wait_for_timeout(2400)
-                assert page.locator('[data-reload]').get_attribute('class').find('has-update')>=0
-                assert page.locator('[data-review-title]').inner_text()=='Landline V23.19'
+                assert 'Draft (simulated preview)' in page.locator('[data-review-title]').inner_text()
+                draft=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='Draft')).first
+                assert draft.get_attribute('aria-current')=='true'
+                assert abs(draft.bounding_box()['height']-256)<1
+                assert 'has-update' not in (page.locator('[data-reload]').get_attribute('class') or '')
+                live.locator('#talk').click(); assert live.locator('#talk').inner_text()=='1'
                 page.locator('[data-reload]').click(); page.wait_for_timeout(200)
-                assert 'Demo 1' in page.locator('[data-review-title]').inner_text()
-                assert 'has-update' not in page.locator('[data-reload]').get_attribute('class')
-                assert live.locator('#talk').inner_text()=='0'; print('PASS select, simulated result, no autoswitch, green reload')
-                # Rewind leaves newer cards above the viewport, not reordered.
-                card=page.locator('[data-card-id="fixture-revision-2"]'); card.scroll_into_view_if_needed(); card.click()
-                page.locator('[data-card-load="fixture-revision-2"]').click(); page.wait_for_timeout(200)
+                assert live.locator('#talk').inner_text()=='0'
+                print('PASS successful edit auto-loads as Draft; Restart resets the current state')
+                # Every timeline step navigates directly. Clicking Draft while viewing
+                # history returns to it; clicking the active Draft opens save controls.
+                card=page.locator('[data-card-id="fixture-revision-2"]'); card.scroll_into_view_if_needed(); card.click(); page.wait_for_timeout(200)
                 assert page.locator('[data-review-title]').inner_text()=='Landline V23.17'
                 active_top=page.locator('.activity-card.is-active').bounding_box()['y']
                 assert abs(active_top-page.locator('.review-history').bounding_box()['y'])<3
-                assert page.locator('[data-history-items]').locator('.activity-card').first.get_attribute('data-card-id').startswith('sim-')
                 page.locator('.review-history').evaluate('(el)=>el.scrollTop=0')
-                assert page.locator('[data-history-items]').locator('.activity-card').first.is_visible()
-                print('PASS history rewind, active card at top, newer cards retained')
+                draft=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='Draft')).first
+                draft.click(); page.wait_for_timeout(200)
+                assert 'Draft (simulated preview)' in page.locator('[data-review-title]').inner_text()
+                draft=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='Draft')).first
+                draft.click(); page.wait_for_timeout(50)
+                assert draft.locator('[data-card-save]').inner_text()=='Save version'
+                assert abs(draft.bounding_box()['height']-304)<1
+                draft.locator('[data-card-cancel]').click(); page.wait_for_timeout(50)
+                draft=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='Draft')).first
+                assert draft.locator('[data-card-save]').count()==0
+                draft.click(); draft.locator('[data-card-save]').click(); page.wait_for_timeout(100)
+                draft=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='Draft')).first
+                assert draft.locator('[data-card-save]').inner_text()=='Saved version'
+                page.wait_for_timeout(2100)
+                version=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='V23.20')).first
+                assert version.count()==1 and version.get_attribute('aria-current')=='true'
+                assert 'V23.20 (simulated preview)' in page.locator('[data-review-title]').inner_text()
+                print('PASS Draft navigation, cancel, Save version confirmation and promotion to V23.20')
                 # Area + failure/retry.
                 page.locator('[data-tool=area]').click()
                 b=live.locator('.dial').bounding_box()
@@ -177,9 +196,12 @@ def run():
                 line=page.locator('[data-selection-arrow]').evaluate("""el=>{const p=document.querySelector('.review-plane').getBoundingClientRect();return {x:p.x+Number(el.getAttribute('x1')),y:p.y+Number(el.getAttribute('y1')),x2:p.x+Number(el.getAttribute('x2')),y2:p.y+Number(el.getAttribute('y2'))}}""")
                 assert abs(line['x']-start['x'])<2 and abs(line['y']-start['y'])<2
                 assert abs(line['x2']-end['x'])<2 and abs(line['y2']-end['y'])<2
-                page.locator('#review-comment').fill('Arrow feedback'); page.locator('.composer-send').click()
-                page.locator('[data-request-cancel]').click(); page.wait_for_timeout(200)
-                assert page.locator('.activity-card').filter(has_text='Simulation cancelled').count()==1; print('PASS canvas-wide arrow, terminal composer and cancel')
+                page.locator('#review-comment').fill('Arrow feedback'); page.locator('.composer-send').click(); page.wait_for_timeout(2400)
+                draft=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='Draft')).first
+                edited=page.locator('.activity-card').filter(has=page.locator('.revision-badge',has_text='Edited')).first
+                assert draft.count()==1 and edited.count()>=1
+                assert draft.get_attribute('aria-current')=='true'
+                print('PASS canvas-wide arrow plus Draft/Edited checkpoint labels')
                 # Closing/navigating intentionally discards unsent drafts without a browser warning.
                 page.locator('[data-tool=area]').click(); page.mouse.move(b['x']+5,b['y']+5); page.mouse.down(); page.mouse.move(b['x']+30,b['y']+30); page.mouse.up()
                 page.locator('#review-comment').fill('Discard this draft')
