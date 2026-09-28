@@ -45,7 +45,7 @@ test('HTTP instrumentation, real import, manifests and persistence', {timeout:15
   child.kill(); await once(child,'exit');
   // Existing local project metadata is migrated to the current Landline description on restart.
   const existingDb=JSON.parse(await fs.readFile(path.join(data,'db.json'),'utf8'));
-  existingDb.projects.find(project=>project.slug==='landline').description='A simpler way for households to stay in touch.';
+  existingDb.projects.find(project=>project.slug==='landline').description='A simpler way for households to stay in touch';
   await fs.writeFile(path.join(data,'db.json'),JSON.stringify(existingDb,null,2)+'\n');
   // The saved revision remains readable after restart.
   child=spawn(process.execPath,['server.js'],{cwd:dir,env:{...process.env,HOST:'127.0.0.1',PORT:String(port)},stdio:'ignore'});
