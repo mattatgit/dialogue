@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GRID_DEFAULTS, gridSettings, stageGeometry, rootClipPath, rectFromPoints, safeSelection, reloadTarget, chronological } from '../js/review-model.mjs';
+import { GRID_DEFAULTS, gridSettings, stageGeometry, rootClipPath, rectFromPoints, safeSelection, reloadTarget, nextVersionLabel, chronological } from '../js/review-model.mjs';
 import { MockReviewAdapter } from '../js/review-adapter.mjs';
 const memory = () => { const entries = new Map(); return { getItem:k=>entries.get(k), setItem:(k,v)=>entries.set(k,v) }; };
 const base = {id:'real-revision',version:'V23.18',createdAt:'2026-01-01',entryPoint:'index.html',project:{slug:'landline'},prototype:{id:'prototype'}};
@@ -38,12 +38,18 @@ test('revision order uses timestamps, not decimal-looking version numbers',()=>{
   const revisions=[{id:'a',version:'V99',createdAt:'2026-01-01'},{id:'b',version:'V23.18',createdAt:'2026-01-02'}];
   assert.equal(chronological(revisions)[0].id,'b'); assert.equal(reloadTarget(revisions,'a').id,'b'); assert.equal(reloadTarget(revisions,'b'),null);
 });
+test('next saved version increments the latest numbered checkpoint',()=>{
+  assert.equal(nextVersionLabel([{version:'V23.18',createdAt:'2026-01-01'},{savedVersion:'V23.19',createdAt:'2026-01-02'}]),'V23.20');
+  assert.equal(nextVersionLabel([{version:'V7',createdAt:'2026-01-01'}]),'V8');
+});
 test('simulation creates a labelled output without mutating its base',async()=>{
   const adapter=new MockReviewAdapter('p',memory(),2), copy=structuredClone(input);
   const request=await adapter.createRequest(input); assert.equal(request.result,null);
   await settled(adapter); const result=adapter.listRevisions()[0];
-  assert.equal(result.simulated,true); assert.equal(result.sourceRevisionId,base.id); assert.match(result.version,/^Demo /);
-  assert.deepEqual(input,copy); assert.equal(adapter.listRequests()[0].status,'complete'); adapter.dispose();
+  assert.equal(result.simulated,true); assert.equal(result.sourceRevisionId,base.id); assert.equal(result.version,'Draft');
+  assert.deepEqual(input,copy); assert.equal(adapter.listRequests()[0].status,'complete');
+  const saved=adapter.saveVersion(result.id,'V23.19'); assert.equal(saved.savedVersion,'V23.19'); assert.equal(saved.version,'V23.19');
+  assert.equal(adapter.listRevisions()[0].savedVersion,'V23.19'); adapter.dispose();
 });
 test('failure leaves no output badge; retry returns a simulated result',async()=>{
   const adapter=new MockReviewAdapter('p',memory(),2);
