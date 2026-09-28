@@ -47,6 +47,16 @@ export function safeSelection(value) {
     scroll: { x: clamp(value.scroll?.x, 0, 100000), y: clamp(value.scroll?.y, 0, 100000) }
   };
 }
+export function nextVersionLabel(revisions = []) {
+  const latest = chronological(revisions.filter(r => r && (r.savedVersion || r.version)))
+    .find(r => /^V\d+(?:\.\d+)?$/.test(String(r.savedVersion || r.version || '')));
+  const label = String(latest?.savedVersion || latest?.version || '');
+  let match = label.match(/^V(\d+)\.(\d+)$/);
+  if (match) return `V${match[1]}.${Number(match[2]) + 1}`;
+  match = label.match(/^V(\d+)$/);
+  if (match) return `V${Number(match[1]) + 1}`;
+  return 'V1';
+}
 export function reloadTarget(revisions, activeId) {
   const latest = chronological(revisions)[0];
   return latest && latest.id !== activeId ? latest : null;
