@@ -55,6 +55,10 @@ def run():
                 assert page.locator('.review-grid').is_visible()
                 live.locator('#talk').click(); assert live.locator('#talk').inner_text()=='1'
                 switch_before=page.locator('.review-mode-switch').bounding_box()
+                assert abs(switch_before['width']-200)<1
+                assert page.locator('[data-mode-button=test]').inner_text().strip()=='Interact'
+                assert abs(page.locator('[data-mode-button=test]').bounding_box()['width']-88)<1
+                assert abs(page.locator('[data-mode-button=comment]').bounding_box()['width']-88)<1
                 prototype_before=page.locator('.review-frame-host').bounding_box()
                 canvas_before=page.locator('.review-canvas').bounding_box()
                 page.locator('[data-mode-button=comment]').click(); page.wait_for_timeout(160)
