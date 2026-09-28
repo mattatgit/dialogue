@@ -96,7 +96,7 @@ For the intended post-simulation integration, Activity remains both the work log
 ## Remaining before merge
 
 - Matt/Saori review of the real browser interactions and Figma fidelity.
-- Final empty-state illustration pass: layouts currently use line-icon placeholders, not the clay raster illustrations. Core Reload/Share/Grid/Dialogue icons use exported Figma geometry; other small utility icons are provisional.
+- Final empty-state illustration pass: layouts currently use line-icon placeholders, not the clay raster illustrations. Core Restart/Share/Grid/Dialogue icons use exported Figma geometry; other small utility icons are provisional.
 - End-to-end Safari/Chromium checks, including actual Landline selectors, nested scrolling, viewport resizing, keyboard access and draft handling.
 - Easier live LLM connector integration; real request persistence/progress and publishing are not implemented by the mock.
 - Design-system import, public sharing, team permissions and production authentication remain deferred.
