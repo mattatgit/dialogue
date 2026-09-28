@@ -44,8 +44,7 @@ Workspaces have no database table: `git worktree list --porcelain` on the bare m
 Requirements:
 
 - Node.js 22+
-- `git`, `ttyd`, `tmux` on PATH — the Nix devshell provides them
-- `omp` (oh-my-pi) on PATH — your own install; the devshell deliberately does not provide it
+- `git`, `ttyd`, `tmux` and `omp` (oh-my-pi) on PATH — the Nix devshell provides them; outside it, install omp yourself
 - whatever the projects' previews run, e.g. `node`/`npm` (devshell and Nix package provide Node.js); Chromium for screenshots is optional (devshell provides it)
 
 Start with one of:

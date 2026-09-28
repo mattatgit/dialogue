@@ -1,4 +1,4 @@
-{ pkgs }:
+{ pkgs, omp }:
 let
   # Tools the app shells out to. nixpkgs' Chromium is Linux-only; on macOS
   # server/preview.js falls back to /Applications/{Google Chrome,Chromium}.app.
@@ -9,6 +9,7 @@ let
     pkgs.ttyd
     pkgs.tmux
     pkgs.openssh
+    omp
   ] ++ pkgs.lib.optional (pkgs.lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.chromium) pkgs.chromium;
   dev = pkgs.writeShellApplication {
     name = "dev";
@@ -21,7 +22,7 @@ let
       #                            open tabs when html/css/js/assets change
       #
       # PORT overrides the public port; OPEN=0 skips launching the browser.
-      # omp is taken from your own PATH (or DIALOGUE_OMP). DIALOGUE_SEED
+      # omp comes from the devshell (DIALOGUE_OMP overrides). DIALOGUE_SEED
       # defaults to the repo's seed.json (Landline) so a fresh data dir has
       # a project to open.
       port="''${PORT:-8080}"

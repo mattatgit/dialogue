@@ -15,7 +15,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "Dialogue package providing bin/dialogue-server (built with the omp package on PATH).";
+      description = "Dialogue package providing bin/dialogue-server (the flake's default package, with omp on PATH).";
     };
 
     port = lib.mkOption {

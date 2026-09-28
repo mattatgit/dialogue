@@ -1,7 +1,6 @@
 # The app: static UI files plus server.js (Node builtins only, no npm deps).
 # Runtime tools (git, ttyd, tmux, ssh, and node/npm for project preview
-# servers) are put on PATH by the wrapper; omp is optional here because
-# developers normally run their own.
+# servers) and omp, the agent, are put on PATH by the wrapper.
 {
   lib,
   stdenvNoCC,
@@ -11,7 +10,7 @@
   tmux,
   openssh,
   makeWrapper,
-  omp ? null,
+  omp,
 }:
 stdenvNoCC.mkDerivation {
   pname = "dialogue";
@@ -37,7 +36,7 @@ stdenvNoCC.mkDerivation {
     cp -r . $out/share/dialogue
     makeWrapper ${lib.getExe nodejs} $out/bin/dialogue-server \
       --add-flags $out/share/dialogue/server.js \
-      --prefix PATH : ${lib.makeBinPath ([ nodejs git ttyd tmux openssh ] ++ lib.optional (omp != null) omp)}
+      --prefix PATH : ${lib.makeBinPath ([ nodejs git ttyd tmux openssh omp ])}
   '';
 
   meta.mainProgram = "dialogue-server";

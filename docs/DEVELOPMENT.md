@@ -12,9 +12,9 @@ The immediate goal is still not a production framework/database/hosting migratio
 
 ## Local development (Nix)
 
-The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium (screenshots; Linux only — on macOS Dialogue uses `/Applications/Google Chrome.app` or `Chromium.app` if installed) and the live-reloading `dev` command. The shell works on `x86_64-linux`, `aarch64-linux`, `x86_64-darwin` and `aarch64-darwin`. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
+The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium (screenshots; Linux only — on macOS Dialogue uses `/Applications/Google Chrome.app` or `Chromium.app` if installed) and the live-reloading `dev` command. The shell works on `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
 
-`omp` is deliberately **not** in the devshell: Dialogue uses the developer's own `omp` on PATH so the agent, its profiles and its login are the ones you already use.
+The devshell also provides `omp` from the `llm-agents` flake input: the terminal, preview setup, model sign-in and COMMIT all run it. It reads the usual `~/.omp` profiles and login, so an existing setup carries over; `DIALOGUE_OMP` points Dialogue at a different binary. The flake has no `x86_64-darwin` outputs because `llm-agents` has no omp there. On macOS the flake builds omp without its `--smoke-test` install check, which fails inside the Nix build sandbox (the binary passes it outside); `flake.nix` asserts the patched line still exists, so an upstream change fails evaluation instead of silently re-enabling it.
 
 With [direnv](https://direnv.net) installed, `direnv allow` once in the repo root; the shell then loads automatically. Without direnv, use `nix develop`.
 
@@ -40,9 +40,9 @@ OPEN=0 dev       # don't launch a browser
 
 ### Hosted build: NixOS module and demo VM
 
-Nix files live under `nix/`: `package.nix` (the app + `bin/dialogue-server`; the wrapper prefixes PATH with `nodejs` (so preview servers find `node`/`npm`), `git`, `ttyd`, `tmux`, `openssh` and, when given, `omp`), `module.nix` (NixOS module), `vm.nix` (demo VM), `devshell.nix`.
+Nix files live under `nix/`: `package.nix` (the app + `bin/dialogue-server`; the wrapper prefixes PATH with `nodejs` (so preview servers find `node`/`npm`), `git`, `ttyd`, `tmux`, `openssh` and `omp`), `module.nix` (NixOS module), `vm.nix` (demo VM), `devshell.nix`.
 
-`flake.nix` has an input `llm-agents` (`git+https://github.com/numtide/llm-agents.nix?shallow=1`, nixpkgs follows) which provides the `omp` package for the VM.
+`flake.nix` has an input `llm-agents` (`git+https://github.com/numtide/llm-agents.nix?shallow=1`, nixpkgs follows) which provides the `omp` package for the devshell, the default package and the VM.
 
 `nixosModules.default` provides `services.dialogue`: a systemd service (`DynamicUser`, data in `/var/lib/dialogue` via `DIALOGUE_DATA`, `HOME=/var/lib/dialogue/home`, Node bound to `127.0.0.1:<port>`), an optional `services.dialogue.environmentFile` (systemd `EnvironmentFile`, missing file tolerated) for secrets such as `OPENROUTER_API_KEY`, `services.dialogue.seedProjects` (`[{ url }]`, written to `DIALOGUE_SEED`), `services.dialogue.previewDomain` (sets `DIALOGUE_PREVIEW_DOMAIN`; needs wildcard DNS, and a wildcard certificate for HTTPS; when null previews use `<token>.preview.localhost`, which only works from the host or through a forwarded localhost port such as the demo VM's), and with `services.dialogue.nginx.enable` an nginx virtual host proxying to it with WebSockets enabled, buffering off, a 1 h read timeout, `proxy_set_header Host $http_host` and `X-Forwarded-Proto`, and `serverAliases` `*.preview.localhost` (plus `*.<previewDomain>`) so preview origins reach Node. No authentication yet.
 
@@ -84,8 +84,7 @@ The intended collaboration remains:
 Requirements:
 
 - Node.js 22+
-- `git`, `ttyd`, `tmux` on PATH (devshell)
-- `omp` on PATH
+- `git`, `ttyd`, `tmux`, `omp` on PATH (devshell)
 
 Start with `dev`, `npm start` or `Start Dialogue.command` (which checks for `git`/`ttyd`/`tmux`/`omp` before starting). Open `http://127.0.0.1:8080` (`dev`) or `http://127.0.0.1:4173`.
 

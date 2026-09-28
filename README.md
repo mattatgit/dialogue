@@ -24,8 +24,7 @@ The next milestone is the first **real designer-driven change** made through the
 Requirements:
 
 - Node.js 22 or newer
-- `git`, `ttyd` and `tmux` on PATH (the Nix devshell provides these)
-- `omp` (oh-my-pi) on PATH — the developer's own install; the devshell deliberately does not provide it
+- `git`, `ttyd`, `tmux` and `omp` (oh-my-pi) on PATH — the Nix devshell provides all four (omp from the `llm-agents` flake input); outside it, install omp yourself
 - whatever the previewed projects need, typically `node`/`npm`; Chromium (optional) for card and tile screenshots — the devshell provides both
 
 Start Dialogue in one of these ways:

@@ -1,7 +1,7 @@
 # Headless QEMU VM hosting Dialogue behind nginx. Guest :80 is forwarded to
 # host 127.0.0.1:8483, guest :22 to host 127.0.0.1:2222 (ssh root@localhost
 # -p 2222, empty password — demo VM only). services.dialogue.package is
-# supplied by flake.nix so omp from the llm-agents input is on the PATH.
+# supplied by flake.nix (its default package, with omp on the PATH).
 { modulesPath, pkgs, ... }:
 let
   hostPort = 8483;
