@@ -20,7 +20,10 @@ const REVISION_MANIFEST_NAME = '.dialogue-revision.json';
 const UNZIP_BIN = process.env.DIALOGUE_UNZIP || '/usr/bin/unzip';
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const LANDLINE_DESCRIPTION = 'A simple push-to-talk peer to peer walkie talkie app';
-const LEGACY_LANDLINE_DESCRIPTION = 'A simpler way for households to stay in touch.';
+const LEGACY_LANDLINE_DESCRIPTIONS = new Set([
+  'A simpler way for households to stay in touch',
+  'A simpler way for households to stay in touch.'
+]);
 
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -121,7 +124,7 @@ async function loadData() {
   const raw = await fsp.readFile(DB_PATH, 'utf8');
   const data = JSON.parse(raw);
   const landline = data.projects?.find((project) => project.slug === 'landline');
-  if (landline?.description === LEGACY_LANDLINE_DESCRIPTION) {
+  if (landline && LEGACY_LANDLINE_DESCRIPTIONS.has(String(landline.description || '').trim())) {
     landline.description = LANDLINE_DESCRIPTION;
     await saveData(data);
   }
