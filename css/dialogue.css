@@ -81,9 +81,9 @@ button,.pill,.signin-button,.apply,.viewer-restart{
 @media (hover:hover) and (pointer:fine){.proto-tile:hover{box-shadow:0 16px 34px -14px rgba(0,0,0,.22);transform:scale(1.02)}}
 .proto-preview{height:208px;display:flex;align-items:flex-start;justify-content:center;padding-top:16px;overflow:hidden}
 .landline-proto-img{display:block;width:135px;height:264px;object-fit:contain}
-.proto-info{position:absolute;display:block;left:0;right:0;bottom:0;height:72px;background:#fff;padding:18px 16px}
+.proto-info{position:absolute;display:block;left:0;right:0;bottom:0;height:72px;background:var(--ice);padding:18px 16px}
 .proto-name{display:block;font-weight:600;margin-bottom:5px}.proto-time{display:block;font-size:12px;color:var(--mid)}
-.new-badge{position:absolute;z-index:2;top:16px;left:16px;background:var(--lime);color:#000;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700}
+.new-badge{position:absolute;z-index:2;top:8px;left:8px;height:24px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;background:var(--lime);color:#000;border-radius:8px;font-family:"Inter Tight",Inter,Arial,sans-serif;font-size:12px;font-weight:600;line-height:normal;white-space:nowrap}
 
 /* CSS miniature of Landline: representative content only */
 .landline-mini{width:135px;height:264px;background:#aaa;border-radius:11px;padding:12px 10px;position:relative;box-shadow:0 0 8px rgba(0,0,0,.1)}
@@ -145,7 +145,6 @@ button,.pill,.signin-button,.apply,.viewer-restart{
 .project-badge-img{width:64px;height:64px;display:block}
 .project-heart-img{position:absolute;right:24px;top:24px;width:32px;height:32px}
 .upload-box-img{width:88px;height:88px;display:block}
-.new-badge-img{position:absolute;z-index:2;top:16px;left:16px;width:47px;height:24px}
 .tile-menu{position:absolute;right:16px;top:20px;width:32px;height:32px}
 .proto-info{padding-right:56px}
 .uploaded-project-badge{border-radius:16px;object-fit:cover}

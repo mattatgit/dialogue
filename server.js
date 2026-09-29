@@ -19,6 +19,11 @@ const PROTOTYPE_ROOT = path.join(DATA_ROOT, 'prototypes');
 const REVISION_MANIFEST_NAME = '.dialogue-revision.json';
 const UNZIP_BIN = process.env.DIALOGUE_UNZIP || '/usr/bin/unzip';
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const LANDLINE_DESCRIPTION = 'A simple push-to-talk peer to peer walkie talkie app';
+const LEGACY_LANDLINE_DESCRIPTIONS = new Set([
+  'A simpler way for households to stay in touch',
+  'A simpler way for households to stay in touch.'
+]);
 
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -57,7 +62,7 @@ function initialData() {
         id: 'project-landline',
         slug: 'landline',
         name: 'Landline',
-        description: 'A simpler way for households to stay in touch.',
+        description: LANDLINE_DESCRIPTION,
         createdAt: new Date().toISOString()
       }
     ],
@@ -117,7 +122,13 @@ async function ensureData() {
 async function loadData() {
   await ensureData();
   const raw = await fsp.readFile(DB_PATH, 'utf8');
-  return JSON.parse(raw);
+  const data = JSON.parse(raw);
+  const landline = data.projects?.find((project) => project.slug === 'landline');
+  if (landline && LEGACY_LANDLINE_DESCRIPTIONS.has(String(landline.description || '').trim())) {
+    landline.description = LANDLINE_DESCRIPTION;
+    await saveData(data);
+  }
+  return data;
 }
 
 async function saveData(data, { backupExisting = true } = {}) {
@@ -210,6 +221,7 @@ function joinedRevision(data, revision) {
   const project = prototype && data.projects.find((item) => item.id === prototype.projectId);
   return {
     ...revision,
+    editedAt: revision.editedAt || revision.importedAt || revision.createdAt || null,
     prototype: prototype
       ? { id: prototype.id, name: prototype.name, slug: prototype.slug }
       : null,
@@ -397,7 +409,7 @@ async function importPrototype(req, res, projectSlug, url) {
   }
 }
 
-async function servePrototypeFile(res, revisionId, requestedRelativePath) {
+async function servePrototypeFile(res, revisionId, requestedRelativePath, reviewChannel = null) {
   const data = await loadData();
   const revision = data.revisions.find((item) => item.id === revisionId);
   if (!revision) throw new HttpError(404, 'Prototype revision not found.');
@@ -438,7 +450,26 @@ async function servePrototypeFile(res, revisionId, requestedRelativePath) {
 
   if (!stat.isFile()) throw new HttpError(404, 'Prototype file not found.');
 
+  // Review instrumentation is response-only. Never rewrite an imported revision.
+  // Keep the iframe sandbox opaque; the helper reports bounded selection geometry
+  // through postMessage instead of granting the parent same-origin DOM access.
   const contentType = MIME_TYPES.get(path.extname(absolute).toLowerCase()) || 'application/octet-stream';
+  if (contentType.startsWith('text/html') && /^[a-f0-9]{32}$/.test(reviewChannel || '') && stat.size <= 5 * 1024 * 1024) {
+    const html = await fsp.readFile(absolute, 'utf8');
+    const helper = `<script src="/js/prototype-review-bridge.js" data-review-channel="${reviewChannel}"></script>`;
+    const instrumented = /<head(?:\s[^>]*)?>/i.test(html)
+      ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => head + helper)
+      : helper + html;
+    const body = Buffer.from(instrumented);
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': body.length,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff'
+    });
+    res.end(body);
+    return;
+  }
   res.writeHead(200, {
     'Content-Type': contentType,
     'Content-Length': stat.size,
@@ -519,7 +550,7 @@ async function handleApi(req, res, url) {
     );
     const revisions = data.revisions
       .filter((revision) => prototypeIds.has(revision.prototypeId))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .sort((a, b) => new Date(b.editedAt || b.importedAt || b.createdAt) - new Date(a.editedAt || a.importedAt || a.createdAt))
       .map((revision) => joinedRevision(data, revision));
     sendJson(res, 200, { project, revisions });
     return true;
@@ -556,7 +587,7 @@ async function requestHandler(req, res) {
 
     const prototypeMatch = /^\/prototype-files\/([^/]+)(?:\/(.*))?$/.exec(url.pathname);
     if (req.method === 'GET' && prototypeMatch) {
-      await servePrototypeFile(res, decodeURIComponent(prototypeMatch[1]), prototypeMatch[2] || '');
+      await servePrototypeFile(res, decodeURIComponent(prototypeMatch[1]), prototypeMatch[2] || '', url.searchParams.get('reviewChannel'));
       return;
     }
 
