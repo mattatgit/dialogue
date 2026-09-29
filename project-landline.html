@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="css/dialogue.css">
   <link rel="stylesheet" href="css/local-functional.css">
   <link rel="stylesheet" href="css/review-shared.css">
+  <link rel="stylesheet" href="css/create-prototype.css">
 </head>
 <body class="updated-ui">
   <div class="app-shell">
@@ -25,15 +26,52 @@
           <svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg>
           <span class="crumb-current">Landline</span>
         </h1>
-        <button class="pill" type="button" data-import-open>Import</button>
+        <button class="review-button primary project-create-button" type="button" data-create-open>Create</button>
       </header>
-      <div class="page-surface"><section class="grid" data-prototype-grid>
-        <!-- Existing local import/viewer behavior is preserved. -->
-        <a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><span class="new-badge">New</span><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V19</span><span class="proto-time">Edited 2:35pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a>
-        <a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V18</span><span class="proto-time">Edited 2:18pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a>
-      </section></div>
+      <div class="page-surface">
+        <section class="grid" data-prototype-grid>
+          <!-- Existing local import/viewer behavior is preserved. -->
+          <a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><span class="new-badge">New</span><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V19</span><span class="proto-time">Edited 2:35pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a>
+          <a class="proto-tile" href="prototype-landline-v19.html"><span class="proto-surface"><span class="proto-preview"><img class="landline-proto-img" src="assets/landline-proto.png" alt="Landline prototype preview"></span><span class="proto-info"><span class="proto-name">Landline V18</span><span class="proto-time">Edited 2:18pm yesterday</span><img class="tile-menu" src="assets/tile-menu.svg" alt=""></span></span></a>
+        </section>
+        <section class="project-prototype-empty" data-prototype-empty hidden aria-label="No prototypes">
+          <img src="assets/prototype-empty.png" width="180" height="180" alt="">
+          <p>This project doesn’t have a prototype yet.<br>Click Create to start from an idea, or use an existing design</p>
+        </section>
+      </div>
     </main>
   </div>
+  <div class="modal-layer create-prototype-layer" data-create-layer aria-hidden="true">
+    <section class="modal create-prototype-modal" role="dialog" aria-modal="true" aria-labelledby="create-prototype-title">
+      <button class="create-prototype-close" type="button" aria-label="Close create prototype" data-create-close><img src="assets/share-modal-close.svg" alt="" aria-hidden="true"></button>
+      <h2 id="create-prototype-title">Create a prototype</h2>
+      <form data-create-form>
+        <div class="create-prototype-section">
+          <label class="create-prototype-label" for="create-prototype-prompt">Describe what you want to create</label>
+          <div id="create-prototype-prompt" class="create-prompt-editor" contenteditable="true" role="textbox" aria-multiline="true" data-create-prompt data-placeholder="Make a fantastical machine" data-empty="true" spellcheck="true"></div>
+          <textarea class="sr-only" name="prompt" data-create-prompt-value tabindex="-1" aria-hidden="true"></textarea>
+        </div>
+        <div class="create-prototype-section create-design-section">
+          <label class="create-prototype-label" for="create-figma-link">Add a design file</label>
+          <div class="create-design-field" data-create-design-field>
+            <input id="create-figma-link" type="url" inputmode="url" autocomplete="off" placeholder="Paste a Figma link here if you have one" data-create-figma-input>
+            <div class="create-figma-chip" data-create-figma-chip hidden>
+              <img class="create-figma-icon" src="assets/figma-icon.svg" alt="" aria-hidden="true">
+              <span data-create-figma-label>Figma design</span>
+              <button type="button" class="create-chip-remove" data-create-figma-remove aria-label="Remove Figma design"><img src="assets/create-chip-close.svg" alt="" aria-hidden="true"></button>
+            </div>
+            <input type="hidden" name="figmaUrl" data-create-figma-value>
+          </div>
+        </div>
+        <div class="create-prototype-actions">
+          <button class="create-prototype-action create-prototype-cancel" type="button" data-create-cancel>Cancel</button>
+          <button class="create-prototype-action create-prototype-submit" type="submit" data-create-submit disabled>Create prototype</button>
+        </div>
+        <div class="sr-only" aria-live="polite" data-create-status></div>
+      </form>
+    </section>
+  </div>
+  <button type="button" data-import-open hidden tabindex="-1" aria-hidden="true">Import</button>
   <div class="modal-layer import-prototype-layer" data-import-layer aria-hidden="true">
     <section class="modal import-prototype-modal" role="dialog" aria-modal="true" aria-labelledby="import-prototype-title">
       <button class="modal-close" type="button" aria-label="Close import dialog" data-import-close>&#215;</button>
@@ -47,5 +85,5 @@
       </form>
     </section>
   </div>
-  <script src="js/dialogue.js"></script><script src="js/local-import.js"></script><script type="module" src="js/review-shell.mjs"></script>
+  <script src="js/dialogue.js"></script><script src="js/local-import.js"></script><script src="js/create-prototype.js"></script><script type="module" src="js/review-shell.mjs"></script>
 </body></html>
