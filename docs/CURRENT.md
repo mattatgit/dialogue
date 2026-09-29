@@ -4,6 +4,16 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
+### Create prototype UI implemented — 2026-09-29
+
+Figma node `79:6629` is now implemented on the Landline project view. The top-right action is **Create**; projects with no stored revisions show the exact 180×180 Figma empty-state artwork and copy. Create opens the designed 504×664px **Create a prototype** modal with the 424×264 prompt editor, optional 424×72 Figma-link field, 208×56 Cancel/Create actions, the existing 32px modal-close asset, and the app's established hover/focus/disabled interaction treatment. The Create CTA remains disabled until there is prompt content; the optional Figma field must be empty or valid if present.
+
+The prompt field is a lightweight rich Markdown editor for the agreed first-pass subset: bold, italic, headings (H1–H3), bulleted lists, numbered lists, links, and line breaks. Markdown typed or pasted into the field is rendered in place with syntax characters hidden while the underlying Markdown source is preserved in the form value. Formatting can be removed from the keyboard at its boundary (Backspace/Delete), restoring plain content rather than trapping invisible syntax. Pasted multi-line Markdown is rendered immediately.
+
+Valid Figma URLs pasted into **Add a design file** are converted into the designed attachment chip using the exact Figma icon exported from node `79:6929` and the exact 16px chip-close export from node `79:6936`. The chip stores the original URL and can be removed to return to the URL field. The empty-state illustration is the exact node `79:6655` export.
+
+This remains the pre-architecture-integration UI milestone: submitting the form emits a browser event, `dialogue:create-prototype`, carrying `{ project, prompt, figmaUrl }` and then closes the modal. It does not yet create a Git workspace/prototype. The event is the intended hand-off point for the forthcoming OMP/Git integration from Dave's architecture.
+
 ### Create prototype flow — Figma node `79:6629`
 
 The project-level **Create** flow is now defined in Figma. An empty project shows a centered prototype-empty illustration and the message “This project doesn’t have a prototype yet. Click Create to start from an idea, or use an existing design.” The same top-right **Create** action is available when prototypes already exist.
