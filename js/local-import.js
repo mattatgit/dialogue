@@ -8,6 +8,7 @@
   const fileName = document.querySelector('[data-import-file-name]');
   const status = document.querySelector('[data-import-status]');
   const grid = document.querySelector('[data-prototype-grid]');
+  const emptyState = document.querySelector('[data-prototype-empty]');
   const versionField = form?.querySelector('[name="version"]');
   const nameField = form?.querySelector('[name="prototypeName"]');
   const submitButton = form?.querySelector('[type="submit"]');
@@ -154,9 +155,14 @@
 
       if (revisions.length) {
         grid.replaceChildren(...revisions.map((revision, index) => buildTile(revision, index === 0)));
+        if (emptyState) emptyState.hidden = true;
         updateSuggestedVersion(revisions);
         refreshEditedLabels();
+      } else {
+        grid.replaceChildren();
+        if (emptyState) emptyState.hidden = false;
       }
+      window.dispatchEvent(new CustomEvent('dialogue:revisions-loaded', { detail: { count: revisions.length } }));
       return true;
     } catch {
       return false;
