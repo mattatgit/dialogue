@@ -437,7 +437,7 @@
   }
 
   const resetForm = () => {
-    editor.replaceChildren();
+    renderMarkdown('');
     editor.dataset.empty = 'true';
     if (promptValue) promptValue.value = '';
     removeFigma({ focus: false });
@@ -468,6 +468,10 @@
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) finish();
     else window.setTimeout(finish, 100);
   };
+
+  editor.addEventListener('click', (event) => {
+    if (event.target.closest('a')) event.preventDefault();
+  });
 
   editor.addEventListener('input', () => {
     transformBlockPrefix();
@@ -571,15 +575,16 @@
     event.preventDefault();
     const markdown = updatePromptState().trim();
     if (!markdown || submitButton.disabled) return;
+    const submittedFigma = attachedFigma || parseFigmaUrl(figmaInput?.value);
     const detail = {
       project: 'landline',
       prompt: markdown,
-      figmaUrl: attachedFigma?.url || null
+      figmaUrl: submittedFigma?.url || null
     };
     window.dispatchEvent(new CustomEvent('dialogue:create-prototype', { detail }));
     if (status) status.textContent = 'Prototype creation request ready.';
     closeModal();
   });
 
-  updatePromptState();
+  renderMarkdown('');
 })();
