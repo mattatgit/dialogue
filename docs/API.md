@@ -38,6 +38,8 @@ All routes bind to `127.0.0.1` in the local build. In the VM nginx proxies them,
 | `POST /api/agent/login/:id/input` body `{ value }` | answers the pending `input` prompt. `202`; `400` empty; `409` when nothing is being asked yet |
 | `DELETE /api/agent/login/:id` | cancels the sign-in and kills its omp child |
 
+On startup and forced readiness checks, if the selected provider has no sign-in, Dialogue looks for models from other authenticated providers. When exactly one other provider is available, it selects one of its models, saves the choice to `<data>/agent.json` and probes it before reporting readiness. It does not guess between multiple signed-in providers or switch away from a provider whose sign-in exists but whose probe fails; choose a model in Settings in those cases. This also picks up sign-ins made directly in omp outside Dialogue.
+
 Workspace `id` is `<slug>/<encodeURIComponent(ref)>`, so it appears URL-encoded in paths. `open` on a ref means a worktree already exists for it.
 
 ## Error semantics

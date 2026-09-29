@@ -221,6 +221,24 @@ test('a designer signs in to a model provider from the web UI and the agent beco
   assert.ok(models.body.models.some((entry) => entry.id === 'fake-cloud/fake-model'));
   assert.ok(!models.body.models.some((entry) => entry.provider === 'dialogue-bootstrap'));
 
+  // A fresh Dialogue data directory must discover an omp sign-in completed
+  // elsewhere instead of remaining on the unsigned-in OpenRouter default.
+  const freshData = path.join(tmp, 'fresh-data');
+  const freshPort = await freePort();
+  const fresh = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
+    cwd: tmp, env: { ...env, DIALOGUE_DATA: freshData, PORT: String(freshPort) }, stdio: ['ignore', 'pipe', 'pipe']
+  });
+  t.after(async () => {
+    fresh.kill('SIGTERM');
+    await new Promise((resolve) => fresh.on('exit', resolve));
+  });
+  const freshBase = `http://127.0.0.1:${freshPort}`;
+  await waitForServer(freshBase, fresh);
+  const discovered = await api(freshBase, 'POST', '/api/agent/check');
+  assert.equal(discovered.body.status.ready, true, JSON.stringify(discovered.body));
+  assert.equal(discovered.body.model, 'fake-cloud/fake-model');
+  assert.deepEqual(JSON.parse(await fsp.readFile(path.join(freshData, 'agent.json'), 'utf8')), { model: 'fake-cloud/fake-model' });
+
   // 6. The provider starts rejecting the key.
   provider.state.mode = 'reject';
   const rejected = await api(base, 'POST', '/api/agent/check');

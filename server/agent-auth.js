@@ -293,14 +293,28 @@ class AgentAuth extends EventEmitter {
   }
 
   async probe() {
-    const model = this.model;
+    let model = this.model;
     const checkedAt = () => new Date().toISOString();
     if (!model) return { ready: false, reason: 'unknown', detail: 'No model is configured.', model: null, checkedAt: checkedAt() };
     return this.withEmptyCwd(async (cwd) => {
       const provider = model.split('/')[0];
       const presence = await this.runOmp(['token', provider], { cwd, timeoutMs: PROBE_TIMEOUT_MS });
       if (presence.code !== 0) {
-        return { ready: false, reason: 'not-connected', detail: `No sign-in for ${provider} yet.`, model, checkedAt: checkedAt() };
+        // A sign-in may have happened in omp outside Dialogue. Only switch
+        // when one other provider has available models; never guess between accounts.
+        let available = [];
+        try {
+          available = await this.models();
+        } catch {
+          // Keep the original "not connected" status if discovery is unavailable.
+        }
+        const providers = [...new Set(available.map((entry) => entry.provider).filter((id) => id !== provider))];
+        const picked = providers.length === 1 ? AgentAuth.pickModel(available, providers[0]) : null;
+        if (!isModelId(picked) || (await this.runOmp(['token', providers[0]], { cwd, timeoutMs: PROBE_TIMEOUT_MS })).code !== 0) {
+          return { ready: false, reason: 'not-connected', detail: `No sign-in for ${provider} yet.`, model, checkedAt: checkedAt() };
+        }
+        await this.saveModel(picked);
+        model = picked;
       }
       const probe = await this.runOmp(['-p', ...this.headlessArgs(), PROBE_PROMPT], { cwd, timeoutMs: PROBE_TIMEOUT_MS });
       if (probe.code === 0 && /\bOK\b/.test(probe.stdout)) {
@@ -313,15 +327,18 @@ class AgentAuth extends EventEmitter {
     });
   }
 
+  async saveModel(model) {
+    if (model === this.model) return;
+    this.model = model;
+    await fsp.mkdir(this.dataRoot, { recursive: true });
+    await fsp.writeFile(this.settingsPath, `${JSON.stringify({ model }, null, 2)}\n`);
+    this.last = null;
+    this.emit('model', model);
+  }
+
   async setModel(model) {
     if (!isModelId(model)) throw new AgentAuthError(400, 'Choose a model as provider/model-id.');
-    if (model !== this.model) {
-      this.model = model;
-      await fsp.mkdir(this.dataRoot, { recursive: true });
-      await fsp.writeFile(this.settingsPath, `${JSON.stringify({ model }, null, 2)}\n`);
-      this.last = null;
-      this.emit('model', model);
-    }
+    await this.saveModel(model);
     return this.check({ force: true });
   }
 
