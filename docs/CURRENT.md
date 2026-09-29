@@ -4,6 +4,14 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Review UI polish — 2026-09-28
 
+### Create prototype flow — Figma node `79:6629`
+
+The project-level **Create** flow is now defined in Figma. An empty project shows a centered prototype-empty illustration and the message “This project doesn’t have a prototype yet. Click Create to start from an idea, or use an existing design.” The same top-right **Create** action is available when prototypes already exist.
+
+Create opens one **Create a prototype** modal rather than separate role/path screens. The modal has a required large prompt field (**Describe what you want to create**) and an optional **Add a design file** field accepting a Figma link. This means the two creation paths converge in one surface: prompt only = start from an idea; prompt + Figma reference = start from an existing design. A valid Figma reference is represented as an attachment chip with Figma icon, truncated file name and remove control. **Create prototype** is disabled in the empty state and enabled once the creation request is sufficiently populated; **Cancel** and the close control dismiss the modal. The same modal is intended when adding another prototype to a project that already contains prototypes.
+
+The board does not yet specify post-submit progress/setup UI, invalid-link/error handling, multiple Figma references, or GitHub/model connection gating; those should be resolved when this flow is wired into the OMP/Git architecture rather than invented as part of the visual port.
+
 A recurring stale-runtime issue was identified during project-card/date verification: because static files are read from disk on each request while `server.js` logic remains loaded in the Node process, a previously running server can display newly pulled UI assets while continuing to return old API behaviour. `Start Dialogue.command` now detects a listener on port 4173: it automatically restarts `node server.js` only when that process belongs to the same checkout, and otherwise stops with a clear warning instead of silently opening an unrelated/stale server. The Projects client also narrowly normalizes the two known built-in legacy Landline descriptions to the current copy, so the card no longer depends on the server migration having already run; future user-authored descriptions remain untouched.
 
 The Landline project description shown on the Projects card is now **“A simple push-to-talk peer to peer walkie talkie app”**. The local server seeds this text for new data stores and performs a narrow migration from both historical built-in variants of the previous description (with or without its trailing period), so existing local Dialogue data updates automatically without overwriting any user-custom description added later.
