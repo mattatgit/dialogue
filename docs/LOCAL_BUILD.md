@@ -19,13 +19,15 @@ Browser
   ├── /ws/terminal/:id              WebSocket → ttyd → tmux → omp
   └── <token>.preview.localhost     preview origin per workspace → static files or the project's dev server
         ↓
-Dialogue local Node server (server.js, server/git.js, server/watch.js, server/terminal.js,
-                            server/setup.js, server/runner.js, server/preview-proxy.js, server/live-preview.js)
+Dialogue local Node server (server.js, server/git.js, server/requests.js, server/watch.js,
+                            server/terminal.js, server/setup.js, server/runner.js,
+                            server/preview-proxy.js, server/live-preview.js, server/figma.js)
         ↓
 .dialogue-data/
   db.json                     projects (schemaVersion 4): slug, repo.url/host/owner/repo, previewSetup
   repos/<slug>.git            bare mirror, fetched on demand
   workspaces/<slug>/<ref>/    one git worktree per opened ref (<ref> URL-encoded)
+  requests/<slug>/*.json      persisted structured comments and agent runs
   keys/<slug>, <slug>.pub     per-project SSH deploy key (push only) + known_hosts
   setup/<slug>/log.txt        preview setup log (agent + install/start output)
   setup/<slug>/tree/          detached worktree the setup agent works in (kept, so installs are reused)
@@ -60,12 +62,14 @@ The server binds to localhost only.
 ## Workflow
 
 0. Projects lists what is in `db.json` (Landline when seeded). **Add project** takes the address of any Git repository — HTTPS for public repositories, the `git@…` SSH address for private ones (the dialog explains where to find it on GitHub). Dialogue clones it and opens the project page; a private repository first shows the key to add as a deploy key. Hovering a card reveals **×** to remove the project from Dialogue (local copy only).
-1. In the background Dialogue sets up the project's preview. Each card has a **Preview** line: *Waiting to set up*, *Setting up…* (*try 2 of 3* on retries), *Waiting for an AI model* (sign in under Settings; setup continues by itself), *Ready* or *Setup failed*. The agent inspects the repository and writes `.dialogue/preview.json` — plain files, or the project's install and dev-server commands — and Dialogue proves it by starting the preview and taking a screenshot, handing any error back to the agent up to three times. A repository that already has a working recipe skips the agent. On success the recipe is committed on the local default branch (not pushed; the next COMMIT on that branch sends it) and the card shows the screenshot. A failed card shows the reason with **Retry**, **Fix with agent** (opens the default branch with the problem handed to the agent in the terminal) and **Show log**.
+1. In the background Dialogue sets up the project's preview. Each card has a **Preview** line: *Waiting to set up*, *Setting up…* (*try 2 of 3* on retries), *Waiting for an AI model* (sign in under Settings; setup continues by itself), *Ready* or *Setup failed*. The agent inspects the repository and writes `.dialogue/preview.json` — plain files, or the project's install and dev-server commands — and Dialogue proves it by starting the preview and taking a screenshot, handing any error back to the agent up to three times. A repository that already has a working recipe skips the agent. On success the recipe is committed on the local default branch (not pushed; the next Save version on that branch sends it) and the card shows the screenshot. A failed card shows the reason with **Retry**, **Fix with agent** (opens the default branch with the problem handed to the agent in the terminal) and **Show log**.
 2. Open Projects → Landline. Dialogue fetches the repository and shows a **Branches** group and, when there are any, a **Tags** group. Each tile shows the ref name, short sha, commit subject and relative commit date, and a screenshot — the branch's own once it has been opened, otherwise the default branch's labelled "from main"; a dot marks refs that already have a workspace. If the fetch fails (offline), a one-line note appears and tiles render from the last local refs.
 3. Click a branch. Dialogue creates the worktree (first open creates a local tracking branch from `origin/<branch>`, or fast-forwards a local branch that has nothing of its own) and opens `workspace.html?id=…`.
-4. The workspace is split: the **terminal** on the left, running `omp` inside that branch's checkout; the **prototype preview** on the right in the familiar 370×722 sandboxed iframe, loaded from the workspace's own preview origin `http://<token>.preview.localhost:<port>/`. For a server recipe Dialogue runs the install (only when lockfiles changed) and the dev server, showing *Installing…* / *Starting the preview…* meanwhile; the server stops 10 minutes after the last viewer leaves. Crumbs read `Projects › Landline › <branch>`; the status chip shows `<sha7> · clean`.
-5. Ask omp for a change in the terminal. As it edits files the preview updates — Dialogue reloads the iframe, or the dev server's own hot reload does when the recipe says `"reload": "self"` — the chip switches to `· uncommitted changes` and a **COMMIT** button appears in the header. Restart / `R` still reloads the preview by hand. If the dev server stops, its last output and a **Restart preview** button replace the preview; editing the recipe restarts it automatically.
-6. Press COMMIT. The first time, Dialogue shows the project's public deploy key with instructions to add it to the repository with write access; after "I've added the key — continue" (or immediately on later commits) omp is asked to commit and push (pulling with rebase and retrying once if the remote moved), reports in the terminal, and the chip returns to `clean` with the new sha. Between commit and push it reads `· 1 to push` and the button says **Push 1 commit**.
+4. The workspace shows a 370×722 sandboxed prototype preview on its own origin `http://<token>.preview.localhost:<port>/`, with an on-demand `omp` terminal over the canvas. For a server recipe Dialogue runs the install (only when lockfiles changed) and the dev server, showing *Installing…* / *Starting the preview…* meanwhile; the server stops 10 minutes after the last viewer leaves. Crumbs read `Projects › Landline › <branch>`; the status chip shows `<sha7> · clean`.
+5. Send an anchored comment in Comment mode. While the agent works, Activity shows its pulsing Dialogue mark and live status; when it finishes, the card shows the comment and short summary instead of verbose agent notes. The agent edits the checkout; the preview reloads (or uses the dev server's own HMR with `"reload": "self"`). The live Draft remains in Activity and a successful file-changing run adds a private, read-only Edited snapshot linked to the comment. A no-change run is just an execution record. Direct terminal turns show their status and summary separately, without a fake Edited snapshot. The chip reports `· uncommitted changes`; Restart / `R` still reloads manually. If the dev server stops, the last output and **Restart preview** replace it; editing the recipe restarts it automatically.
+6. Select Draft and press **Save a version** after reviewing. The first time, Dialogue shows the project's public deploy key to register with write access. Once connected, Dialogue atomically pushes a commit for the current Draft and the numbered Version tag. Only a confirmed publish briefly displays **Saved version**. A failed push leaves the Draft and pending save retryable, never a false Version; previous Edited snapshots remain private. The chip updates to the saved SHA and clean state. Open a PR on the git host.
+
+The **Create a prototype** modal accepts a pasted Figma design/file link in its second field and turns it into a removable chip. In Comment mode, a Figma link pasted anywhere in the message becomes a separate removable chip while the surrounding prose remains. Both submit `figmaUrl` with the feedback. Dialogue reads the file outline or selected node using its server-only `FIGMA_ACCESS_TOKEN`, stages design JSON outside the checkout for the agent, and lets a running request inspect deeper frame nodes on demand. For nodes configured for SVG or PNG export in that snapshot or an inspected frame, the agent can fetch the actual binary at Figma's configured scale through a short-lived URL; it then decides which downloaded assets to add to the worktree. Nothing is exported solely by pasting a link. If the token is missing or Figma denies access, the request is rejected with a specific error; the link alone is not treated as a connected design.
 
 Closing the tab does not end the agent: the omp session lives in tmux and reattaches when the workspace is reopened. Opening a **tag** or commit gives a full-width read-only preview with no terminal.
 
@@ -98,17 +102,16 @@ Production keeps the separate prototype execution origin, for example:
 - no multi-user access
 - no public sharing implementation
 - screenshots exist only for commits whose preview has run (setup, opened workspaces, default-branch refresh); other tiles show the default branch's image
-- no Figma comparison/comments yet
+- Figma attachments supply document/node data, not automatically exported SVG/PNG assets or a persistent project-wide design import; the temporary agent snapshot is removed after the request.
 - workspaces are only removed through the API; there is no cleanup UI yet
 - preview servers and installs are not sandboxed; a project's dependencies run as the Dialogue user
 
 ## Next test
 
-1. run `dev` (seeds Landline from `seed.json`) or add a project by pasting its repository address; wait for the card's Preview line to say Ready, then open `main` (or a feature branch)
-2. confirm the terminal connects and omp starts in the worktree
-3. ask omp for one small visible colour/copy change in the prototype
-4. confirm the preview reloads with the change and the chip shows uncommitted changes
-5. press COMMIT, register the deploy key, let omp commit and push; open a PR on GitHub
-6. repeat end to end in `nix run .#vm`
+1. run `dev` (seeds Landline from `seed.json`) or add a project by pasting its repository address; wait for Preview Ready, then open `main` (or a feature branch)
+2. send an anchored comment; confirm a file-changing run creates a reopenable Edited card while Draft remains live
+3. confirm the prototype preview reloads with the change and the chip shows uncommitted changes
+4. select Draft and Save version; register the deploy key if required and confirm a Vn card, remote commit and tag
+5. open a PR and repeat end to end in `nix run .#vm`
 
 The purpose is to learn what the designer and the agent each need from the split screen before any production infrastructure work begins.

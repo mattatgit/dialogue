@@ -1,6 +1,7 @@
 // Git-backed project storage: one bare mirror per project, one worktree per
 // opened ref. Node builtins only; shells out to `git`.
 const fsp = require('node:fs/promises');
+const os = require('node:os');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
@@ -22,12 +23,13 @@ class GitError extends Error {
 
 async function run(args, options = {}) {
   try {
+    const { env, ...rest } = options;
     const { stdout } = await execFileAsync(GIT_BIN, args, {
       maxBuffer: 16 * 1024 * 1024,
       // Never prompt: no terminal, no askpass helper (a private repository
       // over anonymous HTTPS must fail fast so the UI can suggest SSH).
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: '', SSH_ASKPASS_REQUIRE: 'never', LC_ALL: 'C' },
-      ...options
+      ...rest,
+      env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: '', SSH_ASKPASS_REQUIRE: 'never', LC_ALL: 'C' }
     });
     return stdout;
   } catch (error) {
@@ -268,6 +270,7 @@ class ProjectRepo {
     ]);
     const parsed = parseRefs(out.replace(/^refs\/remotes\/origin\//gm, 'refs/heads/'));
     parsed.branches = parsed.branches.filter((branch) => branch.name !== 'HEAD');
+    parsed.tags = parsed.tags.filter((tag) => !tag.name.startsWith('dialogue/'));
     return parsed;
   }
 
@@ -350,6 +353,7 @@ class ProjectRepo {
     const dir = workspaceDir(this.workspacesRoot, this.slug, ref);
     await this.git(['worktree', 'remove', '--force', dir]);
     await this.git(['worktree', 'prune']);
+    await this.removeEdits(ref);
   }
 
   async describeWorkspace(ref, tree) {
@@ -374,6 +378,120 @@ class ProjectRepo {
       dirty: status.length > 0,
       ahead
     };
+  }
+
+  // Build a complete checkout tree using a disposable index. Never stage into
+  // the user's index, and never copy ignored files or project .env secrets.
+  async draftTree(workspace) {
+    const temp = await fsp.mkdtemp(path.join(os.tmpdir(), 'dialogue-index-'));
+    try {
+      const env = { GIT_INDEX_FILE: path.join(temp, 'index') };
+      const git = (args) => run(['-C', workspace.dir, ...args], { env });
+      await git(['read-tree', 'HEAD']);
+      // Keep any already-published tracked .env at its HEAD content, but do
+      // not stage its current contents (or any new .env anywhere).
+      await git(['add', '-A', '--', '.', ':(exclude,glob)**/.env*']);
+      return (await git(['write-tree'])).trim();
+    } finally {
+      await fsp.rm(temp, { recursive: true, force: true });
+    }
+  }
+
+  editRef(branch, requestId) {
+    return `refs/dialogue/edits/${branch}/${requestId}`;
+  }
+
+  async snapshotEdit(workspace, requestId, beforeTree) {
+    const tree = await this.draftTree(workspace);
+    if (tree === beforeTree) return null;
+    const head = (await run(['-C', workspace.dir, 'rev-parse', 'HEAD'])).trim();
+    const sha = (await this.git(['commit-tree', tree, '-p', head, '-m', `Dialogue edit ${requestId}`])).trim();
+    await this.git(['update-ref', this.editRef(workspace.ref, requestId), sha, '0'.repeat(40)]);
+    return sha;
+  }
+
+  async removeEdits(branch) {
+    const prefix = `refs/dialogue/edits/${branch}/`;
+    const refs = (await this.git(['for-each-ref', '--format=%(refname)', prefix])).trim().split('\n')
+      .filter((ref) => /^[0-9a-f-]{36}$/.test(ref.slice(prefix.length)));
+    for (const ref of refs) await this.git(['update-ref', '-d', ref]);
+    await this.git(['update-ref', '-d', `refs/dialogue/pending/${branch}`]).catch(() => {});
+  }
+
+  async versionState(workspace) {
+    const branch = workspace.ref;
+    const tagPrefix = `refs/tags/dialogue/${branch}/`;
+    const out = await this.git(['for-each-ref', '--format=%(refname)|%(objectname)|%(creatordate:iso-strict)', tagPrefix]);
+    const versions = out.trim().split('\n').flatMap((line) => {
+      const [ref, sha, createdAt] = line.split('|');
+      const match = new RegExp(`^${tagPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}V([1-9]\\d*)$`).exec(ref);
+      return match ? [{ label: `V${match[1]}`, sha, createdAt }] : [];
+    }).sort((a, b) => Number(a.label.slice(1)) - Number(b.label.slice(1)));
+    const pending = (await this.git(['rev-parse', '--verify', '--quiet', `refs/dialogue/pending/${branch}^{commit}`]).catch(() => '')).trim() || null;
+    const head = (await run(['-C', workspace.dir, 'rev-parse', 'HEAD'])).trim();
+    const tree = await this.draftTree(workspace);
+    const headTree = (await this.git(['rev-parse', `${head}^{tree}`])).trim();
+    const remote = (await this.git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}^{commit}`]).catch(() => '')).trim();
+    const ahead = Number((await this.git(['rev-list', '--count', `${remote || head}..${head}`])).trim());
+    return { draft: { head, dirty: tree !== headTree, ahead, canSave: Boolean(pending || tree !== headTree || ahead), ...(pending ? { pending } : {}) }, versions };
+  }
+
+  // A private pending ref is the durable retry record. Only publish the local
+  // numbered tag after an atomic remote push of *explicit* commit/tag refspecs.
+  async publishVersion(workspace) {
+    const branch = workspace.ref;
+    const pendingRef = `refs/dialogue/pending/${branch}`;
+    const state = await this.versionState(workspace);
+    if (!state.draft.canSave) throw new GitError('Nothing new in the Draft to save.');
+    const number = state.versions.length ? Math.max(...state.versions.map((v) => Number(v.label.slice(1)))) + 1 : 1;
+    const label = `V${number}`;
+    const tagRef = `refs/tags/dialogue/${branch}/${label}`;
+    const head = state.draft.head;
+    let sha = state.draft.pending;
+    if (!sha) {
+      const tree = await this.draftTree(workspace);
+      sha = tree === (await this.git(['rev-parse', `${head}^{tree}`])).trim()
+        ? head
+        : (await this.git(['commit-tree', tree, '-p', head, '-m', `Dialogue ${label}`])).trim();
+      await this.git(['update-ref', pendingRef, sha, '0'.repeat(40)]);
+    }
+    const destination = this.pushUrl || this.url;
+    // Query the real destination on retry: a lost response may follow a
+    // successful push. Never emit a false version from a local pending ref.
+    const remoteRefs = await this.git(['ls-remote', destination, `refs/heads/${branch}`, tagRef], { timeout: 20000 });
+    const remote = new Map(remoteRefs.trim().split('\n').filter(Boolean).map((line) => line.split(/\s+/).reverse()));
+    const remoteHead = remote.get(`refs/heads/${branch}`);
+    const remoteTag = remote.get(tagRef);
+    if (remoteTag && (remoteTag !== sha || remoteHead !== sha)) throw new GitError(`Remote ${label} conflicts with the pending Draft.`);
+    // A failed push can be retried after more local edits. If the remote did
+    // not receive the tag, replace the pending commit with today's Draft.
+    // A verified remote tag, by contrast, must finish its original save.
+    if (state.draft.pending && !remoteTag) {
+      const tree = await this.draftTree(workspace);
+      const pendingTree = (await this.git(['rev-parse', `${sha}^{tree}`])).trim();
+      if (tree !== pendingTree) {
+        if (remoteHead && remoteHead !== head) throw new GitError('The remote branch moved; the Draft was not overwritten.');
+        sha = tree === (await this.git(['rev-parse', `${head}^{tree}`])).trim()
+          ? head
+          : (await this.git(['commit-tree', tree, '-p', head, '-m', `Dialogue ${label}`])).trim();
+        await this.git(['update-ref', pendingRef, sha, state.draft.pending]);
+      }
+    }
+    if (remoteHead !== sha || remoteTag !== sha) {
+      if (remoteHead && remoteHead !== head) throw new GitError('The remote branch moved; the Draft was not overwritten.');
+      await this.git(['push', '--atomic', `--force-with-lease=refs/heads/${branch}:${remoteHead || ''}`, destination,
+        `${sha}:refs/heads/${branch}`, `${sha}:${tagRef}`], { timeout: 120000 });
+    }
+    // A successful atomic push (or a verified earlier success) is the only
+    // point at which a Version becomes visible locally.
+    await this.git(['update-ref', tagRef, sha, '0'.repeat(40)]);
+    await this.git(['update-ref', `refs/remotes/origin/${branch}`, sha]);
+    if (sha !== head) {
+      await this.git(['update-ref', `refs/heads/${branch}`, sha, head]);
+      await run(['-C', workspace.dir, 'reset', '--mixed', '-q', sha]);
+    }
+    await this.git(['update-ref', '-d', pendingRef]);
+    return { label, sha, createdAt: (await this.git(['for-each-ref', '--format=%(creatordate:iso-strict)', tagRef])).trim() };
   }
 
   // What to watch for a workspace. `files` roots are the project's own files

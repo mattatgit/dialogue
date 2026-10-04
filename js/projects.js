@@ -1,6 +1,7 @@
 (() => {
   const grid = document.querySelector('[data-project-grid]');
   const note = document.querySelector('[data-projects-note]');
+  const empty = document.querySelector('[data-project-empty]');
   const form = document.querySelector('[data-add-project-form]');
   const urlField = form?.querySelector('[name="url"]');
   const submit = form?.querySelector('[data-add-project-submit]');
@@ -51,7 +52,7 @@
     remove.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const ok = window.confirm(`Remove ${project.name} from Dialogue?\n\nThis deletes Dialogue's local copy and any open workspaces. Nothing on ${project.host} is changed.`);
+      const ok = window.confirm(`Remove ${project.name} from Dialogue?\n\nThis deletes Dialogue's local copy and any open workspaces. Nothing on ${project.repo.host} is changed.`);
       if (!ok) return;
       card.classList.add('is-busy');
       try {
@@ -162,9 +163,11 @@
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Could not load projects.');
       grid.replaceChildren(...payload.projects.map(buildCard));
+      if (empty) empty.hidden = payload.projects.length !== 0;
       pollWhileBusy(payload.projects);
-      setNote(payload.projects.length ? '' : 'No projects yet. Add one with the address of its Git repository.');
+      setNote('');
     } catch (error) {
+      if (empty) empty.hidden = true;
       setNote(error.message || 'Could not load projects.', 'error');
     }
   };

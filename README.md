@@ -11,9 +11,11 @@ The repository currently contains two layers of work:
 
 The functional build is git-backed. A project points at a git repository (Landline: `https://github.com/mattatgit/landline`, prototype at `prototypes/app`). Dialogue fetches the repository's branches and tags, and opening one creates a **workspace**: a git worktree for that ref under `.dialogue-data/`.
 
-Dialogue can preview any web project, from a folder of HTML files to an app with its own dev server. After a project is added, the agent works out how to run it and writes a recipe, `.dialogue/preview.json`; Dialogue proves the recipe by starting the preview and taking a screenshot (retrying with the agent up to three times), then commits it on the local default branch so it goes out with the next COMMIT. The project card shows the setup's progress, and a failed setup offers Retry, Fix with agent and the log. Setup waits until an AI model is signed in (Settings).
+Dialogue can preview any web project, from a folder of HTML files to an app with its own dev server. After a project is added, the agent works out how to run it and writes a recipe, `.dialogue/preview.json`; Dialogue proves the recipe by starting the preview and taking a screenshot (retrying with the agent up to three times), then commits it on the local default branch so it goes out with the next Save version. The project card shows the setup's progress, and a failed setup offers Retry, Fix with agent and the log. Setup waits until an AI model is signed in (Settings).
 
-A branch workspace is a split screen: on the left, a web terminal running the oh-my-pi coding agent (`omp`) inside that branch's checkout; on the right, a live preview of the prototype in a sandboxed iframe on its own origin (`http://<token>.preview.localhost:<port>/`), which Dialogue serves from the recipe — static files, or the project's dev server proxied with its hot reload — and reloads on file changes. The designer asks the agent for a change, sees the result immediately, and presses COMMIT: the agent commits and pushes the branch over a per-project SSH deploy key that Dialogue generates and asks the designer to add to the repository once. Git is the revision model. Tag and commit workspaces are read-only previews without a terminal.
+A branch workspace opens the live prototype in a sandboxed iframe on its own origin (`http://<token>.preview.localhost:<port>/`) and an on-demand `omp` terminal in the checkout. A completed comment that changes files gets a private, reopenable **Edited** snapshot alongside the live **Draft**; no-change comments remain activity records. After review, **Save version** commits the current Draft and atomically pushes the branch and numbered **Vn** tag using a per-project SSH deploy key. Previous Edited snapshots remain local. Tags, Versions and Edited commits open as read-only previews; the terminal remains available for direct agent work.
+
+The Create a prototype modal accepts a Figma design/file link in **Add a design file** and converts it to a removable chip. Pasting a Figma link anywhere in a review comment extracts the link into the same removable attachment without discarding the surrounding feedback. When the request is sent, Dialogue reads that file or selected node through the read-only Figma API and gives the agent the design data; a missing token or inaccessible file prevents the request from starting instead of silently passing a URL. During that request, the agent can download SVG or PNG assets explicitly marked for export in the attached design, at their configured scale, and add only the assets needed to the prototype. No assets are imported automatically when a link is pasted.
 
 The three earlier functional milestones (Landline V22, V23, V24 on Matt's Mac) are superseded by this model; `docs/CURRENT.md` records them.
 
@@ -34,7 +36,7 @@ dev                          # inside the Nix devshell: live-reloading dev serve
 npm start                    # plain server at http://127.0.0.1:4173
 Start Dialogue.command       # macOS double-click launcher for npm start; checks for git/ttyd/tmux/omp
 nix run .#vm                 # headless NixOS demo VM with nginx; console prints http://127.0.0.1:8483 and the ssh command
-cp .env.example .env         # then set OPENROUTER_API_KEY; picked up by dev, npm start and the VM
+cp .env.example .env         # set OPENROUTER_API_KEY for the agent and FIGMA_ACCESS_TOKEN for read-only Figma attachments
 ```
 
 Local application data — the bare git mirrors, worktrees, preview setup trees and logs, screenshots and (in the VM) the omp home directory — is stored in `.dialogue-data/`. That folder is deliberately excluded from Git.
@@ -58,7 +60,7 @@ Current static prototype UI/interaction coverage includes:
 - Settings skeleton
 - HTML/CSS-only public Share shell
 
-Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored in `assets/`. The terminal pane uses JetBrains Mono (OFL) from `assets/fonts/`.
+Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored in `assets/`. The terminal text uses Space Mono (OFL), while its chrome uses Inter Tight; JetBrains Mono remains for agent-output excerpts.
 
 ## Project documentation
 

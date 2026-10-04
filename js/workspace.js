@@ -8,44 +8,47 @@
   const projectLink = document.querySelector('[data-project-link]');
   const status = document.querySelector('[data-workspace-status]');
   const restartButton = document.querySelector('[data-restart]');
-  const commitButton = document.querySelector('[data-commit]');
   const terminalPane = document.querySelector('[data-terminal-pane]');
   const terminalHost = document.querySelector('[data-terminal-host]');
   const overlay = document.querySelector('[data-terminal-overlay]');
   const overlayText = document.querySelector('[data-terminal-overlay-text]');
+  const terminalToggle = document.querySelector('[data-terminal-toggle]');
+  const modelLabel = document.querySelector('[data-terminal-model]');
   const params = new URLSearchParams(window.location.search);
   const workspaceId = params.get('id');
   let wantsFix = params.get('fix') === '1';
   let currentSource = '';
   let previewUrl = '';
+  let channel = '';
   let reloadMode = 'dialogue';
   let setupStatus = '';
   let terminal = null;
-  let canCommit = false;
-  let committing = false;
 
   if (!frame || !frameShell || !state || !body) return;
 
   const showError = (message) => {
     state.textContent = message;
-    state.classList.add('is-error');
+    state.classList.add('is-error', 'error');
     state.hidden = false;
     frameShell.hidden = true;
   };
 
   const showState = (message) => {
     state.replaceChildren(document.createTextNode(message));
-    state.classList.remove('is-error');
+    state.classList.remove('is-error', 'error');
     state.hidden = false;
     frameShell.hidden = true;
   };
 
   const reloadPrototype = () => {
     if (!currentSource) return;
+    channel = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+    const url = new URL(currentSource);
+    url.searchParams.set('reviewChannel', channel);
+    url.searchParams.set('reviewOrigin', location.origin);
+    window.dispatchEvent(new CustomEvent('dialogue:channel', { detail: channel }));
     frame.src = 'about:blank';
-    window.setTimeout(() => {
-      frame.src = currentSource;
-    }, 0);
+    window.setTimeout(() => { frame.src = url.href; }, 0);
   };
 
   const restartPreview = async () => {
@@ -62,9 +65,11 @@
       state.hidden = true;
       frameShell.hidden = false;
       if (firstLoad || runner.restarted) reloadPrototype();
+      window.dispatchEvent(new CustomEvent('dialogue:runner', { detail: runner }));
       return;
     }
     currentSource = '';
+    window.dispatchEvent(new CustomEvent('dialogue:runner', { detail: runner }));
     if (runner.state === 'crashed') {
       showError(runner.message || 'The preview stopped.');
       if (runner.log) {
@@ -102,16 +107,7 @@
     }
   };
 
-  const renderCommitButton = (dirty, ahead) => {
-    if (!commitButton || !canCommit) return;
-    const pending = dirty || ahead > 0;
-    commitButton.hidden = !pending;
-    if (committing) return;
-    commitButton.textContent = dirty ? 'Commit' : ahead === 1 ? 'Push 1 commit' : `Push ${ahead} commits`;
-  };
-
   const renderStatus = (head, dirty, ahead = 0) => {
-    renderCommitButton(dirty, ahead);
     if (!status) return;
     status.replaceChildren();
     const sha = document.createElement('code');
@@ -124,47 +120,15 @@
     status.hidden = false;
   };
 
-  const connect = window.DialogueConnect;
-  const closeSetup = () => connect?.close();
-  const showSetup = (setup, failedBefore) => connect?.show(setup, { failedBefore, onRetry: () => requestCommit(true) });
-
-  // --- commit ----------------------------------------------------------------
-
-  const requestCommit = async (retry = false) => {
-    if (!commitButton || committing) return;
-    const label = commitButton.textContent;
-    committing = true;
-    commitButton.disabled = true;
-    commitButton.textContent = retry ? 'Checking…' : 'Committing…';
-    connect?.busy(true);
-    let accepted = false;
-    try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/commit`, { method: 'POST', cache: 'no-store' });
-      const payload = await response.json().catch(() => ({}));
-      if (response.status === 409 && payload.setup) {
-        showSetup(payload.setup, retry);
-        return;
-      }
-      if (!response.ok) throw new Error(payload.error || 'Could not start the commit.');
-      closeSetup();
-      accepted = true;
-      // The agent reports in the terminal; the chip follows via SSE.
-      commitButton.textContent = 'Working…';
-    } catch (error) {
-      closeSetup();
-      state.hidden = false;
-      state.classList.add('is-error');
-      state.textContent = error.message || 'Could not start the commit.';
-      window.setTimeout(() => { state.hidden = Boolean(currentSource); state.classList.remove('is-error'); }, 6000);
-    } finally {
-      committing = false;
-      commitButton.disabled = false;
-      if (!accepted) commitButton.textContent = label;
-      connect?.busy(false);
-    }
+  window.DialogueWorkspace = {
+    id: workspaceId,
+    reload: () => (currentSource ? reloadPrototype() : restartPreview()),
+    restartPreview,
+    updateStatus: renderStatus,
+    get previewUrl() { return previewUrl; },
+    get channel() { return channel; },
+    get ready() { return Boolean(currentSource); }
   };
-
-  commitButton?.addEventListener('click', () => requestCommit(false));
 
   const setOverlay = (message) => {
     if (!overlay) return;
@@ -173,15 +137,21 @@
   };
 
   const mountTerminal = () => {
-    if (!terminalPane || !terminalHost || !window.DialogueTerminal) return;
+    if (!terminalPane || !terminalHost || !window.DialogueTerminal || terminal) return;
     terminalPane.hidden = false;
-    body.classList.add('has-terminal');
+    document.body.classList.add('terminal-open');
+    terminalToggle?.setAttribute('aria-expanded', 'true');
+    if (modelLabel) fetch('/api/agent', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((agent) => {
+        if (!agent?.model) return;
+        modelLabel.textContent = agent.model.split('/').at(-1);
+        modelLabel.title = agent.model;
+      })
+      .catch(() => {});
     terminal = window.DialogueTerminal.mount(terminalHost, workspaceId, {
       onStatus: (kind, detail) => {
-        if (kind === 'connected') {
-          setOverlay('');
-          requestFix();
-        }
+        if (kind === 'connected') { setOverlay(''); requestFix(); }
         else if (kind === 'connecting') setOverlay('Connecting…');
         else if (kind === 'reconnecting') setOverlay('Reconnecting…');
         else if (kind === 'error') setOverlay(detail || 'The agent terminal could not be started.');
@@ -189,6 +159,19 @@
     });
     overlay?.addEventListener('click', () => terminal?.retry());
   };
+
+  terminalToggle?.addEventListener('click', () => {
+    if (terminalPane.hidden && terminal) {
+      terminalPane.hidden = false;
+      document.body.classList.add('terminal-open');
+      terminalToggle.setAttribute('aria-expanded', 'true');
+    } else if (terminalPane.hidden) mountTerminal();
+    else {
+      terminalPane.hidden = true;
+      document.body.classList.remove('terminal-open');
+      terminalToggle.setAttribute('aria-expanded', 'false');
+    }
+  });
 
   const subscribe = () => {
     const events = new EventSource(`/api/workspaces/${workspaceId}/events`);
@@ -204,12 +187,19 @@
       try {
         const payload = JSON.parse(event.data);
         renderStatus(payload.head, payload.dirty, payload.ahead);
+        window.dispatchEvent(new CustomEvent('dialogue:change', { detail: payload }));
         files = payload.files !== false;
       } catch {
         // ignore malformed frames
       }
       // Dev servers with their own live reload handle file changes.
       if (files && reloadMode === 'dialogue') reloadPrototype();
+    });
+    events.addEventListener('request', (event) => {
+      try { window.dispatchEvent(new CustomEvent('dialogue:request', { detail: JSON.parse(event.data) })); } catch {}
+    });
+    events.addEventListener('activity', (event) => {
+      try { window.dispatchEvent(new CustomEvent('dialogue:activity', { detail: JSON.parse(event.data) })); } catch {}
     });
   };
 
@@ -223,12 +213,12 @@
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.workspace) throw new Error(payload.error || 'Workspace not found.');
       const workspace = payload.workspace;
+      window.DialogueWorkspace.current = workspace;
 
       refTitles.forEach((node) => { node.textContent = workspace.ref; });
       document.title = `Dialogue — ${workspace.project?.name || 'Project'} · ${workspace.ref}`;
       if (projectNode) projectNode.textContent = workspace.project?.name || 'Project';
       if (projectLink) projectLink.href = workspace.project?.slug ? `project.html?slug=${encodeURIComponent(workspace.project.slug)}` : 'projects.html';
-      canCommit = Boolean(workspace.terminal);
       renderStatus(workspace.head, workspace.dirty, workspace.ahead);
 
       previewUrl = workspace.previewUrl || '';
@@ -236,21 +226,18 @@
       frame.title = `${workspace.project?.name || 'Prototype'} · ${workspace.ref}`;
       renderRunner(workspace.runner || { state: 'starting' });
 
-      if (workspace.terminal) mountTerminal();
+      if (workspace.terminal) {
+        terminalToggle.hidden = false;
+        if (wantsFix) mountTerminal();
+      }
+      window.dispatchEvent(new CustomEvent('dialogue:workspace', { detail: workspace }));
       subscribe();
     } catch (error) {
       showError(error.message || 'Could not load this workspace.');
     }
   };
 
-  restartButton?.addEventListener('click', () => (currentSource ? reloadPrototype() : restartPreview()));
-  document.addEventListener('keydown', (event) => {
-    if (event.key.toLowerCase() === 'r' && !event.metaKey && !event.ctrlKey && !event.altKey
-      && !/input|textarea/i.test(document.activeElement?.tagName || '')
-      && !document.activeElement?.closest('.terminal-pane')) {
-      reloadPrototype();
-    }
-  }, { capture: true });
+  // The review controller handles Restart / R, including focused-field guards.
 
   load();
 })();

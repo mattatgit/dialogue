@@ -9,6 +9,7 @@ const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 const { createHash } = require('node:crypto');
+const { activityPath } = require('./activity.js');
 
 const execFileAsync = promisify(execFile);
 
@@ -38,8 +39,11 @@ async function installTheme(appRoot) {
   await fsp.writeFile(target, content);
 }
 
-function sessionPrefix(workspaceId) {
-  return `dialogue-${createHash('sha1').update(workspaceId).digest('hex').slice(0, 12)}`;
+// Workspace ids recur across independent Dialogue data directories. Include
+// the worktree path so their tmux sessions cannot attach to each other.
+function sessionPrefix(workspace) {
+  const identity = createHash('sha1').update(workspace.id).update('\0').update(path.resolve(workspace.dir)).digest('hex');
+  return `dialogue-${identity.slice(0, 12)}`;
 }
 
 function waitForSocket(socketPath, child) {
@@ -69,9 +73,10 @@ function waitForSocket(socketPath, child) {
 }
 
 class TerminalManager {
-  constructor({ appRoot, agentAuth }) {
+  constructor({ appRoot, agentAuth, activityRoot = path.join(appRoot, '.dialogue-data', 'activity') }) {
     this.appRoot = appRoot;
     this.agentAuth = agentAuth;
+    this.activityRoot = activityRoot;
     this.terminals = new Map();
     this.socketDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dialogue-term-'));
   }
@@ -94,7 +99,7 @@ class TerminalManager {
   }
 
   async start(workspace, record) {
-    const prefix = sessionPrefix(workspace.id);
+    const prefix = sessionPrefix(workspace);
     const socketPath = path.join(this.socketDir, `${prefix.slice('dialogue-'.length)}.sock`);
     await Promise.all([fsp.rm(socketPath, { force: true }), installTheme(this.appRoot)]);
 
@@ -118,6 +123,7 @@ class TerminalManager {
         COLORTERM: 'truecolor',
         DIALOGUE_APP: this.appRoot,
         DIALOGUE_WORKSPACE: workspace.id,
+        DIALOGUE_ACTIVITY_FILE: activityPath(this.activityRoot, workspace.id),
         DIALOGUE_WORKSPACE_DIR: workspace.dir,
         DIALOGUE_SESSION: prefix,
         DIALOGUE_TMUX: TMUX_BIN,
@@ -157,7 +163,7 @@ class TerminalManager {
     } catch {
       // no tmux server: no sessions
     }
-    const prefix = `${sessionPrefix(workspace.id)}-`;
+    const prefix = `${sessionPrefix(workspace)}-`;
     const session = sessions.split('\n').find((name) => name.startsWith(prefix));
     if (!session) throw new TerminalError('Open the agent terminal first, then try again.');
     // `<session>:` targets the session's current window exactly (no

@@ -28,7 +28,7 @@ Browser
   └── HTTP+WS: <token>.preview.localhost:<port>   preview origin per workspace (iframe)
         ↓
 Dialogue Node server (server.js)
-  ├── server/git.js           bare repos, refs, worktrees, HEAD/dirty/ahead, push check, recipe lookup
+  ├── server/git.js           bare repos, refs, worktrees, Draft/Edited/Version commits, push check
   ├── server/deploy-key.js    per-project SSH deploy key, push URL, known_hosts
   ├── server/watch.js         fs.watch on worktree + git dirs → SSE fan-out
   ├── server/recipe.js        parses .dialogue/preview.json
@@ -38,12 +38,16 @@ Dialogue Node server (server.js)
   ├── server/setup.js         preview setup pipeline (omp -p → recipe → validate → commit)
   ├── server/preview.js       headless-Chromium screenshots of a preview URL, cached
   ├── server/agent-auth.js    AI model readiness, model choice, web sign-in
+  ├── server/figma.js         bounded read-only Figma file/node API, server-only token
+  ├── server/requests.js      persisted comments, agent runs, local edit snapshots
   └── server/terminal.js      ttyd lifecycle per branch workspace, prompt injection
         ↓
 .dialogue-data/
   ├── db.json                       projects (schemaVersion 4), see server/projects.js
   ├── repos/<slug>.git              bare mirror, git fetch --prune origin
   ├── workspaces/<slug>/<ref>/      one git worktree per opened ref
+  ├── requests/<slug>/*.json       durable per-workspace comment/run records
+  ├── requests/.figma-snapshots/  temporary design JSON for an active agent run
   ├── keys/<slug>, <slug>.pub       deploy key per project; keys/known_hosts
   ├── previews/<slug>/<sha>.png     screenshots per commit, plus main.png
   ├── setup/<slug>/                 preview setup: log.txt, tree/ (detached worktree), stamps/, shot.png
@@ -152,23 +156,23 @@ Core concepts remain:
 - comments/review annotations
 - revision requests
 
-The local build implements projects and workspaces. A "revision" is a commit; a "prototype variant" is a branch. Comparison, rollback and traceability come from git rather than from a bespoke store.
+The local build implements projects, workspaces, persisted review requests, private Edited snapshots and numbered Versions. A "prototype variant" is a branch. Git commits identify immutable snapshots and published versions; the current Draft stays in the writable worktree.
 
 ## Publishing
 
-Publishing a change is a git commit and push made by the agent in the workspace. The branch's remote (GitHub or any git host) is where the result lands, and a pull request is the review artifact.
+Saving a Version snapshots the current Draft, pushes the branch commit and a numbered tag to the remote (GitHub or any git host), then exposes the Version in Activity. A pull request remains the external review artifact. Earlier Edited snapshots stay local unless their file changes are included in the Draft being saved.
 
 ### Deploy keys
 
 Fetching keeps using the project's HTTPS URL so browsing a public repository needs no setup. Pushing goes over SSH: `server/deploy-key.js` generates an ed25519 key per project on first use (`keys/<slug>`), records the host's SSH key with `ssh-keyscan` in `keys/known_hosts`, and `ProjectRepo.ensure()` sets `remote.origin.pushurl` (`git@host:owner/repo.git`) and `core.sshCommand` (`ssh -i <key> -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=<known_hosts>`) on the bare mirror. Worktrees inherit both, so `git push` works for the agent in the terminal as soon as the public key is registered as a deploy key with write access. GitHub allows one deploy key per repository, which is why the key is per project. The bare repo also gets a fallback `user.name`/`user.email` when no global identity exists (VM).
 
-### COMMIT button
+### Activity and Save version
 
-A dirty or ahead branch workspace shows a COMMIT (or PUSH) button. `POST /api/workspaces/:id/commit` first runs `git ls-remote <pushurl>` with the deploy key (successes cached 60 s). If the host rejects the key, the response carries the public key and host-specific instructions, and the workspace page opens the "Connect Dialogue to your repository" panel: copy the key, open `<repo>/settings/keys/new` (GitHub) or the equivalent, tick write access, come back and press continue. Once the check passes, the server finds the workspace's tmux session (`dialogue-<hash>-<checksum>`) and types `omp/commit-prompt.md` into it with `tmux send-keys`; omp commits, pushes and reports in the terminal. Dialogue itself never runs `git commit`. The status chip and button follow the SSE stream: commit → `ahead` 1, push → clean. When the push is rejected because the remote has new commits, the prompt has omp run `git pull --rebase` and push once more, aborting the rebase on conflict. On the default branch this push also publishes the recipe commit left by the preview setup pipeline.
+Each completed comment run that changed files writes an immutable commit from a disposable Git index and keeps it at `refs/dialogue/edits/<branch>/<requestId>` in the local bare mirror. Its feedback, anchor, timestamp and SHA are persisted in `requests/<slug>/*.json`; no-change and failed runs remain execution records only. The Draft is the live branch/worktree. Clicking Edited or Version opens its SHA in a read-only worktree, with Activity still sourced from the branch and Draft returning to the live workspace.
 
-A revision request should eventually be able to reference the feedback that caused it:
+`POST /api/workspaces/:id/versions` checks the deploy key with `git ls-remote <pushurl>` (success cached 60 s); an unregistered key opens the connect panel. Dialogue assembles a commit for the current Draft without staging into the user's index or publishing private edit refs. It pushes the commit to `refs/heads/<branch>` and the new `refs/tags/dialogue/<branch>/Vn` atomically with a remote-head lease. Only a confirmed remote branch/tag creates a visible Version. A rejected push retains a private pending ref for retry; if the Draft changes before retry, the pending commit is replaced with the current tree. After success the local branch/upstream advance, but earlier Edited snapshots remain private. Git hosts without atomic pushes cannot publish a Version through this route.
 
-`design comment → revision request → agent work in the branch → commit/PR`
+`design comment → private Edited snapshot + live Draft → reviewed Draft → numbered Version on remote → PR`
 
 ## Prototype isolation
 
@@ -197,7 +201,9 @@ Public sharing is not part of the current lightweight local milestone.
 
 The agent (`omp`) runs inside the branch checkout with an ordinary shell, git and the repository's own tooling. Dialogue supplies the working directory, a profile, a config, an appended system prompt (`omp/system-prompt.md`) and a theme; it does not mediate the agent's file access. This replaces the earlier model where an external LLM connected to Dialogue through a tool layer and Dialogue re-packaged the result.
 
-Later, Dialogue may feed the agent structured context — Figma node references, review comments, screenshot crops — through the same terminal session or through a designed conversation UI that replaces the raw pane. The agent remains replaceable: anything that can run in a tmux session in a checkout fits.
+Structured Create and review-comment requests can attach a Figma design/file URL. `server/figma.js` reads the actual file outline or selected node with a server-only token before the request starts; `server/requests.js` stages bounded JSON outside the checkout for the agent and offers capability-scoped, short-lived reads of deeper nodes in the same file. Nodes with SVG/PNG `exportSettings` in the supplied or inspected data can be rendered and downloaded by the agent while the request runs. The render URL is restricted to Figma's asset hosts and the binary is bounded before delivery; the agent chooses whether to add an asset to the checkout. The capability stays in the agent prompt, not the durable request record or SSE. The Figma token is removed from the server's process environment before any Git hook, terminal, agent or preview subprocess can inherit it.
+
+Richer context such as design/prototype screenshot crops and direct annotation on a Figma canvas remains future work. The agent remains replaceable: anything that can run against a branch checkout fits.
 
 ### Agent sign-in
 

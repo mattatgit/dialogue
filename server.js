@@ -9,13 +9,23 @@ const git = require('./server/git.js');
 const { DeployKeys, classifyPushError, hostingSetup, pushUrl } = require('./server/deploy-key.js');
 const { ProjectError, ProjectStore } = require('./server/projects.js');
 const { TerminalManager, TerminalError } = require('./server/terminal.js');
+const { activityPath, readActivity } = require('./server/activity.js');
 const { WatchRegistry } = require('./server/watch.js');
 const { PreviewRenderer } = require('./server/preview.js');
 const { PreviewProxy } = require('./server/preview-proxy.js');
 const { LivePreviews } = require('./server/live-preview.js');
 const { PreviewSetup } = require('./server/setup.js');
 const { AgentAuth, AgentAuthError } = require('./server/agent-auth.js');
+const { WorkspaceRequests, RequestError } = require('./server/requests.js');
 const { parseRecipe } = require('./server/recipe.js');
+const { FigmaError } = require('./server/figma.js');
+
+// npm start does not use direnv. Inherited variables take precedence over
+// optional local configuration; keep the Figma credential out of every child
+// process (including Git hooks, terminals, preview setup and model probes).
+if (fs.existsSync(path.join(__dirname, '.env'))) process.loadEnvFile(path.join(__dirname, '.env'));
+const figmaToken = process.env.FIGMA_ACCESS_TOKEN;
+delete process.env.FIGMA_ACCESS_TOKEN;
 
 const ROOT = __dirname;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -27,8 +37,9 @@ const WORKSPACES_ROOT = path.join(DATA_ROOT, 'workspaces');
 const KEYS_ROOT = path.join(DATA_ROOT, 'keys');
 const PREVIEWS_ROOT = path.join(DATA_ROOT, 'previews');
 const SETUP_ROOT = path.join(DATA_ROOT, 'setup');
+const REQUESTS_ROOT = path.join(DATA_ROOT, 'requests');
 const STAMPS_ROOT = path.join(DATA_ROOT, 'stamps');
-const COMMIT_PROMPT_PATH = path.join(ROOT, 'omp', 'commit-prompt.md');
+const ACTIVITY_ROOT = path.join(DATA_ROOT, 'activity');
 const FIX_PROMPT_PATH = path.join(ROOT, 'omp', 'preview-fix-prompt.md');
 const SETUP_PROMPT_PATH = path.join(ROOT, 'omp', 'preview-setup-prompt.md');
 // Preview origins normally use the port the browser reached Dialogue on;
@@ -70,10 +81,15 @@ class HttpError extends Error {
 }
 
 const agentAuth = new AgentAuth({ dataRoot: DATA_ROOT, appRoot: ROOT });
-const terminals = new TerminalManager({ appRoot: ROOT, agentAuth });
+const terminals = new TerminalManager({ appRoot: ROOT, agentAuth, activityRoot: ACTIVITY_ROOT });
 // Open terminals keep the model they started with; new connections pick up
 // the new one because attach.sh rotates the tmux session on changed args.
 agentAuth.on('model', () => terminals.stopAll());
+const requests = new WorkspaceRequests({
+  root: REQUESTS_ROOT, workspacesRoot: WORKSPACES_ROOT, agent: agentAuth,
+  configPath: path.join(ROOT, 'omp', 'config.yml'), activityExtension: path.join(ROOT, 'omp', 'activity.js'), figmaToken,
+  internalOrigin: `http://${HOST === '0.0.0.0' || HOST === '::' ? '127.0.0.1' : HOST}:${PORT}`
+});
 const watchers = new WatchRegistry();
 const deployKeys = new DeployKeys(KEYS_ROOT);
 const previews = new PreviewRenderer(PREVIEWS_ROOT);
@@ -114,6 +130,23 @@ async function ensureData() {
   await fsp.mkdir(DATA_ROOT, { recursive: true });
   await fsp.mkdir(REPOS_ROOT, { recursive: true });
   await fsp.mkdir(WORKSPACES_ROOT, { recursive: true });
+  await fsp.mkdir(ACTIVITY_ROOT, { recursive: true, mode: 0o700 });
+  const lastActivity = new WeakMap();
+  const activityWatch = fs.watch(ACTIVITY_ROOT, { persistent: false }, (_event, filename) => {
+    if (!filename) return;
+    for (const [id, watcher] of watchers.watchers) {
+      if (filename.toString() !== path.basename(activityPath(ACTIVITY_ROOT, id))) continue;
+      readActivity(activityPath(ACTIVITY_ROOT, id)).then((terminalActivity) => {
+        if (watchers.watchers.get(id) !== watcher) return;
+        const fingerprint = JSON.stringify(terminalActivity);
+        if (lastActivity.get(watcher) === fingerprint) return;
+        lastActivity.set(watcher, fingerprint);
+        watcher.broadcast('activity', { terminalActivity });
+      }).catch((error) => console.error(error));
+    }
+  });
+  activityWatch.on('error', (error) => console.error(error));
+  await requests.load();
   await projects.load();
   if (SEED_PATH) {
     let entries = [];
@@ -185,19 +218,27 @@ async function repoFor(project) {
 
 // Drop the in-memory repo and everything on disk for a project.
 async function discardRepo(project) {
-  const repo = repos.get(project.slug);
-  repos.delete(project.slug);
-  const instance = repo || new git.ProjectRepo({ slug: project.slug, url: project.repo.url, reposRoot: REPOS_ROOT, workspacesRoot: WORKSPACES_ROOT });
-  for (const workspace of await instance.openWorkspaces().catch(() => [])) {
-    const id = git.workspaceId(project.slug, workspace.ref);
-    terminals.stop(id);
-    watchers.drop(id);
-    await live.close(id);
+  requests.blockProject(project.slug);
+  try {
+    const repo = repos.get(project.slug);
+    repos.delete(project.slug);
+    const instance = repo || new git.ProjectRepo({ slug: project.slug, url: project.repo.url, reposRoot: REPOS_ROOT, workspacesRoot: WORKSPACES_ROOT });
+    for (const workspace of await instance.openWorkspaces().catch(() => [])) {
+      const id = git.workspaceId(project.slug, workspace.ref);
+      await requests.stop(id);
+      terminals.stop(id);
+      watchers.drop(id);
+      await fsp.rm(activityPath(ACTIVITY_ROOT, id), { force: true });
+      await live.close(id);
+    }
+    await requests.removeProject(project.slug);
+    await instance.destroy();
+    await setup.remove(project.slug);
+    await deployKeys.remove(project.slug);
+    await previews.remove(project.slug);
+  } finally {
+    requests.unblockProject(project.slug);
   }
-  await instance.destroy();
-  await setup.remove(project.slug);
-  await deployKeys.remove(project.slug);
-  await previews.remove(project.slug);
 }
 
 // Screenshot URL for a commit; the route falls back to the latest main image.
@@ -347,7 +388,13 @@ async function serveAppFile(res, pathname) {
 async function serveEvents(req, res, id) {
   const { project, repo, workspace } = await resolveWorkspace(id);
   const roots = await repo.watchRoots(workspace);
+  const onRequest = (workspaceId, request) => {
+    if (workspaceId === id && !res.writableEnded && !res.destroyed) res.write(`event: request\ndata: ${JSON.stringify(request)}\n\n`);
+  };
+  requests.on('request', onRequest);
+  res.on('close', () => requests.off('request', onRequest));
   sendEventStream(res);
+  for (const request of requests.list(id)) onRequest(id, request);
 
   watchers.subscribe(id, roots, res, async (watcher, files) => {
     try {
@@ -368,6 +415,8 @@ async function serveEvents(req, res, id) {
       console.error(error);
     }
   });
+  const terminalActivity = await readActivity(activityPath(ACTIVITY_ROOT, id));
+  if (!res.writableEnded) res.write(`event: activity\ndata: ${JSON.stringify({ terminalActivity })}\n\n`);
 
   // Viewing a workspace keeps its preview server running.
   const isDefault = workspace.kind === 'branch' && workspace.ref === (await repo.defaultBranchName());
@@ -619,13 +668,86 @@ async function handleApi(req, res, url) {
     sendJson(res, 200, { workspace: await publicWorkspace(project, repo, workspace, req.headers) });
     return true;
   }
+
+  match = /^\/api\/workspaces\/([^/]+\/[^/]+)\/activity$/.exec(pathname);
+  if (match && req.method === 'GET') {
+    const { repo, workspace } = await resolveWorkspace(match[1]);
+    if (workspace.kind !== 'branch') throw new HttpError(409, 'Only branches have activity.');
+    const { draft, versions } = await repo.versionState(workspace);
+    sendJson(res, 200, { draft, edits: requests.edits(workspace.id), versions, requests: requests.list(workspace.id),
+      terminalActivity: await readActivity(activityPath(ACTIVITY_ROOT, workspace.id)) });
+    return true;
+  }
+
+  // Short-lived, capability-scoped file inspection and configured asset export.
+  match = /^\/api\/workspaces\/([^/]+(?:\/[^/]+)?)\/requests\/([0-9a-f-]{36})\/figma(\/export)?$/.exec(pathname);
+  if (req.method === 'GET' && match) {
+    let id;
+    try {
+      id = match[1].includes('/') ? match[1] : decodeURIComponent(match[1]);
+    } catch {
+      throw new HttpError(404, 'Figma access is not available.');
+    }
+    if (match[3]) {
+      const asset = await requests.exportFigma(id, match[2], url.searchParams.get('access'),
+        url.searchParams.get('node-id'), url.searchParams.get('setting'));
+      res.writeHead(200, {
+        'Content-Type': asset.contentType,
+        'Content-Disposition': `attachment; filename="${asset.filename}"`,
+        'Content-Length': asset.bytes.length,
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+        'X-Content-Type-Options': 'nosniff'
+      });
+      res.end(asset.bytes);
+    } else {
+      const result = await requests.inspectFigma(id, match[2], url.searchParams.get('access'), url.searchParams.get('node-id'));
+      sendJson(res, 200, result);
+    }
+    return true;
+  }
+
+  match = /^\/api\/workspaces\/([^/]+(?:\/[^/]+)?)\/requests$/.exec(pathname);
+  // The ref portion of a workspace id is encoded already; callers may also
+  // URL-encode the whole id, including its separator, once more.
+  let requestId = null;
+  if (match) {
+    try {
+      requestId = match[1].includes('/') ? match[1] : decodeURIComponent(match[1]);
+    } catch {
+      throw new HttpError(404, 'Workspace not found.');
+    }
+  }
+  if (match && req.method === 'GET') {
+    await resolveWorkspace(requestId);
+    sendJson(res, 200, { requests: requests.list(requestId) });
+    return true;
+  }
+  if (match && req.method === 'POST') {
+    const { repo, workspace } = await resolveWorkspace(requestId);
+    const body = await readJsonBody(req);
+    try {
+      sendJson(res, 201, { request: await requests.start(workspace, repo, body) });
+    } catch (error) {
+      if (error instanceof RequestError || error instanceof FigmaError) throw new HttpError(error.status, error.message);
+      throw error;
+    }
+    return true;
+  }
+  match = /^\/api\/workspaces\/([^/]+\/[^/]+)$/.exec(pathname);
   if (match && req.method === 'DELETE') {
     const id = match[1];
     const { repo, workspace } = await resolveWorkspace(id);
-    terminals.stop(id);
-    watchers.drop(id);
-    await live.close(id);
-    await repo.removeWorkspace(workspace.ref);
+    try {
+      await requests.remove(id);
+      terminals.stop(id);
+      watchers.drop(id);
+      await live.close(id);
+      await repo.removeWorkspace(workspace.ref);
+      await fsp.rm(activityPath(ACTIVITY_ROOT, id), { force: true });
+    } finally {
+      requests.unblock(id);
+    }
     sendJson(res, 200, { removed: id });
     return true;
   }
@@ -661,12 +783,12 @@ async function handleApi(req, res, url) {
     return true;
   }
 
-  // Ask the workspace's agent to commit and push. Refused with the deploy-key
-  // setup when the remote does not accept the project's key yet.
-  match = /^\/api\/workspaces\/([^/]+\/[^/]+)\/commit$/.exec(pathname);
+  // Save the current Draft without invoking a model or terminal. Private edit
+  // refs are deliberately absent from the explicit atomic push refspecs.
+  match = /^\/api\/workspaces\/([^/]+\/[^/]+)\/versions$/.exec(pathname);
   if (req.method === 'POST' && match) {
     const { project, repo, workspace } = await resolveWorkspace(match[1]);
-    if (workspace.kind !== 'branch') throw new HttpError(409, 'Only branches can be committed.');
+    if (workspace.kind !== 'branch') throw new HttpError(409, 'Only branches can save Versions.');
     const check = await repo.checkPush();
     if (!check.ok) {
       if (check.reason === 'key' && repo.publicKey) {
@@ -678,15 +800,15 @@ async function handleApi(req, res, url) {
       }
       throw new HttpError(502, `Could not reach the repository to push: ${check.message}`);
     }
-    // One line: a newline would submit the first line before the rest arrives.
-    const prompt = (await fsp.readFile(COMMIT_PROMPT_PATH, 'utf8')).replace(/\s+/g, ' ').trim();
+    await readJsonBody(req);
     try {
-      await terminals.sendPrompt(workspace, prompt);
+      sendJson(res, 201, { version: await requests.saveVersion(workspace, repo) });
     } catch (error) {
-      if (error instanceof TerminalError) throw new HttpError(409, error.message);
+      if (error instanceof RequestError) throw new HttpError(error.status, error.message);
+      if (error instanceof git.GitError && /Nothing new in the Draft/.test(error.message)) throw new HttpError(409, error.message);
+      if (error instanceof git.GitError) throw new HttpError(502, `Could not save Version: ${error.message}`);
       throw error;
     }
-    sendJson(res, 202, { accepted: true });
     return true;
   }
 
@@ -725,15 +847,15 @@ async function requestHandler(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed.');
     await serveAppFile(res, url.pathname);
   } catch (error) {
-    const status = error instanceof HttpError ? error.status : 500;
-    const message = error instanceof HttpError ? error.message : 'Unexpected local server error.';
+    const status = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError ? error.status : 500;
+    const message = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError ? error.message : 'Unexpected local server error.';
     if (!res.headersSent) {
       if ((req.url || '').startsWith('/api/')) sendJson(res, status, { error: message, ...(error.reason ? { reason: error.reason } : {}), ...(error.setup ? { setup: error.setup } : {}) });
       else sendText(res, status, message);
     } else {
       res.destroy();
     }
-    if (!(error instanceof HttpError)) console.error(error);
+    if (!(error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError)) console.error(error);
   }
 }
 
@@ -811,6 +933,7 @@ async function shutdown() {
   agentAuth.shutdown();
   terminals.shutdown();
   server.close();
+  await requests.shutdown().catch((error) => console.error(error));
   // Preview servers run in their own process groups: stop them explicitly.
   await live.shutdown().catch(() => {});
   process.exit(0);

@@ -176,13 +176,33 @@ async function serveStatic(req, res, root) {
     res.writeHead(405, { allow: 'GET, HEAD', 'cache-control': 'no-store' });
     return res.end();
   }
-  const found = await resolveStatic(root, new URL(req.url, 'http://x').pathname);
+  const url = new URL(req.url, 'http://preview.localhost');
+  const found = await resolveStatic(root, url.pathname);
   if (!found) return sendHtml(res, 404, statusPage({ title: 'Not found', message: 'No such file in this preview.' }));
-  res.writeHead(200, {
-    'content-type': MIME[path.extname(found.file).toLowerCase()] || 'application/octet-stream',
-    'content-length': found.size,
-    'cache-control': 'no-store'
-  });
+  const type = MIME[path.extname(found.file).toLowerCase()] || 'application/octet-stream';
+  const channel = url.searchParams.get('reviewChannel');
+  const parent = url.searchParams.get('reviewOrigin');
+  let reviewOrigin = null;
+  if (channel && /^[a-f0-9]{32}$/.test(channel) && parent && type.startsWith('text/html')) {
+    try {
+      const candidate = new URL(parent);
+      if (candidate.origin === parent && ['127.0.0.1', 'localhost'].includes(candidate.hostname)
+        && ['http:', 'https:'].includes(candidate.protocol)) reviewOrigin = candidate.origin;
+    } catch {
+      // Invalid review origins never change the preview response.
+    }
+  }
+  if (reviewOrigin) {
+    // Instrument only this response, never the checked-out file. Server
+    // recipes stay byte-for-byte proxied; their Select tool remains unavailable.
+    const html = await fsp.readFile(found.file, 'utf8');
+    const script = `<script src="${escapeHtml(reviewOrigin)}/js/prototype-review-bridge.js" data-review-channel="${channel}"></script>`;
+    const injected = html.replace(/<\/body\s*>/i, `${script}</body>`);
+    const output = Buffer.from(injected === html ? `${html}${script}` : injected);
+    res.writeHead(200, { 'content-type': type, 'content-length': output.length, 'cache-control': 'no-store' });
+    return req.method === 'HEAD' ? res.end() : res.end(output);
+  }
+  res.writeHead(200, { 'content-type': type, 'content-length': found.size, 'cache-control': 'no-store' });
   if (req.method === 'HEAD') return res.end();
   const stream = fs.createReadStream(found.file);
   stream.on('error', () => res.destroy());

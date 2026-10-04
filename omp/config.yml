@@ -2,6 +2,11 @@
 theme:
   dark: dialogue
   light: dialogue
+statusLine:
+  preset: custom
+  leftSegments: [pi, model, git]
+  rightSegments: []
+  separator: none
 symbolPreset: unicode
 # Skip the first-run setup wizard; credentials arrive via environment
 # (OPENROUTER_API_KEY from .env) or /login.

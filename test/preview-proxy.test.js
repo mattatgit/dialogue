@@ -306,6 +306,35 @@ test('static resolves serve files under root with MIME types and no-store cachin
   }
 });
 
+test('review instrumenting changes only a requested static HTML response, not the source or other assets', async () => {
+  const fixture = await staticFixture();
+  const proxy = new PreviewProxy({ domain: null });
+  const token = proxy.register('ws', () => ({ kind: 'static', root: fixture.root }));
+  const { port, close } = await serveProxy(proxy);
+  const host = `${token}.preview.localhost:${port}`;
+  const channel = 'a'.repeat(32);
+  try {
+    const urlPath = `/?reviewChannel=${channel}&reviewOrigin=${encodeURIComponent('http://127.0.0.1:8080')}`;
+    const response = await request(port, { host, path: urlPath });
+    assert.equal(response.status, 200);
+    assert.match(response.body, new RegExp(`data-review-channel="${channel}"`));
+    assert.match(response.body, /src="http:\/\/127\.0\.0\.1:8080\/js\/prototype-review-bridge\.js"/);
+    assert.equal(Number(response.headers['content-length']), Buffer.byteLength(response.body));
+    const head = await request(port, { host, path: urlPath, method: 'HEAD' });
+    assert.equal(head.headers['content-length'], response.headers['content-length']);
+    assert.equal(head.body, '');
+
+    assert.equal((await request(port, { host, path: '/' })).body, '<h1>hi</h1>');
+    assert.equal(await fsp.readFile(path.join(fixture.root, 'index.html'), 'utf8'), '<h1>hi</h1>');
+    assert.equal((await request(port, { host, path: `/assets/app.js?reviewChannel=${channel}&reviewOrigin=http%3A%2F%2F127.0.0.1%3A8080` })).body, 'console.log(1)');
+    const unsafe = await request(port, { host, path: `/?reviewChannel=${channel}&reviewOrigin=${encodeURIComponent('https://untrusted.example')}` });
+    assert.equal(unsafe.body, '<h1>hi</h1>');
+  } finally {
+    await close();
+    await fixture.cleanup();
+  }
+});
+
 test('static resolves refuse every way out of the root', async () => {
   const fixture = await staticFixture();
   const proxy = new PreviewProxy({ domain: null });

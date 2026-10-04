@@ -1,5 +1,6 @@
 (() => {
   const grid = document.querySelector('[data-ref-groups]');
+  const empty = document.querySelector('[data-ref-empty]');
   const note = document.querySelector('[data-ref-note]');
   const titleNode = document.querySelector('[data-project-title]');
   const linkNode = document.querySelector('[data-project-link]');
@@ -178,6 +179,7 @@
       }
       if (payload.setup) {
         setNote('Dialogue cannot read this repository yet.', 'error');
+        if (empty) empty.hidden = true;
         showConnect(payload.setup, retry);
         return;
       }
@@ -189,6 +191,14 @@
       if (payload.branches?.length) groups.push(buildGroup('Branches', payload.branches, 'branch'));
       if (payload.tags?.length) groups.push(buildGroup('Tags', payload.tags, 'tag'));
       grid.replaceChildren(...groups);
+      if (empty) {
+        const hasPreview = Boolean(payload.project?.previewUrl || [...(payload.branches || []), ...(payload.tags || [])].some((ref) => ref.previewUrl));
+        empty.hidden = hasPreview;
+        const message = empty.querySelector('[data-ref-empty-message]');
+        if (message) message.textContent = payload.branches?.length
+          ? 'No preview yet. Open a branch below, or Create to request a prototype.'
+          : 'No branches yet. Push a branch to your repository to start a prototype.';
+      }
       const setupNote = setupMessage(payload.project?.previewSetup);
       if (!groups.length) setNote('This repository has no branches yet.');
       else if (payload.fetchError) setNote(`Showing the last known branches — ${payload.project?.repo?.host || 'the repository host'} could not be reached (${payload.fetchError}).`, 'error');
@@ -197,6 +207,7 @@
         pollTimer = window.setTimeout(() => load(false, true), 3000);
       }
     } catch (error) {
+      if (empty) empty.hidden = true;
       setNote(error.message || 'Could not read the repository.', 'error');
     }
   };

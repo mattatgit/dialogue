@@ -6,7 +6,7 @@
 
 The three earlier functional milestones (Landline V22, V23, V24; see `docs/CURRENT.md`) used a separate revision store. That model was replaced on 2026-09-23 by git worktrees and an embedded `omp` terminal (`docs/superpowers/specs/2026-09-23-git-workspaces-web-terminal-design.md`).
 
-The current product-development goal is the first **real designer-driven change** made through the web terminal on a Landline branch, pushed and opened as a pull request.
+The current product-development goal is the first **real designer-driven change** made through a structured review comment on a Landline branch, saved as a Version and opened as a pull request; the web terminal remains a fallback.
 
 The immediate goal is still not a production framework/database/hosting migration. Production infrastructure remains deferred until that loop has been dogfooded.
 
@@ -14,7 +14,7 @@ The immediate goal is still not a production framework/database/hosting migratio
 
 The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium for screenshots (`chromium` on Linux; on macOS Playwright's `chrome-headless-shell`, because nixpkgs' chromium is Linux-only and full Chrome builds crash headless without a desktop session) and the live-reloading `dev` command. The shell works on `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
 
-The devshell also provides `omp` from the `llm-agents` flake input: the terminal, preview setup, model sign-in and COMMIT all run it. It reads the usual `~/.omp` profiles and login, so an existing setup carries over; `DIALOGUE_OMP` points Dialogue at a different binary. The flake has no `x86_64-darwin` outputs because `llm-agents` has no omp there. On macOS the flake builds omp without its `--smoke-test` install check, which fails inside the Nix build sandbox (the binary passes it outside); `flake.nix` asserts the patched line still exists, so an upstream change fails evaluation instead of silently re-enabling it.
+The devshell also provides `omp` from the `llm-agents` flake input: the terminal, preview setup, model sign-in and structured comment runs use it; Save version performs Git commit/push directly. It reads the usual `~/.omp` profiles and login, so an existing setup carries over; `DIALOGUE_OMP` points Dialogue at a different binary. The flake has no `x86_64-darwin` outputs because `llm-agents` has no omp there. On macOS the flake builds omp without its `--smoke-test` install check, which fails inside the Nix build sandbox (the binary passes it outside); `flake.nix` asserts the patched line still exists, so an upstream change fails evaluation instead of silently re-enabling it.
 
 With [direnv](https://direnv.net) installed, `direnv allow` once in the repo root; the shell then loads automatically. Without direnv, use `nix develop`.
 
@@ -27,6 +27,10 @@ OPEN=0 dev       # don't launch a browser
 `dev` runs `node --watch server.js` on 4173 and puts browser-sync in front of it on `PORT`: edits to HTML/CSS/JS/assets reload open tabs (CSS is injected in place); edits to `server.js` restart the server, then reload. Both listeners are bound to localhost only. Restarting the server does not kill agent sessions: they live in tmux. Preview servers are children of the Node server and are stopped with it; they start again when a workspace is viewed. `dev` also sets `DIALOGUE_PREVIEW_PORT=4173`: preview origins (`http://<token>.preview.localhost:4173/`) go straight to Node, because browser-sync rewrites the Host header they are routed by.
 
 `npm start` still works inside the devshell for a plain server without reload. `npm test` (`node --test test/*.test.js`) runs the unit tests and the preview end-to-end test.
+
+When multiple Dialogue worktrees are in use, localhost ports identify running processes, not branches. Before sharing a test URL, establish which worktree the user is working on, map the server process to its working directory, and verify that worktree's page responds. If it is not running, start that worktree on an unused port. Share only its URL; a reachable server from another branch is not a substitute.
+
+Do not copy `.dialogue-data/` between source worktrees: Git's linked checkout metadata contains absolute paths to its original mirror and worktree. A copied directory may appear intact but fail to open a branch or use the other build's Git metadata. Start with a separate data directory; if preserving a copy is necessary, repair and verify every linked worktree's `.git` and mirror `worktrees/*/gitdir` pointers before running Dialogue.
 
 ### Environment overrides
 
@@ -58,7 +62,9 @@ The VM's disk image `nixos.qcow2` is written to the current directory and is ign
 
 Copy `.env.example` to `.env` (gitignored) and set `OPENROUTER_API_KEY`. `.envrc` loads it with `dotenv_if_exists`, so `dev` and `npm start` pass it to Dialogue, which runs its tmux server (`tmux -L dialogue`) with that environment; omp therefore starts authenticated. `nix run .#vm` stages `.env` (plus `OPENROUTER_API_KEY` from the shell) into a temporary directory that the VM mounts read-only at `/run/dialogue-env` and the service reads as `EnvironmentFile`. `omp/config.yml` sets `setupVersion` so the first-run wizard is skipped, `modelRoles.default` to `openrouter/anthropic/claude-opus-5.5`, `display.hideToolActivity` / `hideThinkingBlock` so the designer sees prose, not tool calls, and `startup.checkUpdate: false` (omp is Nix-pinned; no update banner) (toggle live with `/tools`-style display commands or Settings → Appearance); use `/model` in the terminal to change it, or `/login` for providers without an API key.
 
-Git push uses a per-project SSH deploy key that Dialogue generates in `.dialogue-data/keys/` on first use; the first COMMIT shows the public key to register on the repository. Nothing is placed in `/var/lib/dialogue/home` by hand any more.
+For Figma-backed Create and comment requests, add a read-only `FIGMA_ACCESS_TOKEN` (`file_content:read`) to this worktree's gitignored root `.env` or server environment, then restart Dialogue. `npm start` also loads this local `.env`; an inherited variable takes precedence. The token is captured by the server and removed from child environments before model probes, agents, terminals, preview setup, Git hooks and project preview processes launch. Pasting a link still makes a chip without credentials, but submitting it returns an actionable error instead of running an agent that cannot read the design.
+
+Git push uses a per-project SSH deploy key that Dialogue generates in `.dialogue-data/keys/` on first use; the first Save version shows the public key to register on the repository. Nothing is placed in `/var/lib/dialogue/home` by hand any more.
 
 ## Branch strategy
 
@@ -95,7 +101,9 @@ See `docs/LOCAL_BUILD.md`.
 ## Relevant files
 
 - `server.js` — http routing, static files, preview-origin dispatch, SSE, WebSocket proxy, setup/preview routes
-- `server/git.js` — bare repo ensure/fetch, ref listing, worktree add/list/remove, HEAD/dirty status, recipe lookup (`readRecipe`), setup tree and recipe commit (`checkoutSetupTree`, `commitRecipe`, `advanceDefault`, `localDefault`), watch roots, exec wrapper
+- `server/git.js` — bare repo ensure/fetch, ref listing, worktree add/list/remove, Draft/Edited/Version Git snapshots, atomic Version publication, HEAD/dirty status, recipe lookup and setup commits, watch roots
+- `server/requests.js` — durable structured comment records, agent-run observation, immutable Edited snapshots and Version save coordination
+- `server/activity.js`, `omp/activity.js` — validate and write bounded private agent-turn sidecars, with settled request summaries and live direct-terminal SSE updates
 - `server/projects.js` — `db.json` store (schemaVersion 4, v2/v3 migration, `previewSetup`)
 - `server/recipe.js` — `.dialogue/preview.json` parser
 - `server/runner.js` — `Runner` (install stamp, dev server in its own process group, readiness probe) and `RunnerPool` (idle stop)
@@ -109,10 +117,11 @@ See `docs/LOCAL_BUILD.md`.
 - `projects.html`, `js/projects.js` — Projects page, card Preview status line and setup failure actions
 - `project.html`, `js/project-refs.js` — branch/tag tiles, "from main" screenshot label
 - `workspace.html`, `js/workspace.js` — split-screen workspace page, preview iframe on the preview origin, runner states, Restart preview, "Fix with agent" hand-off
+- `js/prototype-review.mjs`, `css/prototype-review.css` — Activity cards, anchored comments, read-only snapshot previews and Save version
 - `js/terminal.js`, `js/vendor/xterm*.js`, `css/terminal.css` — terminal pane
 - `omp/config.yml`, `omp/system-prompt.md`, `omp/tmux.conf`, `omp/dialogue-theme.json` — agent runtime config
-- `omp/preview-setup-prompt.md`, `omp/preview-fix-prompt.md`, `omp/commit-prompt.md` — prompts Dialogue hands the agent
-- `assets/fonts/JetBrainsMono-*.woff2` — terminal typeface (OFL)
+- `omp/preview-setup-prompt.md`, `omp/preview-fix-prompt.md` — preview setup/repair prompts Dialogue hands the agent
+- `assets/fonts/SpaceMono-*.ttf`, `assets/fonts/InterTight-Latin.woff2` — terminal grid and panel chrome (OFL)
 - `test/*.test.js` — unit tests per module plus `preview-e2e.test.js` and `agent-auth.e2e.test.js`
 
 ## Repository hygiene
@@ -152,7 +161,10 @@ When touching git/workspace/terminal/preview behaviour, preserve:
 - editing `.dialogue/preview.json` restarts the preview; killing the dev server shows the crash log and **Restart preview** brings it back
 - the terminal connects and omp starts inside the worktree
 - closing and reopening the tab reattaches to the same tmux session
-- editing a project file flips the chip to uncommitted changes; committing flips it back
+- editing a project file flips the chip to uncommitted changes; Save version publishes a numbered tag and updates the branch/head chip only after remote confirmation
+- completed comments with file changes retain private reopenable Edited commits; no-change and failed runs never appear as Edited
+- the live Draft persists alongside Edited and Vn cards; opening a snapshot gives a read-only worktree and Draft returns to the source branch
+- rejected pushes leave a retryable Draft, never an advertised Version or pushed private edit refs
 - a tag workspace renders full-width with no terminal and no ttyd is spawned
 - `DELETE /api/workspaces/:id` stops the terminal and preview server and removes the worktree
 - a static preview refuses paths outside the recipe's `root`
@@ -164,8 +176,8 @@ When touching git/workspace/terminal/preview behaviour, preserve:
 
 ## Near-term build sequence
 
-1. run the split-screen workspace end to end locally on a Landline branch: ask omp for a visible change, watch the preview reload
-2. press COMMIT, register the deploy key on first use, let omp commit and push; open a PR
+1. run the workspace end to end locally on a Landline branch: send anchored feedback, watch the preview reload and reopen an Edited snapshot
+2. select Draft and Save version, register the deploy key on first use, verify remote commit and numbered tag; open a PR
 3. repeat in `nix run .#vm` with `.env` providing the API key
 4. record what context omp needed and where the designer had to leave the pane
 5. use that to shape the designed conversation UI and the structured revision-request context

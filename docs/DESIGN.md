@@ -10,9 +10,13 @@ Dialogue section/page references used during prototyping include the Dialogue Ap
 
 Figma remains the source of truth for intended UI where a design exists.
 
+## Figma attachment inputs
+
+The [Figma connection section](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=145-3744) defines two request-scoped attachment surfaces. The second field in **Create a prototype** turns a pasted design/file link into a Figma-icon chip with a shortened filename and remove control (`Create prototype from empty 3`). In the comment composer, pasting a link anywhere in the message extracts it into the same removable chip below the remaining prose (`Comment with Figma link`). The chip is a design reference attached to that request, not inline text or an automatically saved project-wide file.
+
 ## Typography
 
-Primary UI typeface: Inter Tight. The workspace terminal pane uses JetBrains Mono (see Terminal styling below); it is the only monospace surface in the product.
+Primary UI typeface: Inter Tight. The terminal panel chrome also uses Inter Tight; the `omp` text grid uses Space Mono (see Terminal styling below).
 
 Use the actual intended weights rather than browser-synthesized approximations. For example, SemiBold should be `font-weight: 600`.
 
@@ -51,17 +55,27 @@ The Landline project page replaces the static fallback cards with a **Branches**
 
 This is functional UI. When Matt designs how projects, branches and history are presented, the Figma design supersedes it.
 
-### Split-screen workspace
+### Git workspace
 
-`workspace.html` keeps the existing dark owner-viewer shell, crumbs (`Projects › Landline › <ref>`) and the 370×722 sandboxed prototype stage with Restart / `R`, and adds a status chip (`<sha7> · clean` / `· uncommitted changes`) and a terminal pane on the left (`minmax(420px, 44%)`). Tag/commit workspaces show the stage full-width without a terminal.
+The integrated workspace keeps the designed review canvas, Activity rail, and Interact / Comment controls. Its on-demand `omp` terminal remains functional UI rather than the intended final conversation design. The terminal opens over the canvas in a 256 px column aligned with the Activity rail; in Comment mode, the canvas and terminal move alongside Activity. Tag/commit workspaces remain read-only without a terminal.
 
-The two-column layout is temporary functional UI. It exists to prove that a designer can ask for a change and see it land without leaving Dialogue.
+The designed Activity cards have three distinct meanings: **Draft** is the one live working prototype, **Edited** is an immutable local snapshot linked to a comment that changed files, and **Vn** is a numbered Version of the reviewed Draft confirmed on the remote repository. Draft coexists with all prior Edited and Version cards. Running agent work gets a compact card with the pulsing Dialogue mark and live status; when it finishes, the relevant Edited or completed-request card shows the comment and a short summary, not the verbose transcript. Direct terminal turns get the same transient status and short settled summary without fabricating an Edited snapshot. Selecting Draft with publishable changes reveals **Save a version** and Cancel; after a confirmed save it briefly says **Saved version** and Draft remains available for further edits. Selecting Edited or Version opens its read-only SHA preview; selecting Draft there returns to the source branch. A completed request without file changes is shown as activity, not mislabelled Edited. These card states follow the approved prototype; the on-demand terminal remains temporary functional UI.
+
+### Creation Activity card — specified, not implemented
+
+This describes the intended **initial prototype-creation card**, not the current integration behavior. Do not change the application to match it until the user explicitly asks to begin implementation.
+
+- The first card in any session represents the prompt that created the prototype; truncate that prompt if it will not fit. While the LLM is still building the initial prototype and there are no other cards, this is the top card and its status label is green **Working**.
+- In Working state, a grey status box at the bottom contains the animated Dialogue mark and a very short, pulsing, one-line agent-working detail where available. The animation and text must fit the limited space.
+- Once the task is complete **and** there is something in the viewer for the user to comment on, the card changes from Working to **Draft**. Show the agent's icon (ChatGPT in the illustrated flow) and one short sentence about what it did. The bottom status bar changes to the special tick version of the Dialogue icon plus **Task completed**.
+
+Figma source: [Working-state prototype](https://www.figma.com/proto/YXlBjYhWIS1sfu8cffH5un/Dialogue?page-id=0%3A1&node-id=112-4558&p=f&viewport=-3660%2C11526%2C1&t=iLPGyuoQmO4scS5C-1&scaling=scale-down-width&content-scaling=fixed&starting-point-node-id=112%3A4558), file `YXlBjYhWIS1sfu8cffH5un`, frame `112:4558` (**Draft Card working**). The **Working details** group `112:4563` contains **Waiting** instance `112:4565`, whose component set `111:4499` has four vector variants with timed Smart Animate transitions. The browser prototype link prompts for Figma login, but this project's configured Figma token successfully read those nodes and transition metadata through the Figma API. Figma's prototype is not itself an embeddable animated asset: use the actual vectors and timings rather than the current approximate `assets/dialogue-wait.svg`. If an original Rive, Lottie, or animated SVG export is supplied, prefer that for exact playback. No animation or UI implementation was started from this handoff.
 
 ### Terminal styling
 
-The terminal pane's look (`css/terminal.css`) is a deliberate designer-facing choice rather than a default: JetBrains Mono (OFL, `assets/fonts/`) at 13 px / 1.45, 24 px pane padding, hidden scrollbar chrome, non-blinking block cursor, and one palette shared by the xterm theme and the omp theme (`omp/dialogue-theme.json`) — background `#171717`, foreground `#f8f8f8`, muted `#9ea39e`, borders `#272727`/`#3a3a3a`, accent `#ccff00`, success `#17b239`, error `#e5484d`, warning `#f5a623`, selection `rgba(204,255,0,.25)`, restrained syntax tints.
+The terminal panel uses a locally bundled Inter Tight font (OFL) for its 32 px white rounded session strip, including the selected model and current branch. The pane and xterm background are `#f8f8f8`; the xterm and `omp` palettes use dark text, white sent-prompt and status surfaces, and restrained syntax colours. The text grid uses locally bundled Space Mono (OFL) at 12 px / 1.5: xterm assigns one fixed-width cell per character, so proportional Inter Tight visibly breaks spacing and clips the agent transcript.
 
-The pane itself, however, is a raw agent TUI. It will be superseded by a designed conversation UI once the workflow shows what the designer actually needs to say and see. Final in-product agent/connection management belongs in a designed Dialogue Settings/Connections experience after that.
+The terminal itself is still an `omp` TUI. Its prompt blocks and native status line are painted as rows of character cells, not DOM cards; the theme can set their colours but cannot give each prompt a 16 px corner radius or rearrange its messages. The rounded session strip is Dialogue chrome, not a replacement for the native status line. A later custom conversation view can implement those details without compromising the working terminal; direct console access remains available for advanced use.
 
 ## Prototype preview
 

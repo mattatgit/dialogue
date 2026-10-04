@@ -33,6 +33,7 @@ Do not ask the user to restate project history that is already recorded here.
 - Do not rely on chat memory as the primary project record.
 - Do not invent missing project history. If repository documentation does not support something, say so.
 - Do not modify files merely because `Load project context` was invoked. Context loading is read-only unless the user also asks for a change.
+- When giving a URL to test Dialogue, first identify the build/worktree the user is working on and verify which running server serves that directory. Give only that build's URL; start it on a free port if necessary. Never substitute a different branch's URL just because its server is already running.
 
 ## Response after loading
 
