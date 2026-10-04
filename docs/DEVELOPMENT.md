@@ -74,6 +74,8 @@ Git push uses a per-project SSH deploy key that Dialogue generates in `.dialogue
 
 New work should normally branch from `develop`, be tested, then return through a pull request.
 
+After making a local commit, push its branch to GitHub as part of the same task.
+
 ## Designer-first working model
 
 The intended collaboration remains:
