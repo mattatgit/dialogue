@@ -12,7 +12,6 @@
   const terminalHost = document.querySelector('[data-terminal-host]');
   const overlay = document.querySelector('[data-terminal-overlay]');
   const overlayText = document.querySelector('[data-terminal-overlay-text]');
-  const terminalToggle = document.querySelector('[data-terminal-toggle]');
   const modelLabel = document.querySelector('[data-terminal-model]');
   const params = new URLSearchParams(window.location.search);
   const workspaceId = params.get('id');
@@ -139,8 +138,6 @@
   const mountTerminal = () => {
     if (!terminalPane || !terminalHost || !window.DialogueTerminal || terminal) return;
     terminalPane.hidden = false;
-    document.body.classList.add('terminal-open');
-    terminalToggle?.setAttribute('aria-expanded', 'true');
     if (modelLabel) fetch('/api/agent', { cache: 'no-store' })
       .then((response) => response.ok ? response.json() : null)
       .then((agent) => {
@@ -160,16 +157,13 @@
     overlay?.addEventListener('click', () => terminal?.retry());
   };
 
-  terminalToggle?.addEventListener('click', () => {
-    if (terminalPane.hidden && terminal) {
-      terminalPane.hidden = false;
-      document.body.classList.add('terminal-open');
-      terminalToggle.setAttribute('aria-expanded', 'true');
-    } else if (terminalPane.hidden) mountTerminal();
-    else {
+  window.addEventListener('dialogue:mode', (event) => {
+    if (!terminalPane) return;
+    if (event.detail === 'terminal') {
+      if (terminal) terminalPane.hidden = false;
+      else mountTerminal();
+    } else {
       terminalPane.hidden = true;
-      document.body.classList.remove('terminal-open');
-      terminalToggle.setAttribute('aria-expanded', 'false');
     }
   });
 
@@ -226,10 +220,6 @@
       frame.title = `${workspace.project?.name || 'Prototype'} · ${workspace.ref}`;
       renderRunner(workspace.runner || { state: 'starting' });
 
-      if (workspace.terminal) {
-        terminalToggle.hidden = false;
-        if (wantsFix) mountTerminal();
-      }
       window.dispatchEvent(new CustomEvent('dialogue:workspace', { detail: workspace }));
       subscribe();
     } catch (error) {

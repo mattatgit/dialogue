@@ -35,10 +35,8 @@ function updateGeometry() {
   if (!active) return;
   const width = scroll.clientWidth, height = scroll.clientHeight;
   const contentWidth = Math.max(width, 220), contentHeight = Math.max(height, 300);
-  // Comment mode opens the activity rail by moving only the canvas's left edge.
-  // Calculate the prototype against the original full canvas width, then offset
-  // it back by the animated left-edge shift. This keeps the prototype fixed in
-  // the browser while the white canvas smoothly becomes narrower behind it.
+  // Keep the prototype at its Interact-mode position when either side rail
+  // opens, so the canvas narrows without moving the preview itself.
   const canvasShift = Math.max(0, canvas.getBoundingClientRect().left - 8);
   const layoutWidth = Math.max(contentWidth + canvasShift, 220);
   plane.style.width = `${contentWidth}px`; plane.style.height = `${contentHeight}px`;
@@ -178,13 +176,14 @@ function closeComment() {
 }
 function mayNavigate() { return composer.hidden || closeComment(); }
 function setMode(next) {
-  if (mode === next || (next === 'comment' && !active)) return;
-  if (next === 'test' && !mayNavigate()) return;
+  if (mode === next || (next === 'comment' && !active) || (next === 'terminal' && !active?.terminal)) return;
+  if (!mayNavigate()) return;
   mode = next; document.body.dataset.mode = mode;
   $$('[data-mode-button]').forEach(b => b.setAttribute('aria-pressed', b.dataset.modeButton === mode));
   rail.hidden = mode !== 'comment';
   hit.hidden = mode !== 'comment' || !active?.terminal;
   $('.review-tools').hidden = mode !== 'comment' || !active?.terminal;
+  window.dispatchEvent(new CustomEvent('dialogue:mode', { detail: mode }));
   updateGeometry();
   if (mode === 'comment') refreshActivity().catch(error => toast(`Could not update activity: ${error.message}`));
 }
@@ -380,6 +379,8 @@ addEventListener('dialogue:workspace', async event => {
   historyWorkspaceId = nextWorkspaceId;
   origin = { x: 0, y: 0 }; rootRadius = {};
   $('[data-mode-button="comment"]').lastChild.textContent = active.terminal ? 'Comment' : 'Activity';
+  $('[data-mode-button="terminal"]').disabled = !active.terminal;
+  if (active.terminal && new URLSearchParams(location.search).get('fix') === '1') setMode('terminal');
   updateGeometry();
   try { await refreshActivity(); } catch (error) { toast(`Could not load activity: ${error.message}`); }
 });

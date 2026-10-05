@@ -3,8 +3,8 @@
 .review-home{position:absolute;left:8px;top:8px;width:32px;height:32px;color:var(--ink)}.review-home .icon{width:32px;height:32px}
 .review-crumb{position:absolute;left:48px;top:0;height:48px;max-width:40%;display:flex;align-items:center;gap:3px;white-space:nowrap;font-weight:600;overflow:hidden}
 .review-crumb a,.review-crumb>span:not(:last-child){color:var(--mid)}.review-crumb>span:last-child{overflow:hidden;text-overflow:ellipsis}.review-crumb a:hover{color:var(--ink)}
-.review-mode-switch{position:absolute;left:50%;transform:translateX(-50%);width:200px;height:48px;padding:8px;display:flex;align-items:center;gap:8px;background:white;border-radius:16px;z-index:1}
-.review-mode-switch button{width:88px;height:32px;flex:0 0 88px;border:0;border-radius:8px;background:transparent;color:var(--mid);padding:8px;gap:6px;font-size:12px;font-weight:600}.review-mode-switch button[aria-pressed=true]{background:#323232;color:white}.mode-icon{position:relative;display:block;flex:0 0 12px;width:12px;height:12px}.mode-icon img{position:absolute;left:0;top:50%;display:block;max-width:none;transform:translateY(-50%)}.interact-icon img{width:12px;height:13px}.comment-icon img{width:12px;height:12px}.mode-icon-active{opacity:0}.review-mode-switch button[aria-pressed=true] .mode-icon-inactive{opacity:0}.review-mode-switch button[aria-pressed=true] .mode-icon-active{opacity:1}
+.review-mode-switch{position:absolute;left:50%;transform:translateX(-50%);width:352px;height:48px;padding:8px;display:flex;align-items:center;background:white;border-radius:16px;z-index:1}
+.review-mode-switch button{width:112px;height:32px;flex:0 0 112px;border:0;border-radius:8px;background:transparent;color:var(--mid);padding:8px;gap:6px;font-size:12px;font-weight:600;white-space:nowrap}.review-mode-switch button[aria-pressed=true]{background:#323232;color:white}.review-mode-switch button:disabled{cursor:not-allowed;opacity:.5}.mode-icon{position:relative;display:block;flex:0 0 12px;width:12px;height:12px}.mode-icon img{position:absolute;left:0;top:50%;display:block;max-width:none;transform:translateY(-50%)}.interact-icon img{width:12px;height:13px}.comment-icon img{width:12px;height:12px}.terminal-icon img{width:13px;height:12px}.mode-icon-active{opacity:0}.review-mode-switch button[aria-pressed=true] .mode-icon-inactive{opacity:0}.review-mode-switch button[aria-pressed=true] .mode-icon-active{opacity:1}
 .review-top-actions{position:absolute;right:8px;top:8px;display:flex;gap:10px}.reload-icon{color:var(--ink)}
 .review-canvas{position:absolute;inset:80px 8px 8px;background:white;border-radius:16px;overflow:hidden;transition:left 100ms ease-out,bottom 100ms ease-out;will-change:left,bottom}.review-view[data-mode=comment] .review-canvas{left:280px}
 .review-scroll{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain}.review-plane{position:relative;min-width:100%;min-height:100%}
@@ -65,12 +65,13 @@
 @media(max-width:980px){.review-crumb{max-width:34%}.simulation-controls{bottom:76px}.review-view[data-mode=comment]{--history-width:232px}.review-view[data-mode=comment] .review-history{width:216px}.review-view[data-mode=comment] .review-canvas{left:240px}}
 @media(max-width:680px){.review-header{inset:8px 8px auto;height:96px}.review-crumb{max-width:calc(100% - 64px)}.review-top-actions{top:56px}.review-mode-switch,.review-view[data-mode=comment] .review-mode-switch{left:8px;top:48px;transform:none}.review-canvas,.review-view[data-mode=comment] .review-canvas{top:112px;left:8px}.review-view[data-mode=comment] .review-history{top:auto;bottom:8px;left:8px;right:8px;width:auto;height:184px;padding-right:0}.review-view[data-mode=comment] .review-canvas{bottom:200px}.activity-card{min-height:160px}.review-composer{max-width:calc(100% - 16px)}.simulation-controls{bottom:76px;left:8px}}
 
-/* The Git workspace keeps the designed canvas and an on-demand terminal. */
+/* The workspace switches between a full-width canvas and a side-by-side activity or terminal rail. */
 .workspace-review [hidden]{display:none!important}
 .workspace-review .review-top-actions{align-items:center}
 .workspace-review .review-top-actions .workspace-status{font-size:11px;font-weight:600;white-space:nowrap}
-.workspace-review .review-canvas .terminal-pane{position:absolute;inset:0 auto 0 8px;width:min(256px,calc(100% - 16px));z-index:25;border:1px solid var(--term-line);border-radius:16px;box-shadow:8px 0 28px #0002}
-.workspace-review .review-canvas .terminal-pane[hidden]{display:none}
+.workspace-review[data-mode=terminal] .review-canvas{left:280px}
+.workspace-review .terminal-pane{position:absolute;left:16px;top:80px;bottom:8px;width:248px;z-index:25;background:transparent;padding:0}
+.workspace-review .terminal-pane[hidden]{display:none}
 .workspace-review .review-tools button:disabled{opacity:.5;cursor:not-allowed}
 .workspace-review .activity-live{display:flex;align-items:center;gap:4px;min-width:0;height:32px;margin-top:12px;color:var(--mid);font-size:10px;line-height:16px;white-space:nowrap}
 .workspace-review .activity-live img{display:block;width:32px;height:32px;flex:none;animation:review-mark-wait 3s ease-in-out infinite}
@@ -78,4 +79,9 @@
 @keyframes review-activity-pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes review-mark-wait{0%{transform:scale(1) rotate(0)}16.6667%{transform:scale(.82) rotate(-12deg)}33.3333%{transform:scale(1.08) rotate(8deg)}50%,100%{transform:scale(1) rotate(0)}}
 @media(prefers-reduced-motion:reduce){.workspace-review .activity-live img,.workspace-review .activity-live span{animation:none}}
-@media(max-width:680px){.workspace-review .review-canvas .terminal-pane{width:100%}.workspace-review .review-top-actions{gap:4px}.workspace-review .review-top-actions .workspace-status{display:none}.workspace-review .activity-card{height:auto;min-height:152px}.workspace-review .activity-card.is-version,.workspace-review .activity-card.is-compact{min-height:128px}.workspace-review .activity-card.has-actions{padding-bottom:72px}}
+@media(max-width:680px){.workspace-review .review-top-actions{gap:4px}.workspace-review .review-top-actions .workspace-status{display:none}.workspace-review .activity-card{height:auto;min-height:152px}.workspace-review .activity-card.is-version,.workspace-review .activity-card.is-compact{min-height:128px}.workspace-review .activity-card.has-actions{padding-bottom:72px}}
+@media(max-width:1100px){.workspace-review .review-header{height:96px}.workspace-review .review-mode-switch{left:8px;top:48px;transform:none}.workspace-review .review-top-actions{top:56px}.workspace-review .review-canvas{top:112px}.workspace-review .review-history,.workspace-review .terminal-pane{top:112px}}
+@media(max-width:980px){.workspace-review[data-mode=terminal] .review-canvas{left:240px}.workspace-review .terminal-pane{width:216px}}
+@media(max-width:680px){.workspace-review .review-header{height:144px}.workspace-review .review-mode-switch{width:min(352px,calc(100vw - 16px))}.workspace-review .review-mode-switch button{width:auto;min-width:0;flex:1;padding:6px 3px;gap:3px;font-size:11px}.workspace-review .review-top-actions{top:104px}.workspace-review .review-canvas{top:160px}.workspace-review .review-history,.workspace-review .terminal-pane{top:auto;bottom:8px;left:8px;right:8px;width:auto;height:184px}.workspace-review[data-mode=terminal] .review-canvas{top:160px;left:8px;bottom:200px}.workspace-review .terminal-host{inset:48px 8px 8px}.workspace-review .terminal-toolbar{top:8px}}
+@media(max-width:980px){.workspace-review .review-top-actions .workspace-status{display:none}}
+@media(max-width:680px){.workspace-review[data-mode=comment] .review-canvas{top:160px}}

@@ -18,13 +18,13 @@
       <a href="projects.html" data-project-link data-project-title>Project</a><span aria-hidden="true">→</span>
       <span data-ref-title data-review-title>Workspace</span>
     </nav>
-    <div class="review-mode-switch" role="group" aria-label="Prototype mode">
+    <div class="review-mode-switch" role="group" aria-label="Workspace mode">
       <button type="button" data-mode-button="test" aria-pressed="true"><span class="mode-icon interact-icon" aria-hidden="true"><img class="mode-icon-inactive" src="assets/interact-grey.svg" alt=""><img class="mode-icon-active" src="assets/interact-white.svg" alt=""></span>Interact</button>
       <button type="button" data-mode-button="comment" aria-pressed="false"><span class="mode-icon comment-icon" aria-hidden="true"><img class="mode-icon-inactive" src="assets/comment-grey.svg" alt=""><img class="mode-icon-active" src="assets/comment-white.svg" alt=""></span>Comment</button>
+      <button type="button" data-mode-button="terminal" aria-pressed="false" disabled><span class="mode-icon terminal-icon" aria-hidden="true"><img class="mode-icon-inactive" src="assets/terminal-grey.svg" alt=""><img class="mode-icon-active" src="assets/terminal-white.svg" alt=""></span>LLM terminal</button>
     </div>
     <div class="review-top-actions">
       <span class="workspace-status" data-workspace-status hidden></span>
-      <button class="review-button" data-terminal-toggle type="button" hidden aria-expanded="false" aria-controls="workspace-terminal">Terminal</button>
       <button class="review-button" data-reload data-restart type="button" title="Restart prototype (R)" aria-label="Restart prototype"><svg class="icon reload-icon"><use href="assets/review-icons.svg#reload"/></svg><span>Restart</span></button>
       <button class="review-button" data-review-share type="button" aria-haspopup="dialog"><svg class="icon"><use href="assets/review-icons.svg#share"/></svg>Share</button>
     </div>
@@ -32,6 +32,11 @@
   <aside class="review-history" aria-label="Branch activity" tabindex="0" hidden>
     <div data-history-items></div><div class="history-spacer" aria-hidden="true"></div>
   </aside>
+  <section class="terminal-pane" id="workspace-terminal" data-terminal-pane hidden aria-label="Agent terminal">
+    <div class="terminal-toolbar" aria-label="Agent session"><span class="terminal-toolbar-mark" aria-hidden="true">π</span><span class="terminal-toolbar-model" data-terminal-model title="Selected agent model">AI model</span><span class="terminal-toolbar-ref" data-ref-title title="Current branch"></span></div>
+    <div class="terminal-host" data-terminal-host></div>
+    <div class="terminal-overlay" data-terminal-overlay hidden><span class="terminal-overlay-text" data-terminal-overlay-text>Connecting…</span></div>
+  </section>
   <main class="review-canvas" aria-label="Prototype canvas" data-workspace-body>
     <div class="review-scroll"><div class="review-plane">
       <div class="review-frame-host" data-prototype-frame-shell hidden><iframe title="Prototype" data-review-frame data-prototype-frame sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe></div>
@@ -53,11 +58,6 @@
       <button type="button" data-tool="area" aria-pressed="true"><svg class="icon"><use href="assets/review-icons.svg#area"/></svg>Area</button>
       <button type="button" data-tool="arrow" aria-pressed="false"><svg class="icon"><use href="assets/review-icons.svg#arrow"/></svg>Arrow</button>
     </div>
-    <section class="terminal-pane" id="workspace-terminal" data-terminal-pane hidden aria-label="Agent terminal">
-      <div class="terminal-toolbar" aria-label="Agent session"><span class="terminal-toolbar-mark" aria-hidden="true">π</span><span class="terminal-toolbar-model" data-terminal-model title="Selected agent model">AI model</span><span class="terminal-toolbar-ref" data-ref-title title="Current branch"></span></div>
-      <div class="terminal-host" data-terminal-host></div>
-      <div class="terminal-overlay" data-terminal-overlay hidden><span class="terminal-overlay-text" data-terminal-overlay-text>Connecting…</span></div>
-    </section>
   </main>
   <div class="review-toast" role="status" aria-live="polite" hidden></div>
   <dialog class="review-share-dialog" aria-labelledby="review-share-title">
