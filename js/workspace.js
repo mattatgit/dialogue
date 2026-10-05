@@ -46,8 +46,7 @@
     url.searchParams.set('reviewChannel', channel);
     url.searchParams.set('reviewOrigin', location.origin);
     window.dispatchEvent(new CustomEvent('dialogue:channel', { detail: channel }));
-    frame.src = 'about:blank';
-    window.setTimeout(() => { frame.src = url.href; }, 0);
+    frame.src = url.href;
   };
 
   const restartPreview = async () => {
