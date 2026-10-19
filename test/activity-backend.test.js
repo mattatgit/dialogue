@@ -99,6 +99,38 @@ test('failed atomic push retains pending draft without a Version; retry publishe
   }
 });
 
+test('version and draft attribution requires the latest edited snapshot tree', async () => {
+  const ctx = await fixture();
+  try {
+    const first = await comment(ctx, 'first edit');
+    let state = await ctx.repo.versionState(ctx.workspace);
+    let draft = await ctx.repo.attributeDraft(state.draft, state.versions, ctx.requests.list(ctx.workspace.id), ctx.workspace);
+    assert.equal(draft.requestId, first.id);
+    await fsp.writeFile(path.join(ctx.workspace.dir, 'index.html'), 'manual adjustment');
+    state = await ctx.repo.versionState(ctx.workspace);
+    draft = await ctx.repo.attributeDraft(state.draft, state.versions, ctx.requests.list(ctx.workspace.id), ctx.workspace);
+    assert.equal(draft.requestId, undefined);
+    await fsp.writeFile(path.join(ctx.workspace.dir, 'index.html'), 'first');
+    await ctx.requests.saveVersion(ctx.workspace, ctx.repo);
+    state = await ctx.repo.versionState(ctx.workspace);
+    let versions = await ctx.repo.attributeVersions(state.versions, ctx.requests.list(ctx.workspace.id));
+    assert.equal(versions[0].requestId, first.id);
+    draft = await ctx.repo.attributeDraft(state.draft, state.versions, ctx.requests.list(ctx.workspace.id), ctx.workspace);
+    assert.equal(draft.requestId, undefined);
+    ctx.options.env.FAKE_CONTENT = 'second';
+    await comment(ctx, 'second edit');
+    await fsp.writeFile(path.join(ctx.workspace.dir, 'index.html'), 'manual before save');
+    await ctx.requests.saveVersion(ctx.workspace, ctx.repo);
+    state = await ctx.repo.versionState(ctx.workspace);
+    versions = await ctx.repo.attributeVersions(state.versions, ctx.requests.list(ctx.workspace.id));
+    assert.equal(versions[0].requestId, first.id);
+    assert.equal(versions[1].requestId, undefined);
+  } finally {
+    await ctx.requests.shutdown();
+    await ctx.cleanup();
+  }
+});
+
 test('retry after a failed push publishes the current Draft, not stale pending bytes', async () => {
   const ctx = await fixture();
   try {

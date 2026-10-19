@@ -163,7 +163,7 @@ When touching git/workspace/terminal/preview behaviour, preserve:
 - editing `.dialogue/preview.json` restarts the preview; killing the dev server shows the crash log and **Restart preview** brings it back
 - the terminal connects and omp starts inside the worktree
 - closing and reopening the tab reattaches to the same tmux session
-- editing a project file flips the chip to uncommitted changes; Save version publishes a numbered tag and updates the branch/head chip only after remote confirmation
+- editing a project file leaves the current Draft publishable without adding a worktree-state label to the header; Save version publishes a numbered tag and updates the header's commit SHA only after remote confirmation
 - completed comments with file changes retain private reopenable Edited commits; no-change and failed runs never appear as Edited
 - the live Draft persists alongside Edited and Vn cards; opening a snapshot gives a read-only worktree and Draft returns to the source branch
 - rejected pushes leave a retryable Draft, never an advertised Version or pushed private edit refs

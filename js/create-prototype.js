@@ -618,7 +618,7 @@
       const requestResponse = await fetch(`/api/workspaces/${opened.workspace.id}/requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedback: markdown, ...(submittedFigma ? { figmaUrl: submittedFigma.url } : {}) })
+        body: JSON.stringify({ feedback: markdown, kind: 'create', ...(submittedFigma ? { figmaUrl: submittedFigma.url } : {}) })
       });
       const result = await requestResponse.json().catch(() => ({}));
       if (!requestResponse.ok || !result.request) throw new Error(result.error || 'Could not start the prototype request.');

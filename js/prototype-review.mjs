@@ -5,6 +5,27 @@ import { readGrid, writeGrid } from './review-preferences.mjs';
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Request summaries come from agent text: render only supported inline Markdown,
+// escaping all other markup instead of treating it as trusted HTML.
+function inlineMarkdown(value) {
+  const text = String(value ?? '');
+  const token = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|`([^`\n]+)`|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
+  let html = '', position = 0;
+  for (const match of text.matchAll(token)) {
+    html += esc(text.slice(position, match.index));
+    if (match[1]) {
+      try {
+        const url = new URL(match[2]);
+        html += `<a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(match[1])}</a>`;
+      } catch { html += esc(match[0]); }
+    } else if (match[3] || match[4]) html += `<strong>${esc(match[3] || match[4])}</strong>`;
+    else if (match[5]) html += `<code>${esc(match[5])}</code>`;
+    else if (match[6]) html += `<del>${esc(match[6])}</del>`;
+    else html += `<em>${esc(match[7] || match[8])}</em>`;
+    position = match.index + match[0].length;
+  }
+  return html + esc(text.slice(position));
+}
 const canvas = $('.review-canvas'), plane = $('.review-plane'), scroll = $('.review-scroll');
 const frame = $('[data-review-frame]'), host = $('.review-frame-host'), hit = $('.review-hit-layer');
 const rail = $('.review-history'), cards = $('[data-history-items]'), composer = $('[data-comment-form]');
@@ -19,6 +40,13 @@ let sendHoverTimer, toastTimer, hoverPending = false;
 let channel = '', bridgeReady = false, probeId = 0, selectedProbe = 0;
 let refreshTimer = null, activitySequence = 0, draftSelected = false, savingVersion = false, saveError = '';
 let saveConfirmed = false, saveConfirmationTimer = null;
+const completionTransitions = new Set();
+function showCompletion(previous, current) {
+  if (!previous?.some(request => request.id === current.id && request.status === 'running') ||
+      current.status !== 'completed' || completionTransitions.has(current.id)) return;
+  completionTransitions.add(current.id);
+  setTimeout(() => { completionTransitions.delete(current.id); renderHistory(); }, 1100);
+}
 
 function toast(message) {
   const el = $('.review-toast'); el.textContent = message; el.hidden = false;
@@ -212,7 +240,7 @@ function formatTime(iso) {
   if (now.valueOf() - d.valueOf() < 60000) return 'Just now';
   const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-  if (sameDay) return time;
+  if (sameDay) return `Today ${time}`;
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
   if (d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate()) return `Yesterday ${time}`;
   return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -235,6 +263,8 @@ function upsertRequest(request) {
   const index = requests.findIndex(item => item.id === request.id);
   const previous = requests[index];
   if (previous && previous.status !== 'running' && request.status === 'running') return;
+  if (request.status === 'running') draftSelected = false;
+  showCompletion(previous && [previous], request);
   if (index === -1) requests.push(request);
   else requests[index] = request;
   renderHistory();
@@ -250,6 +280,7 @@ async function refreshActivity() {
   if (!saved.draft || !Array.isArray(saved.edits) || !Array.isArray(saved.versions) || !Array.isArray(saved.requests))
     throw new Error('Invalid activity response.');
   activity = saved;
+  for (const request of saved.requests) showCompletion(requests, request);
   requests = saved.requests;
   renderHistory();
   scheduleRefresh();
@@ -259,61 +290,92 @@ function renderHistory() {
   const focused = cards.contains(document.activeElement) ? document.activeElement : null;
   const focusKey = focused?.dataset.cardFocus;
   const focusPreview = focused?.dataset.previewId;
-  const draft = activity?.draft;
+  const { draft, edits, versions, terminalActivity } = activity || {};
   if (!draft) { cards.replaceChildren(); return; }
   const readonly = !active?.terminal;
-  const working = requests.some(request => request.status === 'running') || activity.terminalActivity?.state === 'working';
-  const canSelectDraft = readonly || draft.canSave || saveConfirmed;
-  const actions = draftSelected && !readonly && canSelectDraft
-    ? `<div class="card-actions"><button class="review-button" type="button" data-card-cancel data-card-focus="cancel">Cancel</button><button class="review-button primary save-version-button ${saveConfirmed ? 'is-saved' : ''}" type="button" data-card-save data-card-focus="save" ${!draft.canSave || working || savingVersion || saveConfirmed ? 'disabled' : ''}>${saveConfirmed ? 'Saved version' : savingVersion ? 'Saving…' : 'Save a version'}</button></div>` : '';
-  const draftDetail = draft.pending ? 'A previous save is ready to retry.'
-    : draft.canSave ? 'Changes are ready to save.' : 'Current working prototype.';
-  const draftTitle = readonly ? 'Changes on the source branch' : `Changes on ${active?.ref || 'this branch'}`;
-  const draftCard = `<article class="activity-card is-active is-draft ${actions ? 'has-actions' : ''}" data-draft-card data-card-focus="draft" tabindex="${canSelectDraft ? '0' : '-1'}" aria-expanded="${draftSelected && !readonly}" aria-current="${readonly ? 'false' : 'true'}" ${canSelectDraft ? `title="${readonly ? 'Open current branch Draft' : 'Select current Draft'}"` : 'data-inert'}>
-    <div class="activity-meta"><span class="revision-badge badge-draft">Draft</span></div>
-    <div class="activity-content"><p class="activity-request">${esc(draftTitle)}</p><p class="activity-summary">${esc(draftDetail)}</p>${readonly ? '<small>Open the source branch to continue editing.</small>' : ''}${saveError ? `<p class="activity-error" role="alert">${esc(saveError)}</p>` : ''}</div>${actions}</article>`;
-  const requestById = new Map(requests.map(request => [request.id, request]));
-  const editedRequests = new Set(activity.edits.map(edit => edit.requestId));
-  const entries = [
-    ...activity.edits.map(edit => ({ type: 'edit', value: edit, createdAt: edit.createdAt })),
-    ...activity.versions.map(version => ({ type: 'version', value: version, createdAt: version.createdAt })),
-    ...requests.filter(request => !editedRequests.has(request.id) || request.status === 'running')
-      .map(request => ({ type: 'request', value: request, createdAt: request.finishedAt || request.startedAt || request.createdAt })),
-    ...(activity.terminalActivity ? [{ type: 'terminal', value: activity.terminalActivity, createdAt: activity.terminalActivity.updatedAt }] : [])
-  ];
+  const working = requests.some(request => request.status === 'running') || terminalActivity?.state === 'working';
+  const editsByRequest = new Map(edits.map(edit => [edit.requestId, edit]));
+  const versionByRequest = new Map(versions.filter(version => version.requestId).map(version => [version.requestId, version]));
+  const latestVersion = versions.at(-1);
+  const creation = requests.find(request => request.kind === 'create') ||
+    requests.find(request => !request.kind && !request.anchor);
   const summaryFor = (request, fallback) => {
     const text = request?.summary?.trim();
     return text && !/^[^.!?]{1,48}:$/.test(text) ? text : fallback;
   };
-  const live = text => `<p class="activity-live" role="status"><img src="assets/dialogue-wait.svg" alt="" aria-hidden="true"><span>${esc(text)}</span></p>`;
-  cards.innerHTML = draftCard + chronological(entries).map(({ type, value }) => {
-    if (type === 'edit') {
-      const edit = value, sha = /^[a-f0-9]{40}$/.test(edit.sha || '') ? edit.sha : '';
-      const request = requestById.get(edit.requestId);
-      return `<article class="activity-card" ${sha ? `data-preview-id="${sha}" tabindex="0" title="Open this Edited snapshot as a read-only preview"` : ''}>
-        <div class="activity-meta"><span class="revision-badge badge-edited">Edited</span><time datetime="${esc(edit.createdAt)}">${esc(formatTime(edit.createdAt))}</time></div>
-        <div class="activity-content"><p class="activity-request">${esc(edit.feedback)}</p><p class="activity-summary">${esc(summaryFor(request, 'Changes from this comment are ready to review.'))}</p></div></article>`;
+  const modelIcon = model => {
+    if (!model) return '';
+    const name = model.split('/').at(-1);
+    const provider = model.toLowerCase();
+    const icon = /anthropic|claude/.test(provider) ? 'history-anthropic.svg'
+      : /qwen/.test(provider) ? 'history-qwen.svg'
+        : /kimi|moonshot/.test(provider) ? 'history-kimi.svg'
+          : /openai|gpt-/.test(provider) ? 'history-model.svg' : null;
+    const glyph = icon ? `<img src="assets/${icon}" alt="" aria-hidden="true">` : esc(name.charAt(0).toUpperCase());
+    return `<span class="activity-model" title="${esc(model)}" aria-label="${esc(name)}">${glyph}</span>`;
+  };
+  const statusBar = (text, complete = false) => `<p class="activity-live ${complete ? 'is-complete' : ''}" role="status">${complete
+    ? '<img src="assets/history-complete.svg" alt="" aria-hidden="true">'
+    : '<picture class="activity-wait-mark" aria-hidden="true"><source media="(prefers-reduced-motion: reduce)" srcset="assets/history-wait-static.svg"><img src="assets/history-wait.svg" alt=""></picture>'}<span>${esc(text)}</span></p>`;
+  const entries = requests.map(request => {
+    const edit = editsByRequest.get(request.id);
+    const version = versionByRequest.get(request.id);
+    const isCreation = request === creation;
+    const completing = completionTransitions.has(request.id);
+    return {
+      type: 'request', request, version, edit,
+      sha: version?.sha || edit?.sha,
+      label: request.status === 'running' || completing ? 'Working' : request.status === 'failed' ? 'Failed'
+        : version?.label || (edit ? isCreation ? 'Created' : 'Edited' : isCreation ? 'No changes' : 'Commented'),
+      createdAt: version?.createdAt || request.finishedAt || request.startedAt || request.createdAt,
+      current: !readonly && !working && !completing && (version ? !draft.canSave && latestVersion === version
+        : draft.requestId === request.id && !version),
+      busy: request.status === 'running' || completing,
+      completing
+    };
+  });
+  for (const version of versions) {
+    if (versionByRequest.has(version.requestId) && requests.some(request => request.id === version.requestId)) continue;
+    entries.push({ type: 'version', version, sha: version.sha, label: version.label, createdAt: version.createdAt,
+      current: !readonly && !working && !draft.canSave && version === latestVersion });
+  }
+  const attributed = requests.some(request => request.id === draft.requestId && !versionByRequest.has(request.id));
+  if (!attributed && !working && (draft.canSave || (!versions.length && !requests.some(request => editsByRequest.has(request.id))))) {
+    entries.push({ type: 'draft', label: 'Draft', createdAt: new Date().toISOString(), current: !readonly && !working,
+      detail: draft.pending ? 'A previous save is ready to retry.' : draft.canSave ? 'Changes are ready to save.' : 'Current working prototype.' });
+  }
+  if (terminalActivity) entries.push({ type: 'terminal', turn: terminalActivity, label: terminalActivity.state === 'working' ? 'Working' : 'Activity',
+    createdAt: terminalActivity.updatedAt, busy: terminalActivity.state === 'working' });
+  const selectedSha = readonly ? active?.head?.sha : null;
+  const ordered = chronological(entries);
+  const workingIndex = ordered.findIndex(entry => entry.type === 'request' && entry.busy);
+  if (workingIndex > 0) ordered.unshift(...ordered.splice(workingIndex, 1));
+  cards.innerHTML = ordered.map(entry => {
+    const { request, version, turn, current, busy, sha, label, createdAt } = entry;
+    const selected = Boolean(sha && selectedSha === sha);
+    const canSave = !readonly && current && !working && draft.canSave && entry.type !== 'terminal';
+    const showSaved = !readonly && current && saveConfirmed && Boolean(version);
+    const expanded = draftSelected && (canSave || showSaved);
+    const actions = expanded ? `<div class="card-actions"><button class="review-button" type="button" data-card-cancel data-card-focus="cancel" ${savingVersion || saveConfirmed ? 'disabled' : ''}>Cancel</button><button class="review-button primary save-version-button ${saveConfirmed ? 'is-saved' : ''}" type="button" data-card-save data-card-focus="save" ${!canSave || savingVersion || saveConfirmed ? 'disabled' : ''}>${saveConfirmed ? 'Saved a version' : savingVersion ? 'Saving…' : 'Save a version'}</button></div>` : '';
+    const preview = sha && /^[a-f0-9]{40}$/.test(sha) ? `data-preview-id="${sha}" tabindex="0" title="Open ${esc(label)} as a read-only preview"` : '';
+    const draftControl = canSave || showSaved || readonly && entry.type === 'draft'
+      ? `data-draft-card data-card-focus="draft" tabindex="0" aria-expanded="${expanded}" title="${readonly ? 'Open source branch' : 'Select current draft'}"` : '';
+    const meta = `<div class="activity-meta"><span class="revision-badge">${esc(label)}</span>${busy ? '' : `<time datetime="${esc(createdAt)}">${esc(formatTime(createdAt))}</time>`}</div>`;
+    const classes = `activity-card ${current || busy && entry.type === 'request' ? 'is-current' : selected ? 'is-selected' : 'is-past'} ${busy ? 'is-working' : ''} ${entry.edit && request !== creation ? 'is-edit' : ''} ${version ? 'is-version' : ''} ${actions ? 'has-actions' : ''}`;
+    let content;
+    if (request) {
+      const fallback = entry.edit ? 'Changes from this comment are ready to review.' : 'The agent finished without changing files.';
+      const summary = request.status === 'failed' ? request.error || 'The request failed.' : summaryFor(request, fallback);
+      content = `<p class="activity-request" title="${esc(request.feedback)}"><span class="activity-request-text">${esc(request.feedback)}</span></p>${busy
+        ? statusBar(entry.completing ? 'Task completed' : request.workingDetail || (request === creation ? 'Creating your prototype…' : 'Working on your comment…'), entry.completing)
+        : `<div class="activity-response">${modelIcon(request.model)}<p class="${request.status === 'failed' ? 'activity-error' : 'activity-summary'}">${request.status === 'failed' ? esc(summary) : inlineMarkdown(summary)}</p></div>`}`;
+    } else if (turn) {
+      content = `<p class="activity-request">Agent terminal</p>${busy ? statusBar(turn.text) : `<p class="activity-summary">${esc(turn.text)}</p>`}`;
+    } else {
+      content = `<p class="activity-request"><span class="activity-request-text">${esc(entry.type === 'draft' ? 'Changes on ' + (active?.ref || 'this branch') : 'Published version')}</span></p><p class="activity-summary">${esc(entry.detail || 'Saved to the repository.')}</p>`;
     }
-    if (type === 'version') {
-      const version = value, sha = /^[a-f0-9]{40}$/.test(version.sha || '') ? version.sha : '';
-      return `<article class="activity-card is-version" ${sha ? `data-preview-id="${sha}" tabindex="0" title="Open ${esc(version.label)} as a read-only preview"` : ''}>
-        <div class="activity-meta"><span class="revision-badge badge-version">${esc(version.label)}</span><time datetime="${esc(version.createdAt)}">${esc(formatTime(version.createdAt))}</time></div>
-        <div class="activity-content"><p class="activity-request">Published version</p><p class="activity-summary">Saved to the repository.</p></div></article>`;
-    }
-    if (type === 'terminal') {
-      const turn = value, busy = turn.state === 'working';
-      return `<article class="activity-card is-compact ${busy ? 'is-working' : ''}" aria-busy="${busy}">
-        <div class="activity-meta"><span class="revision-badge">${busy ? 'Working' : 'Activity'}</span><time datetime="${esc(turn.updatedAt)}">${esc(formatTime(turn.updatedAt))}</time></div>
-        <div class="activity-content"><p class="activity-request">Agent terminal</p>${busy ? live(turn.text) : `<p class="activity-summary">${esc(turn.text)}</p>`}</div></article>`;
-    }
-    const request = value, busy = request.status === 'running';
-    const timestamp = request.finishedAt || request.startedAt || request.createdAt;
-    const summary = request.status === 'failed' ? request.error || 'The request failed.'
-      : summaryFor(request, 'The agent finished without changing files.');
-    return `<article class="activity-card ${busy ? 'is-compact is-working' : ''}" data-card-id="${esc(request.id)}" aria-busy="${busy}">
-      <div class="activity-meta"><span class="revision-badge">${busy ? 'Working' : request.status === 'failed' ? 'Failed' : 'Completed'}</span><time datetime="${esc(timestamp)}">${esc(formatTime(timestamp))}</time></div>
-      <div class="activity-content"><p class="activity-request" title="${esc(request.feedback)}">${esc(request.feedback)}</p>${busy ? live('Working on your comment…')
-      : `<p class="${request.status === 'failed' ? 'activity-error' : 'activity-summary'}">${esc(summary)}</p>${request.figmaUrl ? '<small>Figma design attached</small>' : ''}`}</div></article>`;
+    return `<article class="${classes}" ${draftControl || preview} ${draftControl && preview ? preview.replace('tabindex="0"', '') : ''} ${request ? `data-card-id="${esc(request.id)}"` : ''} aria-busy="${Boolean(busy)}" ${current ? 'aria-current="true"' : ''}>
+      ${meta}<div class="activity-content">${content}${saveError && current ? `<p class="activity-error" role="alert">${esc(saveError)}</p>` : ''}</div>${actions}</article>`;
   }).join('');
   const last = cards.lastElementChild;
   $('.history-spacer').style.height = `${Math.max(0, rail.clientHeight - (last?.offsetHeight || 0) - 8)}px`;
@@ -353,7 +415,7 @@ async function saveVersion(retry = false) {
       renderHistory();
     }, 2000);
     await refreshActivity().catch(error => toast(`Version saved, but activity could not update: ${error.message}`));
-    if (activity?.draft) window.DialogueWorkspace?.updateStatus({ sha: activity.draft.head }, activity.draft.dirty, activity.draft.ahead);
+    if (activity?.draft) window.DialogueWorkspace?.updateStatus({ sha: activity.draft.head });
   } catch (error) {
     saveError = error.message || 'Could not publish this Draft.';
     toast(saveError);
@@ -375,6 +437,7 @@ addEventListener('dialogue:workspace', async event => {
     activity = null; requests = []; draftSelected = false; saveError = ''; saveConfirmed = false;
     clearTimeout(saveConfirmationTimer);
     clearTimeout(refreshTimer); refreshTimer = null;
+    completionTransitions.clear();
   }
   historyWorkspaceId = nextWorkspaceId;
   origin = { x: 0, y: 0 }; rootRadius = {};
@@ -547,6 +610,7 @@ async function openCommit(sha) {
   } catch (error) { toast(error.message); }
 }
 function activateCard(target) {
+  if (target.closest('.activity-summary a')) return;
   if (target.closest('[data-inert]')) return;
   if (target.closest('[data-card-cancel]')) {
     draftSelected = false; saveError = ''; renderHistory(); return;
@@ -567,7 +631,7 @@ function activateCard(target) {
 }
 cards.addEventListener('click', event => activateCard(event.target));
 cards.addEventListener('keydown', event => {
-  if (!['Enter', ' '].includes(event.key) || event.target.closest('button,summary')) return;
+  if (!['Enter', ' '].includes(event.key) || event.target.closest('button,summary,a')) return;
   const card = event.target.closest('[data-draft-card],[data-preview-id]');
   if (card) { event.preventDefault(); activateCard(card); }
 });

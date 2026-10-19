@@ -137,7 +137,7 @@ Success means:
 
 1. open a Landline branch in Dialogue once its card says the preview is ready;
 2. ask the connected agent for one small visible HTML/CSS/JS change;
-3. see the preview reload with the change and the status chip show uncommitted changes;
+3. see the preview reload with the change and Activity show the resulting Edited state;
 4. commit and push from the same terminal and open a pull request;
 5. repeat in the NixOS VM;
 6. record what additional structured context or UI the designer and agent needed.

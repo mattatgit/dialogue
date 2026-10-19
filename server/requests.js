@@ -25,10 +25,11 @@ class RequestError extends Error {
 
 function validate(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new RequestError(400, 'Provide a feedback request.');
-  const { feedback, anchor, figmaUrl } = input;
+  const { feedback, anchor, figmaUrl, kind = 'comment' } = input;
   if (typeof feedback !== 'string' || !feedback.trim() || feedback.length > 4000 || /[\u0000-\u0008\u000b-\u001f]/.test(feedback)) {
     throw new RequestError(400, 'Feedback must be 1–4000 characters of text.');
   }
+  if (kind !== 'create' && kind !== 'comment') throw new RequestError(400, 'Request kind must be create or comment.');
   let anchorText;
   if (anchor !== undefined && anchor !== null) {
     if (typeof anchor !== 'object' || Array.isArray(anchor)) throw new RequestError(400, 'Anchor must be an object.');
@@ -40,7 +41,7 @@ function validate(input) {
     if (typeof figmaUrl !== 'string' || figmaUrl.length > 2048) throw new FigmaError(400, 'Figma URL is invalid.');
     cleanUrl = parseFigmaUrl(figmaUrl).url;
   }
-  return { feedback: feedback.trim(), ...(anchorText ? { anchor: JSON.parse(anchorText) } : {}), ...(cleanUrl ? { figmaUrl: cleanUrl } : {}) };
+  return { feedback: feedback.trim(), kind, ...(anchorText ? { anchor: JSON.parse(anchorText) } : {}), ...(cleanUrl ? { figmaUrl: cleanUrl } : {}) };
 }
 
 function indexExports(result, exports) {

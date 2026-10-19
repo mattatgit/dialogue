@@ -105,16 +105,14 @@
     }
   };
 
-  const renderStatus = (head, dirty, ahead = 0) => {
+  const renderStatus = (head) => {
     if (!status) return;
     status.replaceChildren();
+    if (!head?.sha) { status.hidden = true; return; }
     const sha = document.createElement('code');
-    sha.textContent = (head?.sha || '').slice(0, 7);
-    const text = document.createElement('span');
-    text.textContent = dirty ? 'uncommitted changes' : ahead > 0 ? `${ahead} to push` : 'clean';
-    status.append(sha, document.createTextNode(' · '), text);
-    status.classList.toggle('is-dirty', Boolean(dirty));
-    status.title = head?.subject || '';
+    sha.textContent = head.sha.slice(0, 7);
+    status.append(sha);
+    status.title = head.subject || '';
     status.hidden = false;
   };
 
@@ -179,7 +177,7 @@
       let files = true;
       try {
         const payload = JSON.parse(event.data);
-        renderStatus(payload.head, payload.dirty, payload.ahead);
+        renderStatus(payload.head);
         window.dispatchEvent(new CustomEvent('dialogue:change', { detail: payload }));
         files = payload.files !== false;
       } catch {
@@ -212,7 +210,7 @@
       document.title = `Dialogue — ${workspace.project?.name || 'Project'} · ${workspace.ref}`;
       if (projectNode) projectNode.textContent = workspace.project?.name || 'Project';
       if (projectLink) projectLink.href = workspace.project?.slug ? `project.html?slug=${encodeURIComponent(workspace.project.slug)}` : 'projects.html';
-      renderStatus(workspace.head, workspace.dirty, workspace.ahead);
+      renderStatus(workspace.head);
 
       previewUrl = workspace.previewUrl || '';
       setupStatus = workspace.project?.previewSetup?.status || '';

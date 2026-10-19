@@ -78,9 +78,11 @@ test('successful omp exit records actual checkout state and durable output, with
       anchor: { type: 'selection', rect: { x: 3, y: 4 } }
     });
     assert.equal(accepted.status, 'running');
+    assert.equal(accepted.kind, 'comment');
     await ctx.manager.active.get(ctx.workspace.id).done;
     const [record] = ctx.manager.list(ctx.workspace.id);
     assert.equal(record.status, 'completed');
+    assert.equal(record.kind, 'comment');
     assert.equal(record.summary, 'The agent finished without a summary.', 'stdout is never promoted to summary');
     assert.equal(record.error, null);
     assert.match(record.output, /observed agent output/);
@@ -102,7 +104,28 @@ test('successful omp exit records actual checkout state and durable output, with
     assert.equal(events.at(-1).status, 'completed');
     const restarted = new WorkspaceRequests(ctx.options);
     await restarted.load();
+    assert.equal(restarted.list(ctx.workspace.id)[0].kind, 'comment');
     assert.deepEqual(restarted.list(ctx.workspace.id), [record]);
+  } finally {
+    await ctx.manager.shutdown();
+    await ctx.cleanup();
+  }
+});
+
+test('explicit creation and comment kinds persist in request history across reload', async () => {
+  const ctx = await fixture('no-change');
+  try {
+    const created = await ctx.manager.start(ctx.workspace, ctx.repo, { feedback: 'Create a prototype', kind: 'create' });
+    assert.equal(created.kind, 'create');
+    await ctx.manager.active.get(ctx.workspace.id).done;
+    const commented = await ctx.manager.start(ctx.workspace, ctx.repo, { feedback: 'Looks good', kind: 'comment' });
+    assert.equal(commented.kind, 'comment');
+    await ctx.manager.active.get(ctx.workspace.id).done;
+    const records = ctx.manager.list(ctx.workspace.id);
+    assert.deepEqual(records.map((record) => record.kind), ['create', 'comment']);
+    const reopened = new WorkspaceRequests(ctx.options);
+    await reopened.load();
+    assert.deepEqual(reopened.list(ctx.workspace.id), records);
   } finally {
     await ctx.manager.shutdown();
     await ctx.cleanup();
@@ -403,7 +426,10 @@ test('readiness, branch kind and bounded input reject without launching an agent
       { feedback: 'Change it', figmaUrl: 'https://figma.com.evil.test/file/x' },
       { feedback: 'Change it', figmaUrl: 'javascript:alert(1)' },
       { feedback: 'Change it', anchor: Array(10).fill(1) },
-      { feedback: 'Change it', anchor: { data: 'x'.repeat(4096) } }
+      { feedback: 'Change it', anchor: { data: 'x'.repeat(4096) } },
+      { feedback: 'Change it', kind: 'prompt' },
+      { feedback: 'Change it', kind: null },
+      { feedback: 'Change it', kind: 1 },
     ]) await assert.rejects(ctx.manager.start(ctx.workspace, ctx.repo, body), { status: 400 });
     assert.deepEqual(ctx.manager.list(ctx.workspace.id), []);
     await assert.rejects(fsp.access(ctx.callLog));

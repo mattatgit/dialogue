@@ -1,0 +1,15 @@
+<svg width="16" height="18" viewBox="0 0 16 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M16 0.467526C16 -0.0710811 15.4804 -0.151178 15.0439 0.262934L11.9229 3.03739C10.7637 2.38438 9.4255 2.01149 8 2.01149C3.58173 2.01149 5.9315e-06 5.59064 0 10.0057C2.88856e-05 14.4208 3.58174 18 8 18C12.4183 18 16 14.4208 16 10.0057C16 9.96794 15.9991 9.93015 15.9985 9.89246C15.999 9.88442 16 9.87598 16 9.86707V0.467526Z" fill="#9EA39E"/>
+  <rect x="4" y="6" width="2" height="2" rx="1" fill="#F8F8F8" opacity="0">
+    <animate attributeName="width" values="2;2;8;8;2" keyTimes="0;0.01075;0.11828;0.89247;1" keySplines="0 0 1 1;0 0 0.58 1;0 0 1 1;0 0 0.58 1" calcMode="spline" dur="0.93s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.01075;0.11828;0.89247;1" keySplines="0 0 1 1;0 0 0.58 1;0 0 1 1;0 0 0.58 1" calcMode="spline" dur="0.93s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="4" y="9" width="2" height="2" rx="1" fill="#F8F8F8" opacity="0">
+    <animate attributeName="width" values="2;2;8;8;2" keyTimes="0;0.12903;0.23656;0.89247;1" keySplines="0 0 1 1;0 0 0.58 1;0 0 1 1;0 0 0.58 1" calcMode="spline" dur="0.93s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.12903;0.23656;0.89247;1" keySplines="0 0 1 1;0 0 0.58 1;0 0 1 1;0 0 0.58 1" calcMode="spline" dur="0.93s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="4" y="12" width="2" height="2" rx="1" fill="#F8F8F8" opacity="0">
+    <animate attributeName="width" values="2;2;4;4;2" keyTimes="0;0.24731;0.35484;0.89247;1" keySplines="0 0 1 1;0 0 0.58 1;0 0 1 1;0 0 0.58 1" calcMode="spline" dur="0.93s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.24731;0.35484;0.89247;1" keySplines="0 0 1 1;0 0 0.58 1;0 0 1 1;0 0 0.58 1" calcMode="spline" dur="0.93s" repeatCount="indefinite"/>
+  </rect>
+</svg>

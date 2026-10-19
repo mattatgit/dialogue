@@ -674,7 +674,14 @@ async function handleApi(req, res, url) {
     const { repo, workspace } = await resolveWorkspace(match[1]);
     if (workspace.kind !== 'branch') throw new HttpError(409, 'Only branches have activity.');
     const { draft, versions } = await repo.versionState(workspace);
-    sendJson(res, 200, { draft, edits: requests.edits(workspace.id), versions, requests: requests.list(workspace.id),
+    const records = requests.list(workspace.id);
+    await Promise.all(records.filter((record) => record.status === 'running').map(async (record) => {
+      const detail = await readActivity(path.join(requests.activityRoot, `${record.id}.json`));
+      if (detail?.state === 'working' && detail.text) record.workingDetail = detail.text;
+    }));
+    const attributedVersions = await repo.attributeVersions(versions, records);
+    const attributedDraft = await repo.attributeDraft(draft, versions, records, workspace);
+    sendJson(res, 200, { draft: attributedDraft, edits: requests.edits(workspace.id), versions: attributedVersions, requests: records,
       terminalActivity: await readActivity(activityPath(ACTIVITY_ROOT, workspace.id)) });
     return true;
   }

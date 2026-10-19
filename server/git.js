@@ -418,6 +418,43 @@ class ProjectRepo {
     await this.git(['update-ref', '-d', `refs/dialogue/pending/${branch}`]).catch(() => {});
   }
 
+  async attributeVersions(versions, requests) {
+    const edits = requests.filter((request) => request.status === 'completed' && /^[0-9a-f]{40}$/.test(request.snapshotSha || ''))
+      .sort((a, b) => Date.parse(a.finishedAt) - Date.parse(b.finishedAt));
+    const used = new Set();
+    const attributed = [];
+    for (const version of versions) {
+      let prior = null;
+      for (let index = edits.length - 1; index >= 0; index -= 1) {
+        const edit = edits[index];
+        if (Math.floor(Date.parse(edit.finishedAt) / 1000) > Math.floor(Date.parse(version.createdAt) / 1000)) continue;
+        // A snapshot descended from the published commit was made after this Version,
+        // even when both events share Git's one-second timestamp precision.
+        if (await this.git(['merge-base', '--is-ancestor', version.sha, edit.snapshotSha]).then(() => true, () => false)) continue;
+        prior = edit;
+        break;
+      }
+      const versionTree = (await this.git(['rev-parse', `${version.sha}^{tree}`])).trim();
+      const snapshotTree = prior && !used.has(prior.id)
+        ? (await this.git(['rev-parse', `${prior.snapshotSha}^{tree}`])).trim() : null;
+      if (snapshotTree === versionTree) used.add(prior.id);
+      attributed.push(snapshotTree === versionTree ? { ...version, requestId: prior.id } : version);
+    }
+    return attributed;
+  }
+
+  async attributeDraft(draft, versions, requests, workspace) {
+    const latest = requests.filter((request) => request.status === 'completed' && /^[0-9a-f]{40}$/.test(request.snapshotSha || '')).at(-1);
+    if (!latest || !draft.canSave) return draft;
+    const tree = await this.draftTree(workspace);
+    const snapshotTree = (await this.git(['rev-parse', `${latest.snapshotSha}^{tree}`])).trim();
+    if (tree !== snapshotTree) return draft;
+    for (const version of versions) {
+      if ((await this.git(['rev-parse', `${version.sha}^{tree}`])).trim() === tree) return draft;
+    }
+    return { ...draft, requestId: latest.id };
+  }
+
   async versionState(workspace) {
     const branch = workspace.ref;
     const tagPrefix = `refs/tags/dialogue/${branch}/`;
