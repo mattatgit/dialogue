@@ -415,7 +415,6 @@ async function saveVersion(retry = false) {
       renderHistory();
     }, 2000);
     await refreshActivity().catch(error => toast(`Version saved, but activity could not update: ${error.message}`));
-    if (activity?.draft) window.DialogueWorkspace?.updateStatus({ sha: activity.draft.head });
   } catch (error) {
     saveError = error.message || 'Could not publish this Draft.';
     toast(saveError);

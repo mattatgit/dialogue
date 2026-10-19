@@ -6,7 +6,6 @@
   const refTitles = document.querySelectorAll('[data-ref-title]');
   const projectNode = document.querySelector('[data-project-title]');
   const projectLink = document.querySelector('[data-project-link]');
-  const status = document.querySelector('[data-workspace-status]');
   const restartButton = document.querySelector('[data-restart]');
   const terminalPane = document.querySelector('[data-terminal-pane]');
   const terminalHost = document.querySelector('[data-terminal-host]');
@@ -105,22 +104,10 @@
     }
   };
 
-  const renderStatus = (head) => {
-    if (!status) return;
-    status.replaceChildren();
-    if (!head?.sha) { status.hidden = true; return; }
-    const sha = document.createElement('code');
-    sha.textContent = head.sha.slice(0, 7);
-    status.append(sha);
-    status.title = head.subject || '';
-    status.hidden = false;
-  };
-
   window.DialogueWorkspace = {
     id: workspaceId,
     reload: () => (currentSource ? reloadPrototype() : restartPreview()),
     restartPreview,
-    updateStatus: renderStatus,
     get previewUrl() { return previewUrl; },
     get channel() { return channel; },
     get ready() { return Boolean(currentSource); }
@@ -177,7 +164,6 @@
       let files = true;
       try {
         const payload = JSON.parse(event.data);
-        renderStatus(payload.head);
         window.dispatchEvent(new CustomEvent('dialogue:change', { detail: payload }));
         files = payload.files !== false;
       } catch {
@@ -210,7 +196,6 @@
       document.title = `Dialogue — ${workspace.project?.name || 'Project'} · ${workspace.ref}`;
       if (projectNode) projectNode.textContent = workspace.project?.name || 'Project';
       if (projectLink) projectLink.href = workspace.project?.slug ? `project.html?slug=${encodeURIComponent(workspace.project.slug)}` : 'projects.html';
-      renderStatus(workspace.head);
 
       previewUrl = workspace.previewUrl || '';
       setupStatus = workspace.project?.previewSetup?.status || '';

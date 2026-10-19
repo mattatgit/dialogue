@@ -26,11 +26,7 @@
 .workspace-stage{position:relative;min-height:0;height:auto;padding-top:0;display:grid;place-items:center;min-width:0;overflow:hidden}
 .workspace-body.has-terminal .workspace-stage{border-left:1px solid var(--term-line)}
 
-/* Commit identifier in the workspace header. */
 .workspace .viewer-title{gap:10px;white-space:nowrap}
-.workspace-status{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#fff}
-.workspace-status code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:var(--term-fg)}
-.workspace-status[hidden]{display:none}
 
 /* terminal pane */
 .terminal-pane{position:relative;min-width:0;min-height:0;background:var(--term-bg);padding:56px 16px 16px}

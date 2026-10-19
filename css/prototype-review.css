@@ -72,7 +72,6 @@
 /* The workspace switches between a full-width canvas and a side-by-side activity or terminal rail. */
 .workspace-review [hidden]{display:none!important}
 .workspace-review .review-top-actions{align-items:center}
-.workspace-review .review-top-actions .workspace-status{font-size:11px;font-weight:600;white-space:nowrap}
 .workspace-review[data-mode=terminal] .review-canvas{left:280px}
 .workspace-review .terminal-pane{position:absolute;left:16px;top:80px;bottom:8px;width:248px;z-index:25;background:transparent;padding:0}
 .workspace-review .terminal-pane[hidden]{display:none}
@@ -82,9 +81,8 @@
 .workspace-review .activity-live span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-review .activity-live:not(.is-complete) span:last-child{animation:review-activity-pulse 2s ease-in-out infinite}
 @keyframes review-activity-pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @media(prefers-reduced-motion:reduce){.workspace-review .activity-live span:last-child{animation:none!important}}
-@media(max-width:680px){.workspace-review .review-top-actions{gap:4px}.workspace-review .review-top-actions .workspace-status{display:none}.workspace-review .activity-card{height:200px;min-height:200px}.workspace-review .activity-card.is-edit,.workspace-review .activity-card.is-version{height:192px;min-height:192px}.workspace-review .activity-card.is-working{height:176px;min-height:176px}.workspace-review .activity-card.has-actions{height:256px;min-height:256px}}
+@media(max-width:680px){.workspace-review .review-top-actions{gap:4px}.workspace-review .activity-card{height:200px;min-height:200px}.workspace-review .activity-card.is-edit,.workspace-review .activity-card.is-version{height:192px;min-height:192px}.workspace-review .activity-card.is-working{height:176px;min-height:176px}.workspace-review .activity-card.has-actions{height:256px;min-height:256px}}
 @media(max-width:1100px){.workspace-review .review-header{height:96px}.workspace-review .review-mode-switch{left:8px;top:48px;transform:none}.workspace-review .review-top-actions{top:56px}.workspace-review .review-canvas{top:112px}.workspace-review .review-history,.workspace-review .terminal-pane{top:112px}}
 @media(max-width:980px){.workspace-review[data-mode=terminal] .review-canvas{left:240px}.workspace-review .terminal-pane{width:216px}}
 @media(max-width:680px){.workspace-review .review-header{height:144px}.workspace-review .review-mode-switch{width:min(352px,calc(100vw - 16px))}.workspace-review .review-mode-switch button{width:auto;min-width:0;flex:1;padding:6px 3px;gap:3px;font-size:11px}.workspace-review .review-top-actions{top:104px}.workspace-review .review-canvas{top:160px}.workspace-review .review-history,.workspace-review .terminal-pane{top:auto;bottom:8px;left:8px;right:8px;width:auto;height:184px}.workspace-review[data-mode=terminal] .review-canvas{top:160px;left:8px;bottom:200px}.workspace-review .terminal-host{inset:48px 8px 8px}.workspace-review .terminal-toolbar{top:8px}}
-@media(max-width:980px){.workspace-review .review-top-actions .workspace-status{display:none}}
 @media(max-width:680px){.workspace-review[data-mode=comment] .review-canvas{top:160px}}
