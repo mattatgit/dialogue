@@ -203,7 +203,7 @@ function closeComment() {
   anchor = null; clearShapes(); return true;
 }
 function mayNavigate() { return composer.hidden || closeComment(); }
-function setMode(next) {
+function setMode(next, refresh = true) {
   if (mode === next || (next === 'comment' && !active) || (next === 'terminal' && !active?.terminal)) return;
   if (!mayNavigate()) return;
   mode = next; document.body.dataset.mode = mode;
@@ -213,7 +213,7 @@ function setMode(next) {
   $('.review-tools').hidden = mode !== 'comment' || !active?.terminal;
   window.dispatchEvent(new CustomEvent('dialogue:mode', { detail: mode }));
   updateGeometry();
-  if (mode === 'comment') refreshActivity().catch(error => toast(`Could not update activity: ${error.message}`));
+  if (mode === 'comment' && refresh) refreshActivity().catch(error => toast(`Could not update activity: ${error.message}`));
 }
 function setTool(next) {
   if (!mayNavigate()) return;
@@ -322,26 +322,29 @@ function renderHistory() {
     const version = versionByRequest.get(request.id);
     const isCreation = request === creation;
     const completing = completionTransitions.has(request.id);
+    const live = request.status === 'running' || completing || !working &&
+      (version ? !draft.canSave && latestVersion === version : draft.requestId === request.id);
     return {
       type: 'request', request, version, edit,
       sha: version?.sha || edit?.sha,
       label: request.status === 'running' || completing ? 'Working' : request.status === 'failed' ? 'Failed'
         : version?.label || (edit ? isCreation ? 'Created' : 'Edited' : isCreation ? 'No changes' : 'Commented'),
       createdAt: version?.createdAt || request.finishedAt || request.startedAt || request.createdAt,
-      current: !readonly && !working && !completing && (version ? !draft.canSave && latestVersion === version
-        : draft.requestId === request.id && !version),
+      current: !readonly && live,
+      live,
       busy: request.status === 'running' || completing,
       completing
     };
   });
   for (const version of versions) {
     if (versionByRequest.has(version.requestId) && requests.some(request => request.id === version.requestId)) continue;
+    const live = !working && !draft.canSave && version === latestVersion;
     entries.push({ type: 'version', version, sha: version.sha, label: version.label, createdAt: version.createdAt,
-      current: !readonly && !working && !draft.canSave && version === latestVersion });
+      current: !readonly && live, live });
   }
   const attributed = requests.some(request => request.id === draft.requestId && !versionByRequest.has(request.id));
   if (!attributed && !working && (draft.canSave || (!versions.length && !requests.some(request => editsByRequest.has(request.id))))) {
-    entries.push({ type: 'draft', label: 'Draft', createdAt: new Date().toISOString(), current: !readonly && !working,
+    entries.push({ type: 'draft', label: 'Draft', createdAt: new Date().toISOString(), current: !readonly, live: true,
       detail: draft.pending ? 'A previous save is ready to retry.' : draft.canSave ? 'Changes are ready to save.' : 'Current working prototype.' });
   }
   if (terminalActivity) entries.push({ type: 'terminal', turn: terminalActivity, label: terminalActivity.state === 'working' ? 'Working' : 'Activity',
@@ -352,14 +355,14 @@ function renderHistory() {
   if (workingIndex > 0) ordered.unshift(...ordered.splice(workingIndex, 1));
   cards.innerHTML = ordered.map(entry => {
     const { request, version, turn, current, busy, sha, label, createdAt } = entry;
-    const selected = Boolean(sha && selectedSha === sha);
+    const selected = Boolean(!entry.live && sha && selectedSha === sha);
     const canSave = !readonly && current && !working && draft.canSave && entry.type !== 'terminal';
     const showSaved = !readonly && current && saveConfirmed && Boolean(version);
     const expanded = draftSelected && (canSave || showSaved);
     const actions = expanded ? `<div class="card-actions"><button class="review-button" type="button" data-card-cancel data-card-focus="cancel" ${savingVersion || saveConfirmed ? 'disabled' : ''}>Cancel</button><button class="review-button primary save-version-button ${saveConfirmed ? 'is-saved' : ''}" type="button" data-card-save data-card-focus="save" ${!canSave || savingVersion || saveConfirmed ? 'disabled' : ''}>${saveConfirmed ? 'Saved a version' : savingVersion ? 'Saving…' : 'Save a version'}</button></div>` : '';
-    const preview = sha && /^[a-f0-9]{40}$/.test(sha) ? `data-preview-id="${sha}" tabindex="0" title="Open ${esc(label)} as a read-only preview"` : '';
-    const draftControl = canSave || showSaved || readonly && entry.type === 'draft'
-      ? `data-draft-card data-card-focus="draft" tabindex="0" aria-expanded="${expanded}" title="${readonly ? 'Open source branch' : 'Select current draft'}"` : '';
+    const preview = !entry.live && sha && /^[a-f0-9]{40}$/.test(sha) ? `data-preview-id="${sha}" tabindex="0" title="Open ${esc(label)} as a read-only preview"` : '';
+    const draftControl = canSave || showSaved || readonly && entry.live
+      ? `data-draft-card data-card-focus="draft" tabindex="0" aria-expanded="${expanded}" title="${readonly ? 'Open current build' : 'Select current draft'}"` : '';
     const meta = `<div class="activity-meta"><span class="revision-badge">${esc(label)}</span>${busy ? '' : `<time datetime="${esc(createdAt)}">${esc(formatTime(createdAt))}</time>`}</div>`;
     const classes = `activity-card ${current || busy && entry.type === 'request' ? 'is-current' : selected ? 'is-selected' : 'is-past'} ${busy ? 'is-working' : ''} ${entry.edit && request !== creation ? 'is-edit' : ''} ${version ? 'is-version' : ''} ${actions ? 'has-actions' : ''}`;
     let content;
@@ -431,7 +434,8 @@ async function restartPrototype() {
 
 addEventListener('dialogue:workspace', async event => {
   active = event.detail;
-  const nextWorkspaceId = new URLSearchParams(location.search).get('source') || active.id;
+  const params = new URLSearchParams(location.search);
+  const nextWorkspaceId = params.get('source') || active.id;
   if (nextWorkspaceId !== historyWorkspaceId) {
     activity = null; requests = []; draftSelected = false; saveError = ''; saveConfirmed = false;
     clearTimeout(saveConfirmationTimer);
@@ -440,9 +444,9 @@ addEventListener('dialogue:workspace', async event => {
   }
   historyWorkspaceId = nextWorkspaceId;
   origin = { x: 0, y: 0 }; rootRadius = {};
-  $('[data-mode-button="comment"]').lastChild.textContent = active.terminal ? 'Comment' : 'Activity';
   $('[data-mode-button="terminal"]').disabled = !active.terminal;
-  if (active.terminal && new URLSearchParams(location.search).get('fix') === '1') setMode('terminal');
+  if (active.terminal && params.get('fix') === '1') setMode('terminal');
+  else if (params.get('mode') === 'comment') setMode('comment', false);
   updateGeometry();
   try { await refreshActivity(); } catch (error) { toast(`Could not load activity: ${error.message}`); }
 });
@@ -605,6 +609,7 @@ async function openCommit(sha) {
     if (!response.ok || !data.workspace) throw new Error(data.error || 'Could not open that commit.');
     const url = new URL(data.workspace.viewerUrl, location.href);
     url.searchParams.set('source', historyWorkspaceId);
+    url.searchParams.set('mode', 'comment');
     location.href = url.href;
   } catch (error) { toast(error.message); }
 }
@@ -617,7 +622,7 @@ function activateCard(target) {
   if (target.closest('[data-card-save]')) { saveVersion(); return; }
   const draftCard = target.closest('[data-draft-card]');
   if (draftCard) {
-    if (!active?.terminal) location.href = `workspace.html?id=${encodeURIComponent(historyWorkspaceId)}`;
+    if (!active?.terminal) location.href = `workspace.html?id=${encodeURIComponent(historyWorkspaceId)}&mode=comment`;
     else {
       draftSelected = true;
       renderHistory();
