@@ -29,6 +29,7 @@ OPEN=0 dev       # don't launch a browser
 `npm start` still works inside the devshell for a plain server without reload. `npm test` (`node --test test/*.test.js`) runs the unit tests and the preview end-to-end test.
 
 When multiple Dialogue worktrees are in use, localhost ports identify running processes, not branches. Before sharing a test URL, establish which worktree the user is working on, map the server process to its working directory, and verify that worktree's page responds. If it is not running, start that worktree on an unused port. Share only its URL; a reachable server from another branch is not a substitute.
+Sidebar links use ordinary document navigation. Same-origin cross-document view transitions keep the Dialogue mark visible while switching pages (including Design systems and Settings); browsers without support use ordinary navigation, and reduced-motion preferences disable the page fade.
 
 Do not copy `.dialogue-data/` between source worktrees: Git's linked checkout metadata contains absolute paths to its original mirror and worktree. A copied directory may appear intact but fail to open a branch or use the other build's Git metadata. Start with a separate data directory; if preserving a copy is necessary, repair and verify every linked worktree's `.git` and mirror `worktrees/*/gitdir` pointers before running Dialogue.
 

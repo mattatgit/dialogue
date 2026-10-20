@@ -1,5 +1,12 @@
 /* Designed navigation, page surfaces, and shared review controls. */
 :root{--review-blue:#138ed5;--review-selection:#51b0e6;--review-grid:#bae6ff;--review-dust:#ebebeb;--hover-duration:100ms;--hover-easing:ease-out;--hover-scale:1.05}
+/* Keep the app chrome visible while the browser loads another same-origin page. */
+@view-transition{navigation:auto}
+.updated-ui .brand .icon{view-transition-name:dialogue-mark}
+::view-transition-old(dialogue-mark),::view-transition-new(dialogue-mark){animation:none}
+@media(prefers-reduced-motion:reduce){
+  ::view-transition-old(root),::view-transition-new(root){animation:none}
+}
 [hidden]{display:none!important}
 .icon{width:16px;height:16px;display:block;flex:none;fill:none;color:inherit}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
