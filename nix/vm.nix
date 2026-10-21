@@ -15,6 +15,8 @@ in
 
   services.dialogue = {
     enable = true;
+    development = true;
+    publicOrigin = "http://127.0.0.1:${toString hostPort}";
     nginx.enable = true;
     # Provided by the host: `nix run .#vm` stages the project's .env into the
     # directory named by $DIALOGUE_VM_ENV_DIR, shared below via 9p.

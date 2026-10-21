@@ -119,26 +119,33 @@
     if (overlayText) overlayText.textContent = message || '';
   };
 
-  const mountTerminal = () => {
-    if (!terminalPane || !terminalHost || !window.DialogueTerminal || terminal) return;
-    terminalPane.hidden = false;
-    if (modelLabel) fetch('/api/agent', { cache: 'no-store' })
-      .then((response) => response.ok ? response.json() : null)
-      .then((agent) => {
-        if (!agent?.model) return;
-        modelLabel.textContent = agent.model.split('/').at(-1);
-        modelLabel.title = agent.model;
-      })
-      .catch(() => {});
-    terminal = window.DialogueTerminal.mount(terminalHost, workspaceId, {
-      onStatus: (kind, detail) => {
-        if (kind === 'connected') { setOverlay(''); requestFix(); }
-        else if (kind === 'connecting') setOverlay('Connecting…');
-        else if (kind === 'reconnecting') setOverlay('Reconnecting…');
-        else if (kind === 'error') setOverlay(detail || 'The agent terminal could not be started.');
-      }
-    });
-    overlay?.addEventListener('click', () => terminal?.retry());
+  let mountingTerminal = false;
+  const mountTerminal = async () => {
+    if (!terminalPane || !terminalHost || !window.DialogueTerminal || terminal || mountingTerminal) return;
+    mountingTerminal = true;
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/editing`, { method: 'POST' });
+      if (!response.ok) { const payload = await response.json(); setOverlay(payload.error || 'This working copy is being edited elsewhere.'); terminalPane.hidden = false; return; }
+      terminalPane.hidden = false;
+      if (modelLabel) fetch('/api/agent', { cache: 'no-store' })
+        .then((response) => response.ok ? response.json() : null)
+        .then((agent) => {
+          if (!agent?.model) return;
+          modelLabel.textContent = agent.model.split('/').at(-1);
+          modelLabel.title = agent.model;
+        })
+        .catch(() => {});
+      terminal = window.DialogueTerminal.mount(terminalHost, workspaceId, {
+        onStatus: (kind, detail) => {
+          if (kind === 'connected') { setOverlay(''); requestFix(); }
+          else if (kind === 'connecting') setOverlay('Connecting…');
+          else if (kind === 'reconnecting') setOverlay('Reconnecting…');
+          else if (kind === 'error') setOverlay(detail || 'The agent terminal could not be started.');
+        }
+      });
+      overlay?.addEventListener('click', () => terminal?.retry());
+    } catch (error) { setOverlay(error.message || 'The terminal could not be opened.'); }
+    finally { mountingTerminal = false; }
   };
 
   window.addEventListener('dialogue:mode', (event) => {

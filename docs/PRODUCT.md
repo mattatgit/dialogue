@@ -38,7 +38,9 @@ Matt clarified the intended product model on 2026-10-21:
 - Exclusive editing belongs to the working copy being changed. The exact ownership and handoff behavior still needs design; simultaneous editing of the same working copy is not required for the first release.
 - Show who is working on an app, website or prototype using a user badge/avatar, replacing the generic **Open** badge. The indicator must come from authenticated editing/presence state, not from a persisted Git worktree or the author of the latest commit. Current editing and historical attribution (for example, "Last edited by Saori") are distinct states; closing or abandoning an editing session must not leave a false active-user badge.
 
-Each unit needs its own identity, preview configuration, design context and relevant activity/history within the shared repository. The current branch-first implementation does not yet provide this full model. Independent work on units that share repository files needs an explicit isolation and conflict-handling design; separate names or folders alone do not prevent agents from changing shared files. Account membership, private-project visibility and AI credential ownership remain separate decisions.
+The accounts branch now implements invitation-only passkey/email-code accounts and one shared workspace with owner/editor membership. Development has explicitly local quick sign-in identities; all normal permission checks remain in place. See `docs/ACCOUNTS.md`. Named units and live presence remain unimplemented.
+
+Each unit needs its own identity, preview configuration, design context and relevant activity/history within the shared repository. The current branch-first implementation does not yet provide this full model. Independent work on units that share repository files needs an explicit isolation and conflict-handling design; separate names or folders alone do not prevent agents from changing shared files. Shared workspace membership and per-person AI profiles are implemented on the accounts branch. Private-project visibility remains undecided.
 
 ## Core product flow
 
@@ -100,6 +102,8 @@ The connected agent can see the whole project checkout, edit files, run the proj
 The next product-learning milestone is whether a designer can drive a useful visible change end to end from that terminal without leaving Dialogue.
 
 ## Sharing
+
+The chosen private app address is `build.idealogue.studio` (2026-10-21). The planned home for publicly shared prototypes remains `preview.idealogue.io`, with separate per-prototype origins within that namespace. Matt manages both domains’ DNS at iwantmyname. Public publishing is an explicit action and remains unimplemented; current working-preview URLs are session-bound and are not public shares.
 
 Public share URLs should be unguessable capability-style links using cryptographically strong random tokens. Links should be revocable. Expiry/password controls can be added later.
 

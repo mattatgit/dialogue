@@ -12,6 +12,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
+const { seedAccounts } = require('./helpers/account-fixture.js');
+let authHeaders = {};
+const authByOrigin = new Map();
 const ROOT = path.join(__dirname, '..');
 const OMP_BIN = process.env.DIALOGUE_OMP || 'omp';
 const AUTH_CODE = 'fake-code-4242';
@@ -83,7 +86,7 @@ function freePort() {
 }
 
 async function api(base, method, route, body) {
-  const response = await fetch(`${base}${route}`, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  const response = await fetch(`${base}${route}`, { method, headers: authByOrigin.get(base) || authHeaders, body: body ? JSON.stringify(body) : undefined });
   return { status: response.status, body: await response.json() };
 }
 
@@ -101,7 +104,7 @@ function subscribe(url) {
       }
     }
   };
-  const request = http.get(url, (res) => {
+  const request = http.get(url, { headers: authHeaders }, (res) => {
     let buffer = '';
     res.setEncoding('utf8');
     res.on('data', (piece) => {
@@ -161,6 +164,10 @@ test('a designer signs in to a model provider from the web UI and the agent beco
     env[key] = value;
   }
   const port = await freePort();
+  const accountFixture = seedAccounts(dataRoot, port);
+  authHeaders = accountFixture.headers;
+  authByOrigin.set(`http://127.0.0.1:${port}`, authHeaders);
+  Object.assign(env, accountFixture.env);
   Object.assign(env, { HOME: home, DIALOGUE_DATA: dataRoot, PORT: String(port), HOST: '127.0.0.1' });
   const server = spawn(process.execPath, [path.join(ROOT, 'server.js')], { cwd: tmp, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let serverLog = '';
@@ -225,8 +232,10 @@ test('a designer signs in to a model provider from the web UI and the agent beco
   // elsewhere instead of remaining on the unsigned-in OpenRouter default.
   const freshData = path.join(tmp, 'fresh-data');
   const freshPort = await freePort();
+  const freshAccounts = seedAccounts(freshData, freshPort);
+  authByOrigin.set(`http://127.0.0.1:${freshPort}`, freshAccounts.headers);
   const fresh = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
-    cwd: tmp, env: { ...env, DIALOGUE_DATA: freshData, PORT: String(freshPort) }, stdio: ['ignore', 'pipe', 'pipe']
+    cwd: tmp, env: { ...env, ...freshAccounts.env, DIALOGUE_DATA: freshData, PORT: String(freshPort) }, stdio: ['ignore', 'pipe', 'pipe']
   });
   t.after(async () => {
     fresh.kill('SIGTERM');

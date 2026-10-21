@@ -20,17 +20,17 @@ const START_TIMEOUT_MS = 8000;
 
 class TerminalError extends Error {}
 
-function ompThemesDir() {
-  const home = os.homedir();
-  const profile = (process.env.OMP_PROFILE ?? process.env.PI_PROFILE ?? '').trim();
+function ompThemesDir(env = process.env) {
+  const home = env.HOME || os.homedir();
+  const profile = (env.OMP_PROFILE ?? env.PI_PROFILE ?? '').trim();
   if (profile && profile !== 'default') return path.join(home, '.omp', 'profiles', profile, 'agent', 'themes');
-  if (process.env.PI_CODING_AGENT_DIR) return path.join(process.env.PI_CODING_AGENT_DIR, 'themes');
+  if (env.PI_CODING_AGENT_DIR) return path.join(env.PI_CODING_AGENT_DIR, 'themes');
   return path.join(home, '.omp', 'agent', 'themes');
 }
 
-async function installTheme(appRoot) {
+async function installTheme(appRoot, env) {
   const source = path.join(appRoot, 'omp', 'dialogue-theme.json');
-  const dir = ompThemesDir();
+  const dir = ompThemesDir(env);
   const target = path.join(dir, 'dialogue.json');
   const content = await fsp.readFile(source);
   const existing = await fsp.readFile(target).catch(() => null);
@@ -89,7 +89,7 @@ class TerminalManager {
     const existing = this.terminals.get(workspace.id);
     if (existing) return existing.starting;
 
-    const record = { child: null, socketPath: null, starting: null };
+    const record = { child: null, socketPath: null, starting: null, userId: this.agentAuth.context?.getStore()?.user.id };
     this.terminals.set(workspace.id, record);
     record.starting = this.start(workspace, record).catch((error) => {
       if (this.terminals.get(workspace.id) === record) this.terminals.delete(workspace.id);
@@ -101,7 +101,7 @@ class TerminalManager {
   async start(workspace, record) {
     const prefix = sessionPrefix(workspace);
     const socketPath = path.join(this.socketDir, `${prefix.slice('dialogue-'.length)}.sock`);
-    await Promise.all([fsp.rm(socketPath, { force: true }), installTheme(this.appRoot)]);
+    await Promise.all([fsp.rm(socketPath, { force: true }), installTheme(this.appRoot, { ...process.env, ...this.agentAuth.ompEnv() })]);
 
     // ttyd runs omp/attach.sh per client; the script owns the tmux session
     // (own server via -L so it inherits Dialogue's environment, e.g. API
@@ -159,7 +159,7 @@ class TerminalManager {
   async sendPrompt(workspace, text) {
     let sessions = '';
     try {
-      ({ stdout: sessions } = await execFileAsync(TMUX_BIN, ['-L', 'dialogue', 'list-sessions', '-F', '#S']));
+      ({ stdout: sessions } = await execFileAsync(TMUX_BIN, ['-L', this.agentAuth.ompEnv().DIALOGUE_TMUX_SERVER || 'dialogue', 'list-sessions', '-F', '#S']));
     } catch {
       // no tmux server: no sessions
     }
@@ -168,8 +168,18 @@ class TerminalManager {
     if (!session) throw new TerminalError('Open the agent terminal first, then try again.');
     // `<session>:` targets the session's current window exactly (no
     // prefix matching against other session names).
-    await execFileAsync(TMUX_BIN, ['-L', 'dialogue', 'send-keys', '-t', `${session}:`, '-l', text]);
-    await execFileAsync(TMUX_BIN, ['-L', 'dialogue', 'send-keys', '-t', `${session}:`, 'Enter']);
+    const server = this.agentAuth.ompEnv().DIALOGUE_TMUX_SERVER || 'dialogue';
+    await execFileAsync(TMUX_BIN, ['-L', server, 'send-keys', '-t', `${session}:`, '-l', text]);
+    await execFileAsync(TMUX_BIN, ['-L', server, 'send-keys', '-t', `${session}:`, 'Enter']);
+  }
+
+  async retire(workspace) {
+    this.stop(workspace.id);
+    const server = this.agentAuth.ompEnv().DIALOGUE_TMUX_SERVER || 'dialogue';
+    const { stdout } = await execFileAsync(TMUX_BIN, ['-L', server, 'list-sessions', '-F', '#S']).catch(() => ({ stdout: '' }));
+    for (const session of stdout.trim().split('\n').filter(name => name.startsWith(`${sessionPrefix(workspace)}-`))) {
+      await execFileAsync(TMUX_BIN, ['-L', server, 'kill-session', '-t', `=${session}`]);
+    }
   }
 
   shutdown() {

@@ -13,6 +13,8 @@ const { spawn } = require('node:child_process');
 const { PreviewRenderer } = require('../server/preview.js');
 const { commit, sh } = require('./helpers/git-fixture.js');
 
+const { seedAccounts } = require('./helpers/account-fixture.js');
+let authHeaders = {};
 const ROOT = path.resolve(__dirname, '..');
 const FAKE_OMP = path.join(__dirname, 'helpers', 'fake-omp.js');
 const APP = `require('node:http').createServer((q, s) => s.end('<h1>served by node</h1>')).listen(process.env.PORT, '127.0.0.1');\n`;
@@ -27,9 +29,9 @@ function freePort() {
   });
 }
 
-function request(port, pathname, { method = 'GET', body, host } = {}) {
+function request(port, pathname, { method = 'GET', body, host, headers = {} } = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path: pathname, method, headers: { 'Content-Type': 'application/json', ...(host ? { Host: host } : {}) } }, (res) => {
+    const req = http.request({ host: '127.0.0.1', port, path: pathname, method, headers: { ...authHeaders, 'Content-Type': 'application/json', ...(host ? { Host: host } : {}), ...headers } }, (res) => {
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
@@ -57,7 +59,7 @@ async function until(fn, timeoutMs, label) {
 // Collects SSE events of one type until `predicate` matches.
 function waitForEvent(port, pathname, type, predicate, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const req = http.get({ host: '127.0.0.1', port, path: pathname }, (res) => {
+    const req = http.get({ host: '127.0.0.1', port, path: pathname, headers: authHeaders }, (res) => {
       let buffer = '';
       const timer = setTimeout(() => { req.destroy(); reject(new Error(`No ${type} event in time; got:\n${buffer}`)); }, timeoutMs);
       res.on('data', (chunk) => {
@@ -83,6 +85,7 @@ test('adding a repository sets up its preview, and opening main serves it live',
   await fsp.mkdir(origin, { recursive: true });
   sh(origin, 'init', '-q', '-b', 'main');
   await commit(origin, { 'app.js': APP, 'package.json': '{"name":"app"}\n' }, 'initial');
+  sh(origin, 'branch', 'alternative');
   // Clone "https://github.com/o/app" from the local origin instead.
   const gitConfig = path.join(root, 'gitconfig');
   await fsp.writeFile(gitConfig, `[url "${path.join(root, 'origin')}/"]\n\tinsteadOf = https://github.com/o/\n[user]\n\tname = T\n\temail = t@x\n`);
@@ -92,9 +95,11 @@ test('adding a repository sets up its preview, and opening main serves it live',
   await fsp.mkdir(home);
   const port = await freePort();
 
+  const accountFixture = seedAccounts(path.join(root, 'data'), port);
+  authHeaders = accountFixture.headers;
   const server = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
     env: {
-      ...process.env,
+      ...process.env, ...accountFixture.env,
       PORT: String(port),
       HOME: home,
       DIALOGUE_DATA: path.join(root, 'data'),
@@ -142,6 +147,17 @@ test('adding a repository sets up its preview, and opening main serves it live',
       const page = await request(port, '/', { host: previewUrl.host });
       assert.equal(page.status, 200);
       assert.match(page.body.toString(), /served by node/);
+      // Independent editing within one repository, without sharing a terminal.
+      const editor = seedAccounts(path.join(root, 'data'), port, 'editor@example.test');
+      assert.equal((await request(port, `/api/workspaces/${workspace.id}/preview/restart`, { method: 'POST' })).status, 202);
+      assert.equal((await request(port, `/api/workspaces/${workspace.id}/preview/restart`, { method: 'POST', headers: editor.headers })).status, 409);
+      const readonly = await json(port, `/api/workspaces/${workspace.id}`, { headers: editor.headers });
+      assert.equal(readonly.data.workspace.terminal, false);
+      const alternative = await json(port, '/api/projects/o-app/workspaces', { method: 'POST', body: { ref: 'alternative' }, headers: editor.headers });
+      assert.equal(alternative.status, 201);
+      assert.equal((await request(port, `/api/workspaces/${alternative.data.workspace.id}/preview/restart`, { method: 'POST', headers: editor.headers })).status, 202);
+      assert.equal((await request(port, '/api/auth/logout', { method: 'POST' })).status, 200);
+      assert.equal((await request(port, '/', { host: previewUrl.host })).status, 404, 'logging out revokes the preview capability');
     } finally {
       runner.close();
     }
