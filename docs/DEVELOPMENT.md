@@ -28,10 +28,30 @@ OPEN=0 dev       # don't launch a browser
 
 `npm start` still works inside the devshell for a plain server without reload. `npm test` (`node --test test/*.test.js`) runs the unit tests and the preview end-to-end test.
 
+Run the full `npm test` suite for every Dialogue coding change before reporting completion. Focused tests do not replace the full suite. Report failures and skipped tests explicitly.
+
+### Accounts must preserve easy testing
+
+Matt's requirement (2026-10-21): adding accounts must not require repeated manual logins during routine development or test runs. Design these facilities alongside authentication, before gating existing workflows:
+
+- Persist ordinary development sessions across page reloads and server restarts until expiry, logout or revocation.
+- Give automated tests disposable users, memberships and server-issued sessions using the same session validation and authorization as normal requests. Reuse authenticated browser state for ordinary UI checks; isolate identities/data where parallel tests change shared state.
+- Keep focused end-to-end coverage of real sign-in, sign-out, expiry, recovery and access denial. Most feature tests should start signed in without requiring a real inbox, personal provider login or biometric prompt. Exercise two users and an outsider for membership and editing-ownership checks.
+- Any test session setup or local identity switching must be explicitly restricted to isolated development/test environments, unavailable in production, and must not bypass authorization. Do not add a general "auth disabled" route or production-accessible user impersonation mechanism. Keep session artifacts and test credentials out of Git.
+- If passkeys are selected, automate protocol coverage with virtual authenticators and retain a small real-device/browser check. Account sign-in is separate from the existing AI-provider sign-in tests.
+
+The production sign-in method (password, passkey or email link/code) has not yet been selected.
+
 When multiple Dialogue worktrees are in use, localhost ports identify running processes, not branches. Before sharing a test URL, establish which worktree the user is working on, map the server process to its working directory, and verify that worktree's page responds. If it is not running, start that worktree on an unused port. Share only its URL; a reachable server from another branch is not a substitute.
 Sidebar links use ordinary document navigation. Same-origin cross-document view transitions keep the Dialogue mark visible while switching pages (including Design systems and Settings); browsers without support use ordinary navigation, and reduced-motion preferences disable the page fade.
 
 Do not copy `.dialogue-data/` between source worktrees: Git's linked checkout metadata contains absolute paths to its original mirror and worktree. A copied directory may appear intact but fail to open a branch or use the other build's Git metadata. Start with a separate data directory; if preserving a copy is necessary, repair and verify every linked worktree's `.git` and mirror `worktrees/*/gitdir` pointers before running Dialogue.
+
+### Starting from Codex
+
+OMP needs write access to its existing profile and runtime directories (`~/.omp/agent` and `~/.omp/run`), even when listing providers or checking an existing sign-in. A restricted Codex launch without that access fails with `SQLITE_READONLY` or `EPERM`; it does not establish that the user needs to sign in again. Grant the required filesystem and network access before starting the server, then restart it so its child processes inherit that access.
+
+When the locally installed OMP is newer than the Nix-pinned version, pass its path in the launch environment, for example `DIALOGUE_OMP="$HOME/.local/bin/omp" npm start` inside the devshell. Provider/model discovery and a real readiness response were verified with local OMP 18.12.3. File-watching and headless Chromium may still require capabilities unavailable in the restricted environment.
 
 ### Environment overrides
 

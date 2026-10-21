@@ -21,17 +21,30 @@ Dialogue is intended to remove the friction from that loop. In particular, it sh
 
 ## Initial users and scale
 
-The first production release is for a very small internal Idealogue team. Public self-sign-up is not planned for the initial version.
+The first production release is for Matt and Saori. Public self-sign-up is not planned for the initial version.
 
 The expected real audience for this web version is primarily Matt, Saori and a small number of clients. There is no current requirement to future-proof this implementation for a large public SaaS audience.
 
 The product should be designer-first: a designer should be able to review, comment on, revise and publish prototypes without needing to operate developer tooling directly.
 
+## Project structure and collaboration
+
+Matt clarified the intended product model on 2026-10-21:
+
+- A project corresponds to one Git repository.
+- A project can contain many apps, websites and prototypes, including prototypes of individual areas of an app or operating system. These are separate units within the project; "unit" is a planning term until the UI terminology is agreed.
+- A unit's identity is independent of Git branches. Different branches may represent alternative work on one unit, while different units may coexist in the same repository and branch.
+- Multiple people must be able to work within the same project concurrently, including on different units. Project-wide exclusive editing would not meet this requirement.
+- Exclusive editing belongs to the working copy being changed. The exact ownership and handoff behavior still needs design; simultaneous editing of the same working copy is not required for the first release.
+- Show who is working on an app, website or prototype using a user badge/avatar, replacing the generic **Open** badge. The indicator must come from authenticated editing/presence state, not from a persisted Git worktree or the author of the latest commit. Current editing and historical attribution (for example, "Last edited by Saori") are distinct states; closing or abandoning an editing session must not leave a false active-user badge.
+
+Each unit needs its own identity, preview configuration, design context and relevant activity/history within the shared repository. The current branch-first implementation does not yet provide this full model. Independent work on units that share repository files needs an explicit isolation and conflict-handling design; separate names or folders alone do not prevent agents from changing shared files. Account membership, private-project visibility and AI credential ownership remain separate decisions.
+
 ## Core product flow
 
 1. Sign in to Dialogue.
-2. Create or open a project. A project is backed by a git repository that contains the prototype. The first time, Dialogue works out by itself (with the connected agent) how to show that prototype live, and says so on the project's card.
-3. Open a branch of that repository as a workspace.
+2. Create or open a project backed by a Git repository, then create or choose an app, website or prototype within it. The connected agent helps establish how to preview that unit.
+3. Open that unit's working copy, with its branch context available when needed. Unit selection and branch selection are distinct; the current build still opens workspaces directly from repository refs.
 4. Ask the connected agent, in the workspace, for a change; the agent edits the branch's checkout.
 5. Dialogue shows the live prototype beside the agent and reloads it on every change.
 6. Compare the live prototype with the associated Figma design when available.

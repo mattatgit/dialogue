@@ -4,9 +4,7 @@
 
 Primary design file:
 
-`https://www.figma.com/design/mInH5kB39oFt2FEE7kEF8I/Idealogue-WIP`
-
-Dialogue section/page references used during prototyping include the Dialogue App views and owner/project/settings/modal screens.
+[Dialogue](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue). The older Idealogue-WIP file is historical; use the current Dialogue file for visual changes.
 
 Figma remains the source of truth for intended UI where a design exists.
 
@@ -27,6 +25,12 @@ The browser prototype uses `font-synthesis: none` to avoid synthetic weights.
 Figma uses the rightwards arrow character conceptually (`U+2192`, `→`). A font subset can omit that glyph and trigger a fallback font, so the current prototype renders the separator as a small inline SVG vector for visual consistency.
 
 Breadcrumb links remain un-underlined; hover/focus/active states use colour changes.
+
+## Main sidebar states
+
+Projects, Design systems and Settings use `#9ea39e` for both label and icon by default, changing together to `#6b6b6b` on pointer hover or keyboard focus. The selected destination stays `#171717` with its existing selected background, including on hover. This follows the hover variants referenced by the [first prototype frame](https://www.figma.com/proto/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=1-455): Projects `1:185` and Settings `1:207`. Hover changes colour only, without scaling or adding a background.
+
+The shared styles use the existing 32 × 32 local SVGs as masks inheriting the link's colour; the default and selected SVG geometry is identical. This preserves the original artwork and keeps icon/label states synchronized across Projects, project detail, Design systems and Settings. The compact sidebar retains the icons while hiding the text labels.
 
 ## Interaction conventions
 
@@ -51,7 +55,13 @@ The lightweight functional build adds two pieces of UI that have not been design
 
 ### Branch and tag tiles
 
-The Landline project page replaces the static fallback cards with a **Branches** group and, when non-empty, a **Tags** group. Tiles reuse the existing `.proto-tile` visual language: ref name, short sha, commit subject, relative commit date, and a small dot when a workspace is already open. A failed fetch renders as a one-line note above the grid.
+The project page displays branch cards without a visible **Branches** heading or count; their section retains an accessible label. When non-empty, a **Tags** group follows. Their visual styling follows the [project gallery](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=15-835), including card `15:845`: 320 × 280 px, 16 px outer corners, a 208 px preview and a 72 px `#f8f8f8` footer. The name uses bundled Inter Tight SemiBold at 14 px / 17 px in `#171717`; the date uses Inter Tight Medium at 12 px / 15 px in `#9ea39e`, with a 5 px gap. The footer has 16 px horizontal padding and 18 px top padding; the existing padded 32 px meatball asset sits 16 px from the right and 20 px from the bottom. Desktop surface padding is 40 px. The first card row starts 40 px below the white surface's top, matching the Projects view; the empty-state panel contributes spacing only when visible.
+
+The yellow `#ccff00` badge has 8 px corners, sits 8 px from the top and left, and uses 12 px SemiBold text in a 24 px height. Its current **Open** label means a persistent local Git working copy exists; it does not mean an editor is present, a preview is running, or a branch is unmerged. The tooltip explains this distinction. This functional status differs from the design's sample **New** label.
+
+Matt's subsequent direction (2026-10-21) is to replace **Open** with a user badge/avatar identifying who is working on the app, website or prototype. This belongs to the unit-first gallery and requires actual account/session editing state. Do not infer the active user from commit authorship or the existence of a working copy. Last-editor attribution should be separately labelled; exact badge artwork and placement still need design.
+
+The card face has only the name and a **Saved** timestamp derived from the last commit, rather than claiming to know the last unsaved edit. The independent details control preserves the full ref name, commit hash/message, commit time and working-copy status. It opens without navigating, closes on outside click or Escape, and allows only one panel open at a time. A failed fetch renders as a one-line note above the grid.
 
 This is functional UI. When Matt designs how projects, branches and history are presented, the Figma design supersedes it.
 
@@ -104,7 +114,7 @@ Current examples include:
 - Landline prototype thumbnail PNG
 - Landline full-size prototype PNG
 
-Branch and tag tiles currently reuse the existing Landline thumbnail PNG. Automatic screenshots/thumbnails are a later functional milestone.
+Branch and tag tiles use runtime screenshots of their commits. When a commit has no screenshot, the server may return the default-branch image, labelled **from main** on the card. That label describes the image source, not branch ancestry or merge status. Empty or failed screenshots show the existing empty-preview state.
 
 ## Prototype tile clipping
 

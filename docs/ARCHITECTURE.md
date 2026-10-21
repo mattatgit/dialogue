@@ -18,6 +18,14 @@ Regardless of hosting/provider choices:
 
 ## Current lightweight development architecture
 
+### Intended project and unit model
+
+The product clarification from 2026-10-21 is project = Git repository, containing many independently identifiable apps, websites or prototypes. Units are not Git branches: several units may coexist on a branch, and one unit may have alternative branches. Concurrent work by multiple users within a project is required. See `docs/PRODUCT.md` for the agreed requirements.
+
+The implementation described below still uses a repository/ref workspace and a repository-level preview recipe. It does not yet persist the full unit model. Future design must connect unit identity, source/preview configuration and activity to isolated editable working copies, and coordinate changes to shared repository files. A project-wide editing lock or merely adding unit names to the existing branch list would not satisfy the intended workflow. The storage layout, branching policy and exact edit-lock scope have not been selected.
+
+### Existing implementation
+
 The current milestone runs locally on one machine (or in the NixOS demo VM) and requires no production hosting services:
 
 ```text

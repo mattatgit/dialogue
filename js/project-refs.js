@@ -51,10 +51,12 @@
   };
 
   const buildTile = (ref, kind) => {
-    const tile = document.createElement('a');
+    const tile = document.createElement('div');
     tile.className = 'proto-tile ref-tile';
-    tile.href = `workspace.html?id=${encodeURIComponent(ref.workspaceId)}`;
     tile.dataset.kind = kind;
+    const link = document.createElement('a');
+    link.className = 'ref-link';
+    link.href = `workspace.html?id=${encodeURIComponent(ref.workspaceId)}`;
 
     const surface = document.createElement('span');
     surface.className = 'proto-surface';
@@ -84,6 +86,7 @@
       const badge = document.createElement('span');
       badge.className = 'ref-open-badge';
       badge.textContent = 'Open';
+      badge.title = 'A local working copy exists. This does not indicate merge status or an active editor.';
       surface.appendChild(badge);
     }
 
@@ -93,21 +96,53 @@
     title.className = 'proto-name ref-name';
     title.textContent = ref.name;
     title.title = ref.name;
-    const meta = document.createElement('span');
-    meta.className = 'proto-time ref-meta';
-    const sha = document.createElement('code');
-    sha.textContent = ref.sha.slice(0, 7);
-    meta.append(sha, document.createTextNode(` · ${ref.subject || ''}`));
-    meta.title = ref.subject || '';
-    const when = document.createElement('span');
+    const when = document.createElement('time');
     when.className = 'ref-when';
-    when.textContent = relativeLabel(ref.committedAt);
+    when.dateTime = ref.committedAt;
+    const savedAt = relativeLabel(ref.committedAt);
+    when.textContent = savedAt ? `Saved ${savedAt}` : '';
+    when.title = `Last commit: ${ref.committedAt}`;
 
-    info.append(title, meta, when);
+    info.append(title, when);
     surface.append(preview, info);
-    tile.appendChild(surface);
+    link.appendChild(surface);
 
-    tile.addEventListener('click', (event) => {
+    const details = document.createElement('details');
+    details.className = 'ref-details';
+    const summary = document.createElement('summary');
+    summary.setAttribute('aria-label', `Details for ${ref.name}`);
+    summary.title = `Details for ${ref.name}`;
+    const menuIcon = document.createElement('img');
+    menuIcon.src = 'assets/tile-menu.svg';
+    menuIcon.alt = '';
+    menuIcon.width = 32;
+    menuIcon.height = 32;
+    summary.appendChild(menuIcon);
+    const panel = document.createElement('div');
+    panel.className = 'ref-details-panel';
+    const metadata = document.createElement('dl');
+    for (const [label, value] of [
+      [kind === 'branch' ? 'Branch' : 'Tag', ref.name],
+      ['Last commit', `${ref.sha.slice(0, 7)}${ref.subject ? ` · ${ref.subject}` : ''}`],
+      ['Saved', ref.committedAt],
+      ['Working copy', ref.open ? 'Available locally' : 'Created when opened']
+    ]) {
+      const term = document.createElement('dt');
+      term.textContent = label;
+      const definition = document.createElement('dd');
+      definition.textContent = value;
+      metadata.append(term, definition);
+    }
+    panel.appendChild(metadata);
+    details.append(summary, panel);
+    details.addEventListener('toggle', () => {
+      if (details.open) grid.querySelectorAll('.ref-details[open]').forEach((other) => {
+        if (other !== details) other.open = false;
+      });
+    });
+    tile.append(link, details);
+
+    link.addEventListener('click', (event) => {
       event.preventDefault();
       if (tile.classList.contains('is-busy')) return;
       openWorkspace(ref, tile);
@@ -115,20 +150,37 @@
     return tile;
   };
 
+  document.addEventListener('click', (event) => {
+    grid.querySelectorAll('.ref-details[open]').forEach((details) => {
+      if (!details.contains(event.target)) details.open = false;
+    });
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    grid.querySelectorAll('.ref-details[open]').forEach((details) => {
+      if (details.contains(document.activeElement)) details.querySelector('summary').focus();
+      details.open = false;
+    });
+  });
+
   const buildGroup = (label, refs, kind) => {
     const section = document.createElement('section');
     section.className = 'ref-group';
-    const heading = document.createElement('h2');
-    heading.className = 'ref-group-title';
-    heading.textContent = label;
-    const count = document.createElement('span');
-    count.className = 'ref-group-count';
-    count.textContent = String(refs.length);
-    heading.appendChild(count);
+    section.setAttribute('aria-label', label);
+    if (kind === 'tag') {
+      const heading = document.createElement('h2');
+      heading.className = 'ref-group-title';
+      heading.textContent = label;
+      const count = document.createElement('span');
+      count.className = 'ref-group-count';
+      count.textContent = String(refs.length);
+      heading.appendChild(count);
+      section.appendChild(heading);
+    }
     const list = document.createElement('div');
     list.className = 'grid';
     list.append(...refs.map((ref) => buildTile(ref, kind)));
-    section.append(heading, list);
+    section.appendChild(list);
     return section;
   };
 
