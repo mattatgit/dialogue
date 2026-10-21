@@ -196,12 +196,9 @@ The remaining gap is process isolation: preview servers, installs and the agent 
 
 ### Production requirement
 
-Checked-out/generated prototype JavaScript must execute on a separate origin from authenticated Dialogue, for example:
+Checked-out/generated prototype JavaScript must execute on a separate origin from authenticated Dialogue. Matt selected `https://dialogue.idealogue.studio` for the app on 2026-10-21. `preview.idealogue.io` is a candidate namespace for future public prototypes, with separate origins such as `<share-id>.preview.idealogue.io`; it is not yet a configured preview deployment. The existing `services.dialogue.previewDomain` setting supports per-token preview subdomains and needs wildcard DNS/TLS. Live working previews and published public shares have different lifecycles and authorization; setting this option alone does not implement public sharing.
 
-- trusted app: `dialogue.idealogue.studio`
-- prototype runtime: `<token>.p.idealogue.studio` (`services.dialogue.previewDomain = "p.idealogue.studio"`)
-
-The local preview origins already follow this shape. Production additionally needs the preview processes and the agent sandboxed away from Dialogue's data directory and credentials.
+The local preview origins already follow the separate-origin shape. Production additionally needs the preview processes and the agent sandboxed away from Dialogue's data directory and credentials.
 
 ## Public Share shell
 
