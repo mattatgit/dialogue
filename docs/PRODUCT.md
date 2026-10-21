@@ -103,7 +103,7 @@ The next product-learning milestone is whether a designer can drive a useful vis
 
 ## Sharing
 
-The chosen private app address is `dialogue.idealogue.studio` (2026-10-21). Matt proposed `preview.idealogue.io` as a possible home for publicly shared prototypes. Use separate per-prototype origins within that namespace; the preview domain remains tentative. Public publishing is an explicit action and remains unimplemented; current working-preview URLs are session-bound and are not public shares.
+The chosen private app address is `build.idealogue.studio` (2026-10-21). The planned home for publicly shared prototypes remains `preview.idealogue.io`, with separate per-prototype origins within that namespace. Matt manages both domains’ DNS at iwantmyname. Public publishing is an explicit action and remains unimplemented; current working-preview URLs are session-bound and are not public shares.
 
 Public share URLs should be unguessable capability-style links using cryptographically strong random tokens. Links should be revocable. Expiry/password controls can be added later.
 

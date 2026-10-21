@@ -32,7 +32,7 @@ Development identities require an explicit development mode, a loopback listener
 
 `dev` uses `http://localhost:8080` by default, sets its public account origin, and preserves it through `browser-sync.config.cjs`. Previews still go directly to the upstream preview port. `npm start` uses the origin in `.env`.
 
-Local passkeys belong to the local RP hostname. Enroll passkeys again on the final deployment hostname; local credentials are not deployment credentials. The selected production app origin is `https://dialogue.idealogue.studio`; its DNS/TLS and mail delivery are not configured yet.
+Local passkeys belong to the local RP hostname. Enroll passkeys again on the final deployment hostname; local credentials are not deployment credentials. The selected production app origin is `https://build.idealogue.studio`; its DNS/TLS and mail delivery are not configured yet.
 
 ## Per-person AI connections and working copies
 
@@ -46,9 +46,11 @@ Separate credential homes prevent accidental reuse through Dialogue's routing; t
 
 ## Production configuration
 
-The selected app origin is `https://dialogue.idealogue.studio`. At deployment, set `DIALOGUE_ORIGIN=https://dialogue.idealogue.studio` (or Nix `services.dialogue.publicOrigin` to that value), `DIALOGUE_MODE=production` and `NODE_ENV=production`. This also scopes passkeys to `dialogue.idealogue.studio`; keep that hostname stable. Keep the local `.env` on its loopback origin. Configure the owner/member emails, `DIALOGUE_SMTP_URL` (SMTP with required STARTTLS or SMTPS), and `DIALOGUE_MAIL_FROM` in the deployment's private environment file. Production refuses missing origin, owner or mail settings. Mail credentials are captured and removed from the environment before launching child processes.
+The selected app origin is `https://build.idealogue.studio`. At deployment, set `DIALOGUE_ORIGIN=https://build.idealogue.studio` (or Nix `services.dialogue.publicOrigin` to that value), `DIALOGUE_MODE=production` and `NODE_ENV=production`. This also scopes passkeys to `build.idealogue.studio`; keep that hostname stable. Keep the local `.env` on its loopback origin. Configure the owner/member emails, `DIALOGUE_SMTP_URL` (SMTP with required STARTTLS or SMTPS), and `DIALOGUE_MAIL_FROM` in the deployment's private environment file. Production refuses missing origin, owner or mail settings. Mail credentials are captured and removed from the environment before launching child processes.
 
-`preview.idealogue.io` is a proposed namespace for future public prototypes, using an individual hostname such as `<share-id>.preview.idealogue.io` per prototype. Public sharing is not implemented: existing working-preview capabilities remain session-bound and must not be repurposed as public links. A preview domain needs wildcard DNS/TLS; choosing a domain does not itself publish a prototype.
+`preview.idealogue.io` is the planned namespace for future public prototypes, using an individual hostname such as `<share-id>.preview.idealogue.io` per prototype. Public sharing is not implemented: existing working-preview capabilities remain session-bound and must not be repurposed as public links. A preview domain needs wildcard DNS/TLS; choosing a domain does not itself publish a prototype.
+
+Matt manages DNS for both domains at iwantmyname. Verify supported DNS automation and credential scope when implementing wildcard certificate renewal; if needed, delegate only ACME validation to an automation-capable DNS zone rather than moving the domains. Standard app HTTPS can use HTTP validation. See [Let’s Encrypt challenge types](https://letsencrypt.org/docs/challenge-types/). DNS records and certificate renewal have not been configured.
 
 The Nix package installs pinned npm dependencies with a fixed dependency hash. The NixOS module defaults to production and exposes `publicOrigin`; `development` is an explicit loopback-only demo option. Keep preview DNS/TLS, backups, process isolation and real email/passkey device verification on the deployment checklist. Do not expose the developer server publicly.
 

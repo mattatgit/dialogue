@@ -91,10 +91,10 @@ Each workspace's preview is served on its own browser origin (`<token>.preview.l
 
 This is **not yet the final production security boundary**: preview servers run the repository's own install/start commands, and the agent runs, with the Dialogue process's own privileges.
 
-Production keeps the separate prototype execution origin, for example:
+The planned production addresses retain separate app and prototype origins:
 
-- trusted app: `dialogue.idealogue.studio`
-- untrusted prototype code: `<token>.p.idealogue.studio`
+- trusted app: `build.idealogue.studio`
+- untrusted prototype code: `<token>.preview.idealogue.io`
 
 ## Known limitations
 
