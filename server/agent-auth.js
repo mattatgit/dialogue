@@ -199,9 +199,10 @@ class LoginSession {
 }
 
 class AgentAuth extends EventEmitter {
-  constructor({ dataRoot, appRoot }) {
+  constructor({ dataRoot, appRoot, env = {} }) {
     super();
     this.dataRoot = dataRoot;
+    this.environment = env;
     this.configPath = path.join(appRoot, 'omp', 'config.yml');
     this.bootstrapPath = path.join(appRoot, 'omp', 'bootstrap-provider.js');
     this.settingsPath = path.join(dataRoot, 'agent.json');
@@ -229,7 +230,7 @@ class AgentAuth extends EventEmitter {
   }
 
   ompEnv() {
-    return {};
+    return { ...this.environment };
   }
 
   spawnEnv() {

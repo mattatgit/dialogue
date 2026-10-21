@@ -96,11 +96,15 @@ Tokens are held in memory and change when the server restarts. The workspace pag
 - `DIALOGUE_PREVIEW_PORT` — port put into `*.preview.localhost` URLs instead of the one the browser used; `dev` sets it to the Node port because browser-sync would rewrite the Host header preview origins are routed by
 - `PORT` — listen port (default `4173`)
 - `FIGMA_ACCESS_TOKEN` — optional read-only Figma personal access token (`file_content:read`) for attached design/file links; inherited environment wins over a gitignored application-root `.env`. Unset or denied access rejects Figma-backed requests before launching the agent.
-- Preview servers inherit the server's environment **except `FIGMA_ACCESS_TOKEN`**, plus `PORT`, `HOST=127.0.0.1`, `BROWSER=none`, `CI=1`, `FORCE_COLOR=0`; `node`/`npm` must be on PATH for Node projects (the Nix package adds them).
+- Preview servers inherit the server's environment **except the server-only Figma and SMTP/account bootstrap settings**, plus `PORT`, `HOST=127.0.0.1`, `BROWSER=none`, `CI=1`, `FORCE_COLOR=0`; `node`/`npm` must be on PATH for Node projects (the Nix package adds them).
 
-## Development security
+## Accounts and access
 
-The server is localhost-only. There is no authentication: anyone who can reach the port can open a terminal running as the Dialogue process in a branch checkout, and every preview server runs repository code as that process too. That is acceptable only for a single developer's machine or the single-user VM, and production must put real authentication in front of both the HTTP routes and the WebSocket upgrade. Previews already run on a separate browser origin.
+Except for health and sign-in endpoints, APIs require a valid Dialogue session and shared-workspace membership. Mutations require the exact configured Origin and JSON content type. Pages redirect to sign-in; APIs return 401. Membership management and project deletion require the owner. Workspace mutations reserve editing ownership, and another editor receives 409; other members can view that working copy read-only. `POST /api/workspaces/:id/editing` explicitly reserves the copy before terminal connection. The terminal WebSocket requires the same account session, configured Origin and existing editing ownership.
+
+`GET /api/auth/session` reports the current person/workspace. Sign-in uses `POST /api/auth/email/start`, `/email/verify`, `/passkey/options`, `/passkey/verify`; `POST /api/auth/logout` revokes the session. `/api/account/profile`, `/members`, `/passkeys` and `/editing` provide profile, invitation/removal, passkey enrollment/removal and working-copy release. See `docs/ACCOUNTS.md` for exact setup and boundaries. Development-only identity sessions require explicit loopback development mode and are absent from test/production mode.
+
+Preview URLs are session-bound capabilities on separate origins, not public share links. Logout/removal revokes them. Agent Figma access retains its short-lived per-request capability verification. Prototype code still executes as the service user; account authorization does not provide process isolation.
 
 ## Next API evolution
 

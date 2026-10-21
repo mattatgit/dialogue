@@ -24,6 +24,10 @@ The product clarification from 2026-10-21 is project = Git repository, containin
 
 The implementation described below still uses a repository/ref workspace and a repository-level preview recipe. It does not yet persist the full unit model. Future design must connect unit identity, source/preview configuration and activity to isolated editable working copies, and coordinate changes to shared repository files. A project-wide editing lock or merely adding unit names to the existing branch list would not satisfy the intended workflow. The storage layout, branching policy and exact edit-lock scope have not been selected.
 
+### Account implementation
+
+The accounts branch adds a transactional SQLite identity store (`server/accounts.js`), HTTP account routes, passkey verification through pinned SimpleWebAuthn, and SMTP delivery through pinned Nodemailer. It provides invitation-only accounts, one shared workspace, hashed persistent sessions and same-origin authorization. Browser preview capabilities are session-bound. OMP model selection, member credential homes and tmux servers are routed per person; the owner retains the existing local profile. Temporary per-working-copy reservations protect shared editable state and terminal sessions, without claiming live presence or implementing named units. See `docs/ACCOUNTS.md` for configuration, security boundaries and test fixtures.
+
 ### Existing implementation
 
 The current milestone runs locally on one machine (or in the NixOS demo VM) and requires no production hosting services:
@@ -279,7 +283,7 @@ Important production details:
 - production and testing data should still be separated sufficiently to avoid accidental destructive testing
 - prototype runtime uses a separate origin: set `services.dialogue.previewDomain` with wildcard DNS and certificate so previews work from other machines (`*.preview.localhost` only works when the browser is on the host or reaches it through a forwarded localhost port)
 - preview servers run each project's own `install`/`start` commands (arbitrary code from the repository and its dependencies) as the Dialogue user; they need the same sandboxing as the agent
-- the agent process needs real authentication in front of it before anyone but the owner can reach the terminal
+- account membership now protects the terminal upgrade; process/filesystem isolation for agents and preview code still needs deployment work
 - repos/worktrees/home live on the host filesystem; storage calls should remain behind `server/git.js` so the layout can move
 - automated off-server backups are mandatory if the data lives on one host
 - agent credentials (`/login`) live in the service home directory; git push uses the per-project deploy key under `keys/`, which is unencrypted on disk and readable by the agent process, so the data directory must be treated as secret

@@ -45,6 +45,8 @@ let
       # a project to open.
       port="''${PORT:-8080}"
       upstream=4173
+      export DIALOGUE_MODE=development
+      export DIALOGUE_ORIGIN="http://localhost:$port"
       export DIALOGUE_SEED="''${DIALOGUE_SEED:-seed.json}"
       # Preview origins (<token>.preview.localhost) go straight to the Node
       # server: browser-sync would rewrite the Host header they are routed by.
@@ -56,8 +58,8 @@ let
       open=local
       [ "''${OPEN:-1}" = 0 ] && open=false
 
-      exec browser-sync start \
-        --proxy "127.0.0.1:$upstream" \
+      browser-sync start \
+        --config browser-sync.config.cjs \
         --listen 127.0.0.1 \
         --port "$port" \
         --ws \

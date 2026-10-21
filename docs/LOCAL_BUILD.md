@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This build exists to prove Dialogue's core product workflow — open a project branch, ask an agent for a change, see the prototype update, push the result — before committing to production hosting, authentication, database or storage services.
+This build exists to prove Dialogue's core product workflow — open a project branch, ask an agent for a change, see the prototype update, push the result — while production hosting and execution isolation are finalized. Accounts use SQLite and passkey/email-code sign-in; see `docs/ACCOUNTS.md`.
 
 No production web-service accounts are required for the local application itself.
 
@@ -24,6 +24,9 @@ Dialogue local Node server (server.js, server/git.js, server/requests.js, server
                             server/preview-proxy.js, server/live-preview.js, server/figma.js)
         ↓
 .dialogue-data/
+  accounts.sqlite             identities, membership, sessions and editing reservations
+  users/<user-id>/             per-member model settings and private OMP home
+  mail/                       private development sign-in messages (never sent)
   db.json                     projects (schemaVersion 4): slug, repo.url/host/owner/repo, previewSetup
   repos/<slug>.git            bare mirror, fetched on demand
   workspaces/<slug>/<ref>/    one git worktree per opened ref (<ref> URL-encoded)
@@ -45,19 +48,19 @@ Workspaces have no database table: `git worktree list --porcelain` on the bare m
 
 Requirements:
 
-- Node.js 22+
+- Node.js 22.13+
 - `git`, `ttyd`, `tmux` and `omp` (oh-my-pi) on PATH — the Nix devshell provides them; outside it, install omp yourself
 - whatever the projects' previews run, e.g. `node`/`npm` (devshell and Nix package provide Node.js); Chromium for screenshots is optional (devshell provides it)
 
 Start with one of:
 
 ```text
-dev                       # devshell: live-reloading dev server, http://127.0.0.1:8080
-npm start                 # plain server, http://127.0.0.1:4173
+dev                       # devshell: live-reloading dev server, http://localhost:8080
+npm start                 # plain server, http://localhost:4173
 Start Dialogue.command    # macOS launcher for npm start; checks git/ttyd/tmux/omp are present
 ```
 
-The server binds to localhost only.
+Install dependencies with `npm ci` and configure the private `.env` account settings first; see `docs/ACCOUNTS.md`. The server binds to localhost only. Use the exact configured origin for sign-in.
 
 ## Workflow
 
@@ -95,11 +98,11 @@ Production keeps the separate prototype execution origin, for example:
 
 ## Known limitations
 
-- no authentication — anyone who can reach the port gets a shell-capable agent in the checkout; localhost-only mitigates this on a dev machine
+- accounts protect the app and terminal; real deployment still requires HTTPS/mail settings and process isolation
 - the terminal is the raw omp TUI in an xterm.js pane, not a designed conversation UI
-- localhost-only; the VM adds nginx but still no auth
+- developer shortcuts are loopback-only; the VM has an explicit local development mode
 - omp is authenticated through `OPENROUTER_API_KEY` in `.env` (dev and VM) or by signing in under Settings → AI model (or `/login` in the terminal). Git push uses the generated deploy key; the private key lives unencrypted in `.dialogue-data/keys/` and is readable by the agent process
-- no multi-user access
+- one shared workspace supports owner/editor accounts; named units, live presence and private-project access are still planned
 - no public sharing implementation
 - screenshots exist only for commits whose preview has run (setup, opened workspaces, default-branch refresh); other tiles show the default branch's image
 - Figma attachments supply document/node data, not automatically exported SVG/PNG assets or a persistent project-wide design import; the temporary agent snapshot is removed after the request.
