@@ -273,11 +273,15 @@ The original managed proposal — Vercel + Supabase + Cloudflare R2 — remains 
 
 Dialogue is expected primarily to serve Matt, Saori and a small number of clients. There is no requirement to future-proof this web application for thousands of users.
 
-The current lean candidate is a small self-hosted host running the NixOS module (`nix/module.nix`): a systemd unit with data in `/var/lib/dialogue`, nginx in front, `omp` from the `llm-agents` flake input. Postgres only if a real multi-user need appears; the git store is already durable on disk.
+On 2026-11-02 Matt chose BinaryLane and its smaller Standard plan (2 vCPUs, 4 GB RAM, 60 GB storage) for the initial private pilot, with Melbourne proposed as the location. DigitalOcean was rejected because of signup CAPTCHA friction. This is a hosting choice, not a completed deployment or a validated capacity measurement.
+
+The implementation route remains a small self-hosted host running the NixOS module (`nix/module.nix`): a systemd unit with data in `/var/lib/dialogue`, nginx in front, `omp` from the `llm-agents` flake input. Postgres only if a real multi-user need appears; the git store is already durable on disk.
 
 Important production details:
 
 - production and testing data should still be separated sufficiently to avoid accidental destructive testing
+- protect the app from build/agent resource exhaustion on the 4 GB pilot using global concurrency limits and per-worker resource limits; measure real workloads before claiming the size is sufficient
+- validate the Linux package/service and preview tools on the target OS; a successful macOS package build does not establish target compatibility
 - prototype runtime uses a separate origin: set `services.dialogue.previewDomain` with wildcard DNS and certificate so previews work from other machines (`*.preview.localhost` only works when the browser is on the host or reaches it through a forwarded localhost port)
 - preview servers run each project's own `install`/`start` commands (arbitrary code from the repository and its dependencies) as the Dialogue user; they need the same sandboxing as the agent
 - account membership now protects the terminal upgrade; process/filesystem isolation for agents and preview code still needs deployment work

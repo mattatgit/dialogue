@@ -42,7 +42,7 @@ Before an agent, terminal, version save or other working-copy mutation starts, t
 
 These reservations are explicit working-copy ownership, **not live presence**. They do not yet implement the proposed automatic unit-level lease or avatar badge. Git branches also remain distinct from the planned named app/site/prototype identities.
 
-Separate credential homes prevent accidental reuse through Dialogue's routing; they are not OS security isolation. Agents and project preview/install processes still run as the service user and need process/filesystem isolation before a broader production deployment. Authentication alone does not make arbitrary repository code safe.
+Separate credential homes prevent accidental reuse through Dialogue's routing; they are not OS security isolation. Agents and project preview/install processes still run as the service user and need process/filesystem isolation before deploying the shared instance. Authentication alone does not make arbitrary repository code safe.
 
 ## Production configuration
 
