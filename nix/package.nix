@@ -1,9 +1,9 @@
-# The app: static UI files plus server.js (Node builtins only, no npm deps).
+# The app and its pinned passkey/email dependencies.
 # Runtime tools (git, ttyd, tmux, ssh, and node/npm for project preview
 # servers) and omp, the agent, are put on PATH by the wrapper.
 {
   lib,
-  stdenvNoCC,
+  buildNpmPackage,
   nodejs,
   git,
   ttyd,
@@ -12,7 +12,7 @@
   makeWrapper,
   omp,
 }:
-stdenvNoCC.mkDerivation {
+buildNpmPackage {
   pname = "dialogue";
   version = (lib.importJSON ../package.json).version;
 
@@ -25,11 +25,16 @@ stdenvNoCC.mkDerivation {
       ../css
       ../js
       ../assets
+      ../package.json
+      ../package-lock.json
       (lib.fileset.fileFilter (f: f.hasExt "html") ../.)
     ];
   };
 
   nativeBuildInputs = [ makeWrapper ];
+  npmDepsHash = "sha256-MrN6bLnioiIyR5+F6E90ymuswZaHZYhiSlg9+A+ZxHc=";
+  dontNpmBuild = true;
+  npmFlags = [ "--ignore-scripts" ];
 
   installPhase = ''
     mkdir -p $out/share/dialogue $out/bin

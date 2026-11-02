@@ -186,7 +186,7 @@ async function serveStatic(req, res, root) {
   if (channel && /^[a-f0-9]{32}$/.test(channel) && parent && type.startsWith('text/html')) {
     try {
       const candidate = new URL(parent);
-      if (candidate.origin === parent && ['127.0.0.1', 'localhost'].includes(candidate.hostname)
+      if (candidate.origin === parent && (['127.0.0.1', 'localhost'].includes(candidate.hostname) || parent === process.env.DIALOGUE_ORIGIN)
         && ['http:', 'https:'].includes(candidate.protocol)) reviewOrigin = candidate.origin;
     } catch {
       // Invalid review origins never change the preview response.
@@ -217,14 +217,15 @@ class PreviewProxy {
     this.byToken = new Map(); // token → workspaceId
   }
 
-  register(workspaceId, resolve) {
+  register(workspaceId, resolve, { onUpgrade } = {}) {
     const existing = this.byWorkspace.get(workspaceId);
     if (existing) {
       existing.resolve = resolve;
+      existing.onUpgrade = onUpgrade;
       return existing.token;
     }
     const token = crypto.randomBytes(8).toString('hex');
-    this.byWorkspace.set(workspaceId, { token, resolve });
+    this.byWorkspace.set(workspaceId, { token, resolve, onUpgrade });
     this.byToken.set(token, workspaceId);
     return token;
   }
@@ -294,7 +295,7 @@ class PreviewProxy {
         sendHtml(res, 200, statusPage({ title: target.title, message: target.message, refresh: true }));
         break;
       case 'failed':
-        sendHtml(res, 200, statusPage({ title: target.title, message: target.message, log: target.log }));
+        sendHtml(res, target.status || 200, statusPage({ title: target.title, message: target.message, log: target.log }));
         break;
       default:
         sendHtml(res, 500, statusPage({ title: 'Preview error', message: `Unknown preview target "${target.kind}".` }));
@@ -313,6 +314,7 @@ class PreviewProxy {
       socket.end(`HTTP/1.1 ${entry ? 503 : 404} ${entry ? 'Service Unavailable' : 'Not Found'}\r\nConnection: close\r\n\r\n`);
       return true;
     }
+    entry.onUpgrade?.(socket);
     proxyUpgrade(req, socket, head, target);
     return true;
   }

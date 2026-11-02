@@ -24,6 +24,10 @@ The product clarification from 2026-10-21 is project = Git repository, containin
 
 The implementation described below still uses a repository/ref workspace and a repository-level preview recipe. It does not yet persist the full unit model. Future design must connect unit identity, source/preview configuration and activity to isolated editable working copies, and coordinate changes to shared repository files. A project-wide editing lock or merely adding unit names to the existing branch list would not satisfy the intended workflow. The storage layout, branching policy and exact edit-lock scope have not been selected.
 
+### Account implementation
+
+The accounts branch adds a transactional SQLite identity store (`server/accounts.js`), HTTP account routes, passkey verification through pinned SimpleWebAuthn, and SMTP delivery through pinned Nodemailer. It provides invitation-only accounts, one shared workspace, hashed persistent sessions and same-origin authorization. Browser preview capabilities are session-bound. OMP model selection, member credential homes and tmux servers are routed per person; the owner retains the existing local profile. Temporary per-working-copy reservations protect shared editable state and terminal sessions, without claiming live presence or implementing named units. See `docs/ACCOUNTS.md` for configuration, security boundaries and test fixtures.
+
 ### Existing implementation
 
 The current milestone runs locally on one machine (or in the NixOS demo VM) and requires no production hosting services:
@@ -192,12 +196,9 @@ The remaining gap is process isolation: preview servers, installs and the agent 
 
 ### Production requirement
 
-Checked-out/generated prototype JavaScript must execute on a separate origin from authenticated Dialogue, for example:
+Checked-out/generated prototype JavaScript must execute on a separate origin from authenticated Dialogue. Matt selected `https://build.idealogue.studio` for the app on 2026-10-21. `preview.idealogue.io` is the planned namespace for future public prototypes, with separate origins such as `<share-id>.preview.idealogue.io`; it is not yet a configured preview deployment. Matt manages DNS at iwantmyname; wildcard certificate automation still needs validation or delegated ACME DNS validation. The existing `services.dialogue.previewDomain` setting supports per-token preview subdomains and needs wildcard DNS/TLS. Live working previews and published public shares have different lifecycles and authorization; setting this option alone does not implement public sharing.
 
-- trusted app: `dialogue.idealogue.studio`
-- prototype runtime: `<token>.p.idealogue.studio` (`services.dialogue.previewDomain = "p.idealogue.studio"`)
-
-The local preview origins already follow this shape. Production additionally needs the preview processes and the agent sandboxed away from Dialogue's data directory and credentials.
+The local preview origins already follow the separate-origin shape. Production additionally needs the preview processes and the agent sandboxed away from Dialogue's data directory and credentials.
 
 ## Public Share shell
 
@@ -272,14 +273,18 @@ The original managed proposal — Vercel + Supabase + Cloudflare R2 — remains 
 
 Dialogue is expected primarily to serve Matt, Saori and a small number of clients. There is no requirement to future-proof this web application for thousands of users.
 
-The current lean candidate is a small self-hosted host running the NixOS module (`nix/module.nix`): a systemd unit with data in `/var/lib/dialogue`, nginx in front, `omp` from the `llm-agents` flake input. Postgres only if a real multi-user need appears; the git store is already durable on disk.
+On 2026-11-02 Matt chose BinaryLane and its smaller Standard plan (2 vCPUs, 4 GB RAM, 60 GB storage) for the initial private pilot, with Melbourne proposed as the location. DigitalOcean was rejected because of signup CAPTCHA friction. This is a hosting choice, not a completed deployment or a validated capacity measurement.
+
+The implementation route remains a small self-hosted host running the NixOS module (`nix/module.nix`): a systemd unit with data in `/var/lib/dialogue`, nginx in front, `omp` from the `llm-agents` flake input. Postgres only if a real multi-user need appears; the git store is already durable on disk.
 
 Important production details:
 
 - production and testing data should still be separated sufficiently to avoid accidental destructive testing
+- protect the app from build/agent resource exhaustion on the 4 GB pilot using global concurrency limits and per-worker resource limits; measure real workloads before claiming the size is sufficient
+- validate the Linux package/service and preview tools on the target OS; a successful macOS package build does not establish target compatibility
 - prototype runtime uses a separate origin: set `services.dialogue.previewDomain` with wildcard DNS and certificate so previews work from other machines (`*.preview.localhost` only works when the browser is on the host or reaches it through a forwarded localhost port)
 - preview servers run each project's own `install`/`start` commands (arbitrary code from the repository and its dependencies) as the Dialogue user; they need the same sandboxing as the agent
-- the agent process needs real authentication in front of it before anyone but the owner can reach the terminal
+- account membership now protects the terminal upgrade; process/filesystem isolation for agents and preview code still needs deployment work
 - repos/worktrees/home live on the host filesystem; storage calls should remain behind `server/git.js` so the layout can move
 - automated off-server backups are mandatory if the data lives on one host
 - agent credentials (`/login`) live in the service home directory; git push uses the per-project deploy key under `keys/`, which is unencrypted on disk and readable by the agent process, so the data directory must be treated as secret

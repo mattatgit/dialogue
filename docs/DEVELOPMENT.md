@@ -10,6 +10,10 @@ The current product-development goal is the first **real designer-driven change*
 
 The immediate goal is still not a production framework/database/hosting migration. Production infrastructure remains deferred until that loop has been dogfooded.
 
+## Accounts setup
+
+Run `npm ci` and configure the gitignored `.env` using `.env.example` before starting this branch. Use an explicit `DIALOGUE_MODE=development` and loopback `DIALOGUE_ORIGIN` for local identity shortcuts and file mail delivery. Sessions persist across restarts; Settings offers local identity switching. Production refuses these shortcuts. See `docs/ACCOUNTS.md`.
+
 ## Local development (Nix)
 
 The repo ships a Nix flake devshell (`nix/devshell.nix`) providing Node.js (also used by project preview servers), browser-sync, `git`, `ttyd`, `tmux`, `openssh`, Chromium for screenshots (`chromium` on Linux; on macOS Playwright's `chrome-headless-shell`, because nixpkgs' chromium is Linux-only and full Chrome builds crash headless without a desktop session) and the live-reloading `dev` command. The shell works on `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. `unzip`/`zip` and their `DIALOGUE_UNZIP`/`DIALOGUE_ZIP` variables are gone.
@@ -19,7 +23,7 @@ The devshell also provides `omp` from the `llm-agents` flake input: the terminal
 With [direnv](https://direnv.net) installed, `direnv allow` once in the repo root; the shell then loads automatically. Without direnv, use `nix develop`.
 
 ```sh
-dev              # app at http://127.0.0.1:8080, opens it in your browser
+dev              # app at http://localhost:8080, opens it in your browser
 PORT=3000 dev    # alternative port
 OPEN=0 dev       # don't launch a browser
 ```
@@ -40,7 +44,7 @@ Matt's requirement (2026-10-21): adding accounts must not require repeated manua
 - Any test session setup or local identity switching must be explicitly restricted to isolated development/test environments, unavailable in production, and must not bypass authorization. Do not add a general "auth disabled" route or production-accessible user impersonation mechanism. Keep session artifacts and test credentials out of Git.
 - If passkeys are selected, automate protocol coverage with virtual authenticators and retain a small real-device/browser check. Account sign-in is separate from the existing AI-provider sign-in tests.
 
-The production sign-in method (password, passkey or email link/code) has not yet been selected.
+The approved method is passkeys plus email codes for enrollment/recovery, with no Dialogue passwords. This is implemented on `codex/accounts-shared-workspace`; see `docs/ACCOUNTS.md` for local configuration, testing and production requirements.
 
 When multiple Dialogue worktrees are in use, localhost ports identify running processes, not branches. Before sharing a test URL, establish which worktree the user is working on, map the server process to its working directory, and verify that worktree's page responds. If it is not running, start that worktree on an unused port. Share only its URL; a reachable server from another branch is not a substitute.
 Sidebar links use ordinary document navigation. Same-origin cross-document view transitions keep the Dialogue mark visible while switching pages (including Design systems and Settings); browsers without support use ordinary navigation, and reduced-motion preferences disable the page fade.
@@ -69,7 +73,7 @@ Nix files live under `nix/`: `package.nix` (the app + `bin/dialogue-server`; the
 
 `flake.nix` has an input `llm-agents` (`git+https://github.com/numtide/llm-agents.nix?shallow=1`, nixpkgs follows) which provides the `omp` package for the devshell, the default package and the VM.
 
-`nixosModules.default` provides `services.dialogue`: a systemd service (`DynamicUser`, data in `/var/lib/dialogue` via `DIALOGUE_DATA`, `HOME=/var/lib/dialogue/home`, Node bound to `127.0.0.1:<port>`), an optional `services.dialogue.environmentFile` (systemd `EnvironmentFile`, missing file tolerated) for secrets such as `OPENROUTER_API_KEY`, `services.dialogue.seedProjects` (`[{ url }]`, written to `DIALOGUE_SEED`), `services.dialogue.previewDomain` (sets `DIALOGUE_PREVIEW_DOMAIN`; needs wildcard DNS, and a wildcard certificate for HTTPS; when null previews use `<token>.preview.localhost`, which only works from the host or through a forwarded localhost port such as the demo VM's), and with `services.dialogue.nginx.enable` an nginx virtual host proxying to it with WebSockets enabled, buffering off, a 1 h read timeout, `proxy_set_header Host $http_host` and `X-Forwarded-Proto`, and `serverAliases` `*.preview.localhost` (plus `*.<previewDomain>`) so preview origins reach Node. No authentication yet.
+`nixosModules.default` provides `services.dialogue`: a systemd service (`DynamicUser`, data in `/var/lib/dialogue` via `DIALOGUE_DATA`, `HOME=/var/lib/dialogue/home`, Node bound to `127.0.0.1:<port>`), an optional `services.dialogue.environmentFile` (systemd `EnvironmentFile`, missing file tolerated) for secrets such as `OPENROUTER_API_KEY`, `services.dialogue.seedProjects` (`[{ url }]`, written to `DIALOGUE_SEED`), `services.dialogue.previewDomain` (sets `DIALOGUE_PREVIEW_DOMAIN`; needs wildcard DNS, and a wildcard certificate for HTTPS; when null previews use `<token>.preview.localhost`, which only works from the host or through a forwarded localhost port such as the demo VM's), and with `services.dialogue.nginx.enable` an nginx virtual host proxying to it with WebSockets enabled, buffering off, a 1 h read timeout, `proxy_set_header Host $http_host` and `X-Forwarded-Proto`, and `serverAliases` `*.preview.localhost` (plus `*.<previewDomain>`) so preview origins reach Node. Application accounts protect pages, APIs and terminal upgrades; production also requires its HTTPS origin and mail configuration (see `docs/ACCOUNTS.md`).
 
 ```sh
 nix run .#vm    # headless VM with the module + nginx; the console prints the URL (http://127.0.0.1:8483) once Dialogue is up
@@ -115,7 +119,7 @@ Requirements:
 - Node.js 22+
 - `git`, `ttyd`, `tmux`, `omp` on PATH (devshell)
 
-Start with `dev`, `npm start` or `Start Dialogue.command` (which checks for `git`/`ttyd`/`tmux`/`omp` before starting). Open `http://127.0.0.1:8080` (`dev`) or `http://127.0.0.1:4173`.
+Start with `dev`, `npm start` or `Start Dialogue.command` (which checks for `git`/`ttyd`/`tmux`/`omp` before starting). Open `http://localhost:8080` (`dev`) or `http://127.0.0.1:4173`.
 
 Runtime data — bare mirrors, worktrees, preview setup trees and logs, install stamps, screenshots and the VM home — is written to `.dialogue-data/` and must not be committed.
 

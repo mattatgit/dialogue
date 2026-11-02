@@ -129,3 +129,7 @@ The prototype public Share shell is intentionally minimal and HTML/CSS-only. Do 
 When implementation and screenshots differ, use Figma measurements/assets/typography as the primary visual reference.
 
 Avoid inventing missing product UI unless a temporary interaction is specifically needed to prove functionality. Any such temporary UI must be clearly documented as temporary, as with the current branch/tag tiles and split-screen workspace.
+
+## Account screens (2026-10-21)
+
+The accounts branch adds functional passkey/email-code sign-in, account/member settings and explicit local development identity buttons using the bundled fonts and existing Dialogue colours. These are temporary functional surfaces awaiting dedicated Figma designs; implementation does not establish a new visual source of truth. The unit gallery and live user badges remain separate design work.

@@ -53,7 +53,7 @@ function describeFailure(failure) {
 // Emits 'ready' (slug) whenever a project's recipe is set up.
 class PreviewSetup extends EventEmitter {
   constructor({
-    projects, repoFor, agent, previews, screenshot, setupRoot,
+    projects, repoFor, agent, previews, screenshot, setupRoot, agentFor = () => agent, reserveWorkspace = async () => {},
     ompBin = process.env.DIALOGUE_OMP || 'omp',
     configPath = path.join(APP_ROOT, 'omp', 'config.yml'),
     promptPath = path.join(APP_ROOT, 'omp', 'preview-setup-prompt.md'),
@@ -62,7 +62,7 @@ class PreviewSetup extends EventEmitter {
     createRunner = (options) => new Runner(options)
   }) {
     super();
-    Object.assign(this, { projects, repoFor, agent, previews, screenshot, setupRoot, ompBin, configPath, promptPath, env, maxAttempts, createRunner });
+    Object.assign(this, { projects, repoFor, agent, agentFor, reserveWorkspace, previews, screenshot, setupRoot, ompBin, configPath, promptPath, env, maxAttempts, createRunner });
     this.queue = Promise.resolve();
     this.pending = new Set(); // "<kind>:<slug>" queued or running
     this.waiting = new Set(); // slugs parked until the agent is ready
@@ -114,11 +114,14 @@ class PreviewSetup extends EventEmitter {
   }
 
   async runSetup(slug) {
-    await this.projects.find(slug); // gone meanwhile → throws, job ends
+    const project = await this.projects.find(slug); // gone meanwhile → throws, job ends
+    const agent = this.agentFor(project);
     await fsp.mkdir(this.dir(slug), { recursive: true });
     await fsp.writeFile(this.logFile(slug), '');
     const repo = await this.repoFor(slug);
-    const place = await this.workplace(repo, slug);
+    let place;
+    try { place = await this.workplace(repo, slug); }
+    catch (error) { await this.projects.setPreviewSetup(slug, { status: 'failed', error: error.message, finishedAt: new Date().toISOString() }); return; }
     await this.projects.setPreviewSetup(slug, { status: 'running', attempt: 0, error: null, finishedAt: null });
 
     // A recipe already in the repository gets checked before any agent run.
@@ -140,16 +143,16 @@ class PreviewSetup extends EventEmitter {
       }
     }
 
-    const agentStatus = await this.agent.check();
+    const agentStatus = await agent.check();
     if (!agentStatus.ready) return this.park(slug, agentStatus);
 
     let recipeText = existing;
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
       await this.projects.setPreviewSetup(slug, { status: 'running', attempt });
       await this.log(slug, `== Attempt ${attempt}: asking the agent`);
-      const agentRun = await this.runAgent(slug, place.dir, this.prompt(await this.basePrompt(), failure, recipeText));
+      const agentRun = await this.runAgent(slug, place.dir, this.prompt(await this.basePrompt(), failure, recipeText), agent);
       if (agentRun.exitCode !== 0) {
-        const recheck = await this.agent.check({ force: true });
+        const recheck = await agent.check({ force: true });
         if (!recheck.ready) {
           await this.projects.setPreviewSetup(slug, { attempt: attempt - 1 });
           return this.park(slug, recheck);
@@ -175,7 +178,7 @@ class PreviewSetup extends EventEmitter {
   async workplace(repo, slug) {
     const name = await repo.defaultBranchName();
     const open = await repo.findWorkspace(name);
-    if (open && open.kind === 'branch') return { dir: open.dir, detached: false };
+    if (open && open.kind === 'branch') { await this.reserveWorkspace(open, slug); return { dir: open.dir, detached: false }; }
     const local = await repo.localDefault();
     const dir = path.join(this.dir(slug), 'tree');
     await repo.checkoutSetupTree(dir, local || `refs/remotes/origin/${name}`);
@@ -201,16 +204,16 @@ class PreviewSetup extends EventEmitter {
   // Runs `omp -p` in `dir` with the client's .env moved aside: omp loads
   // .env from its working directory and a client key there must not
   // override the connected model.
-  async runAgent(slug, dir, prompt) {
+  async runAgent(slug, dir, prompt, agent = this.agent) {
     const envFile = path.join(dir, '.env');
     const hidden = path.join(dir, HIDDEN_ENV);
     const moved = await fsp.rename(envFile, hidden).then(() => true, () => false);
     try {
-      const args = ['-p', '--approval-mode', 'yolo', '--config', this.configPath, ...this.agent.ompArgs(), prompt];
+      const args = ['-p', '--approval-mode', 'yolo', '--config', this.configPath, ...agent.ompArgs(), prompt];
       return await new Promise((resolve) => {
         const child = spawn(this.ompBin, args, {
           cwd: dir,
-          env: { ...process.env, ...this.env, ...this.agent.ompEnv() },
+          env: { ...process.env, ...this.env, ...agent.ompEnv() },
           stdio: ['ignore', 'pipe', 'pipe'],
           timeout: AGENT_TIMEOUT_MS,
           killSignal: 'SIGKILL'

@@ -250,7 +250,7 @@ class WorkspaceRequests extends EventEmitter {
   }
 
 
-  async start(workspace, repo, input) {
+  async start(workspace, repo, input, actor = null) {
     if (workspace.kind !== 'branch') throw new RequestError(409, 'Only branch workspaces can receive feedback.');
     const fields = validate(input);
     if (this.blocked.has(workspace.id) || this.blockedProjects.has(workspace.id.split('/')[0]) || this.saving.has(workspace.id)) throw new RequestError(409, 'Workspace is busy or being removed.');
@@ -278,6 +278,7 @@ class WorkspaceRequests extends EventEmitter {
     }
     const record = {
       id: requestId, workspaceId: workspace.id, ...fields, status: 'running',
+      ...(actor ? { actor: { id: actor.id, name: actor.name } } : {}),
       model: this.agent.model, createdAt: new Date().toISOString(), startedAt: null,
       finishedAt: null, error: null, output: '', outputTruncated: false, result: null,
       summary: null, events: []

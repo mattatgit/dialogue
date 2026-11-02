@@ -1,5 +1,5 @@
 # NixOS module: run the Dialogue server as a systemd service, optionally
-# fronted by nginx. No authentication yet.
+# fronted by nginx. Accounts are enforced by the application.
 {
   config,
   lib,
@@ -28,6 +28,19 @@ in
       type = lib.types.path;
       default = "/var/lib/dialogue";
       description = "Directory for db.json, git mirrors, worktrees and the omp home (dataDir/home).";
+    };
+
+    publicOrigin = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "https://dialogue.example.com";
+      description = "Exact public origin for account cookies, CSRF checks and passkeys. Required in production (or set DIALOGUE_ORIGIN in environmentFile).";
+    };
+
+    development = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable loopback-only local development identities and file mail delivery. Never enable on a public deployment.";
     };
 
     environmentFile = lib.mkOption {
@@ -82,6 +95,8 @@ in
       environment = {
         HOST = "127.0.0.1";
         PORT = toString cfg.port;
+        NODE_ENV = if cfg.development then "development" else "production";
+        DIALOGUE_MODE = if cfg.development then "development" else "production";
         DIALOGUE_DATA = cfg.dataDir;
         # omp keeps its profile, sessions and credentials here; run /login in
         # the web terminal on first use.
@@ -89,6 +104,9 @@ in
         DIALOGUE_SEED = toString (pkgs.writeText "dialogue-seed.json" (builtins.toJSON cfg.seedProjects));
         # Prototype preview screenshots for project cards and branch tiles.
         DIALOGUE_CHROMIUM = lib.getExe pkgs.chromium;
+      }
+      // lib.optionalAttrs (cfg.publicOrigin != null) {
+        DIALOGUE_ORIGIN = cfg.publicOrigin;
       }
       // lib.optionalAttrs (cfg.previewDomain != null) {
         DIALOGUE_PREVIEW_DOMAIN = cfg.previewDomain;

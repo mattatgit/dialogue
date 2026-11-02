@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dialogue — Settings</title><link rel="stylesheet" href="css/dialogue.css"><link rel="stylesheet" href="css/local-functional.css"><link rel="stylesheet" href="css/review-shared.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dialogue — Settings</title><link rel="stylesheet" href="css/dialogue.css"><link rel="stylesheet" href="css/local-functional.css"><link rel="stylesheet" href="css/review-shared.css"><link rel="stylesheet" href="css/accounts.css"><script defer src="js/account.js"></script></head>
 <body class="updated-ui">
   <div class="app-shell"><aside class="sidebar">
     <div class="brand"><a href="projects.html" aria-label="Dialogue projects"><svg class="icon" aria-hidden="true"><use href="assets/review-icons.svg#mark"></use></svg></a></div>
@@ -9,10 +9,10 @@
       <a class="side-link" href="design-systems.html"><span class="side-nav-icon side-nav-design-systems" aria-hidden="true"></span> <span>Design systems</span></a>
       <a class="side-link active" aria-current="page" href="settings.html"><span class="side-nav-icon side-nav-settings" aria-hidden="true"></span> <span>Settings</span></a>
     </nav>
-    <div class="profile-link"><span class="profile-inner"><span class="avatar">D</span><span class="profile-copy"><strong>Local workspace</strong><span>This device</span></span></span></div>
+    <a class="profile-link" data-account-profile href="settings.html"><span class="profile-inner"><span class="avatar">D</span><span class="profile-copy"><strong>Local workspace</strong><span>This device</span></span></span></a>
   </aside>
   <main class="main"><header class="page-head"><h1 class="page-title">Settings</h1></header><div class="page-surface">
-    <section class="settings-group agent-section"><h2>AI model</h2><div data-agent-settings></div></section>
+    <section class="account-settings" data-account-settings></section><p class="account-status" role="status" aria-live="polite" data-account-status></p><section class="settings-group agent-section"><h2>AI model</h2><div data-agent-settings></div></section>
     <form class="settings-group grid-settings" data-grid-settings><h2>Grid</h2>
       <label class="settings-row"><span>Grid colour</span><span class="grid-color-field"><input type="color" name="gridColor" value="#bae6ff" aria-label="Grid colour"><output data-grid-color-label>#BAE6FF</output></span></label>
       <label class="settings-row"><span>Grid point size</span><span class="grid-size-field"><input name="gridSize" type="number" min="2" max="64" step="1" required value="8" aria-label="Grid point size"><span aria-hidden="true">pt</span></span></label>

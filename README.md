@@ -21,19 +21,23 @@ The three earlier functional milestones (Landline V22, V23, V24 on Matt's Mac) a
 
 The next milestone is the first **real designer-driven change** made through the web terminal on a Landline branch, then pushed and opened as a pull request.
 
+Accounts now provide invitation-only passkey/email-code sign-in and one shared workspace. Local development has explicit quick sign-in identities and persistent sessions. See [Accounts setup](docs/ACCOUNTS.md); named app/site/prototype cards and live editing badges remain planned.
+
 ## Run the lightweight local build
 
 Requirements:
 
-- Node.js 22 or newer
+- Node.js 22.13 or newer
 - `git`, `ttyd`, `tmux` and `omp` (oh-my-pi) on PATH — the Nix devshell provides all four (omp from the `llm-agents` flake input); outside it, install omp yourself
 - whatever the previewed projects need, typically `node`/`npm`; Chromium (optional) for card and tile screenshots — the devshell provides both
+
+Run `npm ci` and copy `.env.example` to `.env` first. Set the local owner/member addresses there; development mail is written locally, never sent.
 
 Start Dialogue in one of these ways:
 
 ```text
-dev                          # inside the Nix devshell: live-reloading dev server at http://127.0.0.1:8080
-npm start                    # plain server at http://127.0.0.1:4173
+dev                          # inside the Nix devshell: live-reloading dev server at http://localhost:8080
+npm start                    # plain server at your DIALOGUE_ORIGIN (default local example: http://localhost:4173)
 Start Dialogue.command       # macOS double-click launcher for npm start; checks for git/ttyd/tmux/omp
 nix run .#vm                 # headless NixOS demo VM with nginx; console prints http://127.0.0.1:8483 and the ssh command
 cp .env.example .env         # set OPENROUTER_API_KEY for the agent and FIGMA_ACCESS_TOKEN for read-only Figma attachments
@@ -45,11 +49,11 @@ See `docs/LOCAL_BUILD.md` for the workflow, data layout and limitations, and `do
 
 ## Static design prototype
 
-The existing HTML files can still be opened directly in a browser without the local server. In that mode, Dialogue behaves as the original static interaction prototype and uses its mock Landline V19/V18 content.
+The HTML/CSS remains the design baseline, but the account sign-in and functional pages require the server. Direct file opening does not provide accounts or the live project workflow.
 
 Current static prototype UI/interaction coverage includes:
 
-- mock sign-in
+- passkey/email-code sign-in when served by Dialogue
 - Projects and project detail views
 - New Project and Profile modals
 - image upload previews
@@ -72,6 +76,7 @@ Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored
 - `docs/DEVELOPMENT.md` — branches, devshell, VM and development workflow
 - `docs/LOCAL_BUILD.md` — lightweight local functional build
 - `docs/API.md` — local HTTP/SSE/WebSocket contract
+- `docs/ACCOUNTS.md` — accounts, shared membership, development sign-in and deployment configuration
 - `docs/superpowers/specs/2026-09-23-git-workspaces-web-terminal-design.md` — approved design for the git-workspace/terminal build
 
 ## Branches

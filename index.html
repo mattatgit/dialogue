@@ -1,2 +1,13 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dialogue — Sign in</title><link rel="stylesheet" href="css/dialogue.css"></head>
-<body class="signin-page"><form class="signin-card" action="projects.html" data-mock-signin><h1 class="wordmark"><img src="assets/dialogue-wordmark.svg" alt="Dialogue"></h1><input class="field" type="email" placeholder="Enter your email address" aria-label="Email address" data-mock-value="saori@idealogue.io"><input class="field" type="password" placeholder="Enter your password" aria-label="Password" data-mock-value="dialogue-demo"><button class="signin-button" type="submit">Sign in</button><a class="forgot" href="#">Forgot password?</a></form><script src="js/dialogue.js"></script></body></html>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dialogue — Sign in</title><link rel="stylesheet" href="css/dialogue.css"><link rel="stylesheet" href="css/review-shared.css"><link rel="stylesheet" href="css/accounts.css"></head>
+<body class="signin-page updated-ui"><main class="signin-card account-signin">
+<h1 class="wordmark"><img src="assets/dialogue-wordmark.svg" alt="Dialogue"></h1>
+<h2>Welcome to Dialogue</h2><p class="account-hint">Sign in to your shared workspace.</p>
+<button class="signin-button" type="button" data-passkey-signin>Sign in with a passkey</button>
+<div class="account-divider"><span>or use your email</span></div>
+<form data-email-signin><label class="sr-only" for="signin-email">Email address</label><input class="field" id="signin-email" type="email" autocomplete="email webauthn" placeholder="Enter your email address" required><button class="account-secondary" type="submit">Email me a sign-in code</button></form>
+<form data-code-signin hidden><p class="account-hint" data-code-message></p><label class="sr-only" for="signin-code">Six-digit sign-in code</label><input class="field" id="signin-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="Six-digit code" required><button class="signin-button" type="submit">Continue</button><button class="account-text-button" type="button" data-email-back>Use another email address</button></form>
+<p class="account-status" role="status" aria-live="polite" data-account-status></p>
+<section class="account-development" data-development-accounts hidden><h2>Local development</h2><p>Open a configured test identity without sending email.</p><div data-development-buttons></div></section>
+<p class="account-hint">Dialogue is invitation-only.</p>
+</main><script src="js/account.js"></script></body></html>

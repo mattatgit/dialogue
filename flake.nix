@@ -60,7 +60,10 @@
             export DIALOGUE_VM_ENV_DIR
             trap 'rm -rf "$DIALOGUE_VM_ENV_DIR"' EXIT
             {
-              [ -f .env ] && cat .env
+              # Keep the VM's own origin/mode instead of copying local dev values.
+              if [ -f .env ]; then
+                sed '/^[[:space:]]*\(export[[:space:]]\+\)\?\(DIALOGUE_ORIGIN\|DIALOGUE_MODE\|NODE_ENV\)[[:space:]]*=/d' .env
+              fi
               [ -n "''${OPENROUTER_API_KEY:-}" ] && printf 'OPENROUTER_API_KEY=%s\n' "$OPENROUTER_API_KEY"
               true
             } > "$DIALOGUE_VM_ENV_DIR/env"

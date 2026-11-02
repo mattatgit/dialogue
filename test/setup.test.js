@@ -275,3 +275,33 @@ test('refresh screenshots a moved default branch without the agent', { timeout: 
     await ctx.cleanup();
   }
 });
+
+test('preview setup uses the requesting member model instead of the owner connection', async () => {
+  const owner = new FakeAgent(false);
+  const member = new FakeAgent(true);
+  member.ompArgs = () => ['--model', 'fake/member'];
+  member.ompEnv = () => ({ FAKE_AGENT_ENV: 'member-profile' });
+  const ctx = await setup({ agent: owner, steps: [{ recipe: STATIC }] });
+  ctx.pipeline.agentFor = () => member;
+  try {
+    ctx.pipeline.enqueue('o-app'); await ctx.pipeline.idle();
+    assert.equal((await ctx.status()).status, 'ready');
+    assert.equal(owner.checks.length, 0);
+    assert.ok(member.checks.length > 0);
+    const [call] = await ctx.calls();
+    assert.equal(call.agentEnv, 'member-profile');
+    assert.ok(call.args.includes('fake/member'));
+  } finally { await ctx.cleanup(); }
+});
+
+test('preview setup refuses to modify an open working copy reserved by another member', async () => {
+  const ctx = await setup({ steps: [{ recipe: STATIC }] });
+  await ctx.repo.ensureWorkspace('main');
+  ctx.pipeline.reserveWorkspace = async () => { throw new Error('Another member has this working copy.'); };
+  try {
+    ctx.pipeline.enqueue('o-app'); await ctx.pipeline.idle();
+    assert.equal((await ctx.status()).status, 'failed');
+    assert.match((await ctx.status()).error, /Another member/);
+    assert.equal((await ctx.calls()).length, 0);
+  } finally { await ctx.cleanup(); }
+});

@@ -19,6 +19,7 @@ Do not ask the user to restate project history that is already recorded here.
    - `docs/DEVELOPMENT.md`
    - `docs/LOCAL_BUILD.md` when local functional work is active
    - `docs/API.md` when server/API work is active
+   - `docs/ACCOUNTS.md` when authentication, membership or account isolation is active
    - `docs/superpowers/specs/2026-09-23-git-workspaces-web-terminal-design.md` when touching workspaces, the terminal or the preview
 4. Inspect the current `develop` branch and any active feature branch named in `docs/CURRENT.md` or otherwise relevant to the next task.
 5. Check recent commits/PR state when necessary to understand changes made after the documentation was last updated.

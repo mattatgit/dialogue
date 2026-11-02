@@ -4,6 +4,10 @@ const fsp = require('node:fs/promises');
 const net = require('node:net');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
+const { AsyncLocalStorage } = require('node:async_hooks');
+const { Accounts, AccountError, accountConfig, mailer } = require('./server/accounts.js');
+const { accountHttp } = require('./server/account-http.js');
+const { AccountAgents } = require('./server/agent-accounts.js');
 
 const git = require('./server/git.js');
 const { DeployKeys, classifyPushError, hostingSetup, pushUrl } = require('./server/deploy-key.js');
@@ -15,7 +19,7 @@ const { PreviewRenderer } = require('./server/preview.js');
 const { PreviewProxy } = require('./server/preview-proxy.js');
 const { LivePreviews } = require('./server/live-preview.js');
 const { PreviewSetup } = require('./server/setup.js');
-const { AgentAuth, AgentAuthError } = require('./server/agent-auth.js');
+const { AgentAuthError } = require('./server/agent-auth.js');
 const { WorkspaceRequests, RequestError } = require('./server/requests.js');
 const { parseRecipe } = require('./server/recipe.js');
 const { FigmaError } = require('./server/figma.js');
@@ -31,6 +35,11 @@ const ROOT = __dirname;
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4173);
 const DATA_ROOT = path.resolve(process.env.DIALOGUE_DATA || path.join(ROOT, '.dialogue-data'));
+const identityContext = new AsyncLocalStorage();
+const accountsConfig = accountConfig();
+const accounts = new Accounts({ dataRoot: DATA_ROOT, config: accountsConfig, sendMail: mailer(accountsConfig, DATA_ROOT) });
+// Mail-server credentials and bootstrap settings never enter agent/preview children.
+for (const key of Object.keys(process.env)) if (/^DIALOGUE_(?:SMTP_|MAIL_|OWNER_|INITIAL_MEMBERS)/.test(key)) delete process.env[key];
 const DB_PATH = path.join(DATA_ROOT, 'db.json');
 const REPOS_ROOT = path.join(DATA_ROOT, 'repos');
 const WORKSPACES_ROOT = path.join(DATA_ROOT, 'workspaces');
@@ -80,20 +89,24 @@ class HttpError extends Error {
   }
 }
 
-const agentAuth = new AgentAuth({ dataRoot: DATA_ROOT, appRoot: ROOT });
+const agentAuth = new AccountAgents({ accounts, context: identityContext, dataRoot: DATA_ROOT, appRoot: ROOT });
 const terminals = new TerminalManager({ appRoot: ROOT, agentAuth, activityRoot: ACTIVITY_ROOT });
 // Open terminals keep the model they started with; new connections pick up
 // the new one because attach.sh rotates the tmux session on changed args.
-agentAuth.on('model', () => terminals.stopAll());
+agentAuth.on('model', (userId) => {
+  for (const [id, record] of terminals.terminals) if (record.userId === userId) terminals.stop(id);
+});
 const requests = new WorkspaceRequests({
   root: REQUESTS_ROOT, workspacesRoot: WORKSPACES_ROOT, agent: agentAuth,
   configPath: path.join(ROOT, 'omp', 'config.yml'), activityExtension: path.join(ROOT, 'omp', 'activity.js'), figmaToken,
-  internalOrigin: `http://${HOST === '0.0.0.0' || HOST === '::' ? '127.0.0.1' : HOST}:${PORT}`
+  internalOrigin: accountsConfig.origin
 });
 const watchers = new WatchRegistry();
 const deployKeys = new DeployKeys(KEYS_ROOT);
 const previews = new PreviewRenderer(PREVIEWS_ROOT);
 const proxy = new PreviewProxy();
+const previewSessions = new Map();
+const accountConnections = new Set();
 const live = new LivePreviews({ proxy, previews, stampsRoot: STAMPS_ROOT, internalPort: PORT });
 const repos = new Map();
 const fixFailures = new Map(); // slug -> setup error handed to "Fix with agent"
@@ -101,6 +114,36 @@ const fixFailures = new Map(); // slug -> setup error handed to "Fix with agent"
 // --- data -------------------------------------------------------------------
 
 const projects = new ProjectStore(DB_PATH);
+function agentAgentsForRequest() { return agentAuth.current(); }
+function trackConnection(identity, stream) {
+  const entry = { identity, stream };
+  accountConnections.add(entry);
+  const timer = setInterval(() => {
+    if (!accounts.db.prepare('SELECT 1 FROM sessions WHERE hash=? AND expires_at>?').get(identity.session.hash, accounts.clock()) || !accounts.member(identity.user.id)) stream.destroy();
+  }, 15000);
+  timer.unref();
+  stream.once('close', () => { clearInterval(timer); accountConnections.delete(entry); });
+}
+const handleAccounts = accountHttp({ accounts, readJson: readJsonBody, sendJson,
+  onRevoke: async (userId, sessionHash, copies = []) => {
+    for (const entry of accountConnections) if (entry.identity.user.id === userId && (!sessionHash || entry.identity.session.hash === sessionHash)) entry.stream.destroy();
+    for (const [id, identity] of previewSessions) if (identity.user.id === userId && (!sessionHash || identity.session.hash === sessionHash)) { proxy.unregister(id); previewSessions.delete(id); }
+    if (!sessionHash) {
+      for (const [id] of requests.active) if (requests.list(id).some(r => r.status === 'running' && r.actor?.id === userId)) await requests.stop(id);
+      for (const copy of copies) {
+        const found = await resolveWorkspace(copy.id).catch(() => null);
+        if (found) await identityContext.run({ user: { id: userId } }, () => terminals.retire(found.workspace));
+      }
+    }
+  },
+  onRelease: async (id, editorId) => {
+    if (requests.active.has(id) || requests.saving.has(id)) throw new AccountError(409, 'Wait for the agent or version save to finish before releasing this working copy.');
+    const { workspace, project } = await resolveWorkspace(id);
+    if (project.previewSetup?.status === 'running') throw new AccountError(409, 'Wait for preview setup to finish before releasing this working copy.');
+    accounts.db.prepare('DELETE FROM editors WHERE workspace_id=? AND user_id=?').run(id, editorId);
+    await identityContext.run({ user: { id: editorId } }, () => terminals.retire(workspace));
+  }
+});
 
 // Setup screenshots go through a temporary preview origin so they render
 // exactly like the workspace preview will.
@@ -119,6 +162,16 @@ const setup = new PreviewSetup({
   projects,
   repoFor: async (slug) => repoFor(await findProject(slug)),
   agent: agentAuth,
+  agentFor: project => {
+    const userId = project.previewSetup?.requestedBy || accounts.ownerId;
+    return accounts.member(userId) ? agentAuth.forUser(userId) : { check: async () => ({ ready: false, reason: 'not-connected', detail: 'The member who requested setup no longer has access. Retry setup from your own account.' }) };
+  },
+  reserveWorkspace: async (workspace, slug) => {
+    const project = await projects.find(slug);
+    const user = accounts.user(project.previewSetup?.requestedBy || accounts.ownerId);
+    if (!accounts.member(user.id)) throw new AccountError(403, 'The member who requested setup no longer has access. Retry setup from your own account.');
+    accounts.claimEditor(workspace.id, { user });
+  },
   previews,
   screenshot: screenshotTarget,
   setupRoot: SETUP_ROOT,
@@ -280,7 +333,18 @@ async function publicWorkspace(project, repo, workspace, headers) {
   const found = await repo.readRecipe(workspace.dir).catch(() => null);
   const parsed = found ? parseRecipe(found.text) : null;
   const entry = parsed?.ok ? parsed.recipe.entry : '/';
-  const origin = live.url(workspace.id, PREVIEW_PORT ? { ...headers, host: `localhost:${PREVIEW_PORT}` } : headers);
+  live.ensureToken(workspace.id);
+  const identity = identityContext.getStore();
+  const grantId = `view:${workspace.id}:${identity.session.hash}`;
+  proxy.register(grantId, () => {
+    if (!accounts.db.prepare('SELECT 1 FROM sessions WHERE hash=? AND expires_at>?').get(identity.session.hash, accounts.clock()) || !accounts.member(identity.user.id)) return { kind: 'failed', status: 403, title: 'Sign in required', message: 'Open this working copy in Dialogue again.' };
+    const entry = live.entries.get(workspace.id);
+    return entry ? live.resolve(entry) : { kind: 'pending', title: 'Starting', message: 'Open the working copy in Dialogue to start its preview.' };
+  }, { onUpgrade: socket => trackConnection(identity, socket) });
+  previewSessions.set(grantId, identity);
+  const origin = proxy.urlFor(grantId, { headers: PREVIEW_PORT ? { ...headers, host: `localhost:${PREVIEW_PORT}` } : headers });
+  const editor = accounts.editor(workspace.id);
+  const canEdit = !editor || editor.id === identity.user.id;
   return {
     id: workspace.id,
     project: { slug: project.slug, name: project.name, previewSetup: project.previewSetup },
@@ -289,7 +353,8 @@ async function publicWorkspace(project, repo, workspace, headers) {
     head: workspace.head,
     dirty: workspace.dirty,
     ahead: workspace.ahead,
-    terminal: workspace.kind === 'branch',
+    terminal: workspace.kind === 'branch' && canEdit,
+    editingOwner: editor || null,
     viewerUrl: `workspace.html?id=${encodeURIComponent(workspace.id)}`,
     previewUrl: `${origin.replace(/\/$/, '')}${entry}`,
     runner: live.state(workspace.id)
@@ -458,6 +523,7 @@ function sendEventStream(res) {
 // --- agent sign-in ------------------------------------------------------------------
 
 async function handleAgentApi(req, res, pathname) {
+  const agentAuth = agentAgentsForRequest();
   if (req.method === 'GET' && pathname === '/api/agent') {
     sendJson(res, 200, { status: agentAuth.status(), model: agentAuth.model, defaultModel: agentAuth.defaultModel });
     return true;
@@ -512,6 +578,21 @@ async function handleAgentApi(req, res, pathname) {
 
 async function handleApi(req, res, url) {
   const pathname = url.pathname;
+  if (!['GET', 'HEAD'].includes(req.method)) {
+    const match = req.method === 'DELETE'
+      ? /^\/api\/workspaces\/(.+)$/.exec(pathname)
+      : /^\/api\/workspaces\/(.+)\/(?:requests|versions|fix-preview|preview\/restart|editing)$/.exec(pathname);
+    if (match) {
+      const id = match[1].includes('/') ? match[1] : decodeURIComponent(match[1]);
+      await resolveWorkspace(id);
+      accounts.claimEditor(id, identityContext.getStore());
+    }
+    if (req.method === 'DELETE' && /^\/api\/projects\/[^/]+$/.test(pathname)) accounts.requireOwner(identityContext.getStore());
+  }
+
+  if (req.method === 'POST' && /^\/api\/workspaces\/.+\/editing$/.test(pathname)) {
+    sendJson(res, 200, { claimed: true }); return true;
+  }
 
   if (req.method === 'GET' && pathname === '/api/health') {
     sendJson(res, 200, { ok: true, mode: 'local-functional-build' });
@@ -542,6 +623,7 @@ async function handleApi(req, res, url) {
     let stored;
     try {
       stored = await projects.add(body.url);
+      await projects.setPreviewSetup(stored.slug, { requestedBy: identityContext.getStore().user.id });
     } catch (error) {
       if (error instanceof ProjectError) throw new HttpError(error.status, error.message);
       throw error;
@@ -621,7 +703,8 @@ async function handleApi(req, res, url) {
   if (match) {
     const project = await findProject(decodeURIComponent(match[1]));
     if (req.method === 'POST' && match[2] === 'retry') {
-      await projects.setPreviewSetup(project.slug, { status: 'queued', attempt: 0, error: null, finishedAt: null });
+      if (project.previewSetup?.status === 'running') throw new HttpError(409, 'Preview setup is already running.');
+      await projects.setPreviewSetup(project.slug, { status: 'queued', attempt: 0, error: null, finishedAt: null, requestedBy: identityContext.getStore().user.id });
       setup.enqueue(project.slug);
       sendJson(res, 202, { previewSetup: (await findProject(project.slug)).previewSetup });
       return true;
@@ -734,7 +817,7 @@ async function handleApi(req, res, url) {
     const { repo, workspace } = await resolveWorkspace(requestId);
     const body = await readJsonBody(req);
     try {
-      sendJson(res, 201, { request: await requests.start(workspace, repo, body) });
+      sendJson(res, 201, { request: await requests.start(workspace, repo, body, identityContext.getStore().user) });
     } catch (error) {
       if (error instanceof RequestError || error instanceof FigmaError) throw new HttpError(error.status, error.message);
       throw error;
@@ -841,28 +924,51 @@ async function sendPromptWhenReady(workspace, prompt) {
 
 async function requestHandler(req, res) {
   // Preview origins (<token>.preview.localhost) never reach Dialogue's routes.
-  if (proxy.handleRequest(req, res)) return;
   try {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    if (proxy.handleRequest(req, res)) return;
     const url = new URL(req.url, `http://${HOST}:${PORT}`);
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (url.pathname === '/api/health' && req.method === 'GET') { sendJson(res, 200, { ok: true }); return; }
+    if (req.headers.host !== new URL(accountsConfig.origin).host) {
+      if (req.method === 'GET' && !url.pathname.startsWith('/api/')) { res.writeHead(302, { Location: `${accountsConfig.origin}${url.pathname}${url.search}` }); res.end(); return; }
+      throw new AccountError(403, 'Use the configured Dialogue address.');
+    }
+    if (await handleAccounts(req, res, url)) return;
+
+    // Agent Figma URLs are existing short-lived capabilities scoped to one
+    // running request. Their own verifier checks the secret and request state.
+    const internalFigma = req.method === 'GET' && /^\/api\/workspaces\/[^/]+(?:\/[^/]+)?\/requests\/[0-9a-f-]{36}\/figma(?:\/export)?$/.test(url.pathname) && url.searchParams.has('access');
+    const identity = accounts.identity(req);
+    if (url.pathname.startsWith('/api/') && !internalFigma) {
+      if (!identity) throw new AccountError(401, 'Sign in to Dialogue to continue.');
+      if (req.headers.origin && req.headers.origin !== accountsConfig.origin) throw new AccountError(403, 'This request must come from Dialogue.');
+      if (!['GET', 'HEAD'].includes(req.method)) accounts.checkOrigin(req);
+      if (req.method === 'GET' && /\/(?:events)$/.test(url.pathname)) trackConnection(identity, res);
+    }
 
     if (url.pathname.startsWith('/api/')) {
-      const handled = await handleApi(req, res, url);
+      const handled = await identityContext.run(identity, () => handleApi(req, res, url));
       if (!handled) throw new HttpError(404, 'API route not found.');
       return;
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed.');
+    if ((url.pathname === '/' || url.pathname === '/index.html') && identity && url.searchParams.get('reauth') !== '1') { res.writeHead(302, { Location: '/projects.html' }); res.end(); return; }
+    if (!/^\/(?:assets|css|js)\//.test(url.pathname) && !['/', '/index.html'].includes(url.pathname) && !identity) { res.writeHead(302, { Location: `/?next=${encodeURIComponent(url.pathname + url.search)}` }); res.end(); return; }
     await serveAppFile(res, url.pathname);
   } catch (error) {
-    const status = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError ? error.status : 500;
-    const message = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError ? error.message : 'Unexpected local server error.';
+    const known = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError || error instanceof AccountError;
+    const status = known ? error.status : 500;
+    const message = known ? error.message : 'Unexpected local server error.';
     if (!res.headersSent) {
       if ((req.url || '').startsWith('/api/')) sendJson(res, status, { error: message, ...(error.reason ? { reason: error.reason } : {}), ...(error.setup ? { setup: error.setup } : {}) });
       else sendText(res, status, message);
     } else {
       res.destroy();
     }
-    if (!(error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError)) console.error(error);
+    if (!known) console.error(error);
   }
 }
 
@@ -898,12 +1004,17 @@ async function upgradeHandler(req, socket, head) {
 
   let socketPath;
   try {
+    const identity = accounts.requireIdentity(req);
+    accounts.checkOrigin(req);
+    if (req.headers.host !== new URL(accountsConfig.origin).host) throw new AccountError(403, 'Invalid Dialogue address.');
+    if (accounts.editor(id)?.id !== identity.user.id) throw new AccountError(409, 'Editing was released or belongs to another person. Reopen the working copy to start editing.');
     const { workspace } = await resolveWorkspace(id);
     if (workspace.kind !== 'branch') throw new HttpError(403, 'Read-only workspace: terminals are only available on branches.');
-    ({ socketPath } = await terminals.ensure(workspace));
+    ({ socketPath } = await identityContext.run(identity, () => terminals.ensure(workspace)));
+    trackConnection(identity, socket);
   } catch (error) {
-    const message = error instanceof HttpError || error instanceof TerminalError ? error.message : 'Terminal could not be started.';
-    if (!(error instanceof HttpError) && !(error instanceof TerminalError)) console.error(error);
+    const message = error instanceof HttpError || error instanceof TerminalError || error instanceof AccountError ? error.message : 'Terminal could not be started.';
+    if (!(error instanceof HttpError) && !(error instanceof TerminalError) && !(error instanceof AccountError)) console.error(error);
     rejectUpgrade(socket, req, 1011, message);
     return;
   }
@@ -943,6 +1054,7 @@ async function shutdown() {
   await requests.shutdown().catch((error) => console.error(error));
   // Preview servers run in their own process groups: stop them explicitly.
   await live.shutdown().catch(() => {});
+  accounts.close();
   process.exit(0);
 }
 process.on('SIGINT', shutdown);
