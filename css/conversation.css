@@ -32,6 +32,8 @@
 .conversation-message strong{font:600 12px/16px 'Inter Tight',Arial,sans-serif;color:#000}
 .conversation-message time{font:500 10px/16px Inter,Arial,sans-serif;color:#9ea39e;margin-left:4px;white-space:nowrap}
 .message-avatar,.message-dialogue-avatar{display:block;flex:0 0 32px;width:32px;height:32px;border-radius:8px}
+.message-working-avatar{position:relative;background:#f8f8f8}
+.message-working-avatar img{position:absolute;left:7px;top:7px;display:block;width:16px;height:18px}
 .message-avatar{display:grid;place-items:center;background:#d6e9f2;color:#41606e;font:600 12px/16px 'Inter Tight',Arial,sans-serif}
 .message-kind{display:inline-block;height:16px;border-radius:4px;background:#fff;padding:0 6px;font:500 10px/16px 'Inter Tight',Arial,sans-serif}
 .workspace-review .message-view-build{display:inline-flex;align-items:center;gap:4px;height:16px;min-height:0;padding:0 4px 0 8px;border:0;border-radius:4px;background:#177967;color:#fff;font:500 10px/16px 'Inter Tight',Arial,sans-serif;transform:none}

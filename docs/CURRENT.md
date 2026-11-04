@@ -4,6 +4,8 @@ This is the concise continuity record for active Dialogue work. Update it whenev
 
 ## Current status
 
+Working-avatar restoration (2026-11-04): running Dialogue replies reuse the previously prepared `history-wait.svg` animation unchanged, replacing the static avatar inside the same 32 px pale background box. Its 16 × 18 px mark uses the static avatar's 7 px inset. Progress refreshes preserve the existing animation element; completion/failure restores the static avatar. The existing `history-wait-static.svg` remains the reduced-motion fallback. Browser checks verify changing animation frames, dimensions/background/insets, element retention across progress updates, reduced-motion frame stability and return to the static avatar. Full suite: **144 passed, 0 failed/cancelled/skipped**.
+
 Comment-tool icon correction (2026-11-04): replaced the legacy simplified Select/Area/Arrow sprite callsites with unmodified SVG exports from Figma `23:1842`. The originals are now `assets/comment-tool-{select,area,arrow}.svg`, retaining intrinsic dimensions and design insets inside 16 px slots. Alpha masks inherit the dark/white button state without modifying SVG paths. Browser verification covers all three local asset responses, rendered geometry and selected states; full suite **144 passed, 0 failed/cancelled/skipped**.
 
 Message focus correction (2026-11-04): the sidebar textarea now overrides the shared keyboard-focus outline and uses only the native blinking text caret, as Matt requested. Browser checks verify pointer/keyboard focus, no outline/shadow/border and the normal visible caret colour. Full suite: **144 passed, 0 failed/cancelled/skipped**.

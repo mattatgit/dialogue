@@ -300,6 +300,7 @@ async function refreshActivity() {
 }
 function renderHistory() {
   const oldTop = messageScroll.scrollTop;
+  const workingAvatars = new Map([...cards.querySelectorAll('.is-working[data-message-reply]')].map(card => [card.dataset.messageReply, card.querySelector('.message-dialogue-avatar')]));
   const focusPreview = cards.contains(document.activeElement) ? document.activeElement?.dataset.previewId : null;
   const atBottom = messageScroll.scrollHeight - oldTop - messageScroll.clientHeight < 48;
   const initial = !cards.children.length;
@@ -319,9 +320,17 @@ function renderHistory() {
     const snapshot = request.status === 'completed' && /^[a-f0-9]{40}$/.test(request.snapshotSha || '') ? request.snapshotSha : null;
     const reply = busy ? request.workingDetail || 'Working on your request…' : request.status === 'failed' ? request.error || 'The request failed.' : request.reply || request.summary || 'The agent finished without a reply.';
     const build = snapshot ? `<button type="button" class="message-view-build" data-preview-id="${snapshot}">View build<span aria-hidden="true"><img src="assets/conversation-build-arrow.svg" alt=""></span></button>` : '';
-    const answer = `<article class="conversation-message is-dialogue ${busy ? 'is-working' : ''}" data-message-reply="${esc(request.id)}" aria-busy="${busy}"><header><img class="message-dialogue-avatar" src="assets/conversation-dialogue.svg" alt=""><div><strong>Dialogue</strong> <time datetime="${esc(request.finishedAt || request.createdAt)}">${esc(formatTime(request.finishedAt || request.createdAt))}</time><div>${build}</div></div></header><div class="message-body ${request.status === 'failed' ? 'activity-error' : ''}">${busy ? `<span role="status">${esc(reply)}</span>` : replyMarkdown(reply)}</div>${request.replyTruncated ? '<p class="message-limit">Reply exceeded the display limit; ask for a shorter response or continue the discussion.</p>' : ''}</article>`;
+    const avatar = busy
+      ? '<picture class="message-dialogue-avatar message-working-avatar" aria-hidden="true"><source media="(prefers-reduced-motion: reduce)" srcset="assets/history-wait-static.svg"><img src="assets/history-wait.svg" alt=""></picture>'
+      : '<img class="message-dialogue-avatar" src="assets/conversation-dialogue.svg" alt="">';
+    const answer = `<article class="conversation-message is-dialogue ${busy ? 'is-working' : ''}" data-message-reply="${esc(request.id)}" aria-busy="${busy}"><header>${avatar}<div><strong>Dialogue</strong> <time datetime="${esc(request.finishedAt || request.createdAt)}">${esc(formatTime(request.finishedAt || request.createdAt))}</time><div>${build}</div></div></header><div class="message-body ${request.status === 'failed' ? 'activity-error' : ''}">${busy ? `<span role="status">${esc(reply)}</span>` : replyMarkdown(reply)}</div>${request.replyTruncated ? '<p class="message-limit">Reply exceeded the display limit; ask for a shorter response or continue the discussion.</p>' : ''}</article>`;
     return user + answer;
   }).join('');
+  // Progress updates must not restart the existing SVG animation.
+  for (const card of cards.querySelectorAll('.is-working[data-message-reply]')) {
+    const avatar = workingAvatars.get(card.dataset.messageReply);
+    if (avatar) card.querySelector('.message-dialogue-avatar').replaceWith(avatar);
+  }
   if (!ordered.length) cards.innerHTML = '<p class="conversation-empty">Ask a question, request a change, or select part of the prototype to start a conversation.</p>';
   if (initial || followsLatest && atBottom) messageScroll.scrollTop = messageScroll.scrollHeight;
   else messageScroll.scrollTop = oldTop;
