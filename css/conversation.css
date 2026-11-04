@@ -1,4 +1,11 @@
 /* Conversation replacement for the legacy Activity/terminal surfaces. */
+/* Unmodified Figma SVG exports, at their intrinsic size within 16 px slots.
+   Alpha masks use the button colour for selected and unselected states. */
+.comment-tool-icon{position:relative;display:block;flex:0 0 16px;width:16px;height:16px}
+.comment-tool-icon::before{content:'';position:absolute;left:var(--tool-icon-left,0px);top:var(--tool-icon-top,0px);width:var(--tool-icon-width);height:var(--tool-icon-height);background-color:currentColor;-webkit-mask:var(--tool-icon-image) no-repeat;mask:var(--tool-icon-image) no-repeat}
+.comment-tool-select{--tool-icon-image:url('../assets/comment-tool-select.svg');--tool-icon-width:15.3333px;--tool-icon-height:15.3333px;--tool-icon-left:.3333px;--tool-icon-top:.3333px}
+.comment-tool-area{--tool-icon-image:url('../assets/comment-tool-area.svg');--tool-icon-width:16.0005px;--tool-icon-height:16.002px}
+.comment-tool-arrow{--tool-icon-image:url('../assets/comment-tool-arrow.svg');--tool-icon-width:10.8999px;--tool-icon-height:10.9px;--tool-icon-left:2.5px;--tool-icon-top:2.5px}
 .workspace-review{--history-width:336px}
 .workspace-review .review-mode-switch{width:200px}
 .workspace-review .review-mode-switch button{width:96px;flex:0 0 96px;min-width:0}
