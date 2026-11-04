@@ -2,7 +2,7 @@
 
 Prepared 2026-11-04 for **Setup & install**. Matt has requested proceeding toward the first hosted pilot now that the conversation UI is implemented. Server changes, activation and deployment stay in that chat.
 
-**Accepted application candidate:** `4fd8279e19522a120d673da05b44ef9202159e38`. Setup's full Linux suite passed all **151 tests** and the updated isolated acceptance passed every phase, including actual native OMP continuation/provider RPC. Local package and full suite also passed. Documentation-only commits after this SHA do not alter the candidate. Extended canonical conversation/attachment restore and a fresh prelaunch backup remain activation gates.
+**Accepted application candidate:** `4fd8279e19522a120d673da05b44ef9202159e38`. Setup's full Linux suite passed all **151 tests** and the updated isolated acceptance passed every phase, including actual native OMP continuation/provider RPC. Local package and full suite also passed. Extended B2 recovery fixture `d9e19db8` also passed: restored native history and attachments supported actual isolated continuation and image reopening at their original canonical paths. Documentation-only commits after this SHA do not alter the candidate. Owner/editor eligibility and a fresh prelaunch encrypted backup/restore remain activation gates.
 
 **Superseded failed candidates:** `7a78ff5` passed 148 Linux tests and `f6714bb` passed 150, but both hit the native agent's 768 MiB ceiling before a provider call. GC tuning alone was insufficient. The accepted `4fd8279` revised native reservations to 1280 MiB and serialized provider verification, retaining the 2048 MiB total budget and 2304 MiB host slice. Preserve the failure evidence; do not activate either older candidate.
 
