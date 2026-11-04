@@ -31,14 +31,13 @@
     <div class="conversation-messages" tabindex="0" aria-label="Conversation messages"><div data-history-items></div></div>
     <button class="conversation-jump" data-jump-latest hidden>Latest messages ↓</button>
     <form class="conversation-composer" aria-label="Message Dialogue" data-comment-form data-state="default">
-      <div class="composer-heading" hidden><span class="anchor-tag" data-anchor-label>Prompt</span><button type="button" class="composer-close" aria-label="Remove annotation" data-close-comment><img src="assets/comment-close-default.svg" alt=""></button></div>
       <label class="sr-only" for="review-comment">Ask a question or request a change</label>
       <textarea id="review-comment" name="feedback" maxlength="16000" placeholder="Ask a question or request a change" rows="2"></textarea>
       <div class="composer-figma-chip" data-comment-figma-chip hidden><img src="assets/conversation-figma.svg" alt=""><span data-comment-figma-label>Figma design</span><button type="button" data-comment-figma-remove aria-label="Remove Figma design"><img src="assets/create-chip-close.svg" alt=""></button></div>
       <div class="composer-files" data-composer-files></div>
       <div class="conversation-composer-footer">
         <button type="button" class="conversation-add" data-add-attachment aria-label="Add to conversation" aria-expanded="false" aria-controls="attachment-menu"><img src="assets/conversation-plus.svg" alt=""></button>
-        <span class="conversation-model" data-conversation-model>AI model</span>
+        <a class="conversation-model" data-conversation-model href="settings.html#agent-model" aria-label="Choose AI model in Settings">AI model</a>
         <button class="composer-send" type="submit" aria-label="Send message" disabled><span class="composer-enter-icon"><img src="assets/comment-enter-default.svg" alt=""></span></button>
         <button type="button" class="conversation-stop" data-stop-request hidden>Stop</button>
       </div>
@@ -62,6 +61,13 @@
     <button class="grid-toggle reload-toggle" type="button" data-reload data-restart aria-label="Reload prototype" title="Reload prototype (R)"><img src="assets/conversation-reload.svg" alt=""></button>
     <div class="viewing-build" data-viewing-build hidden><span data-viewing-build-label></span><button type="button" data-return-current aria-label="Return to current build"><img src="assets/conversation-return-close.svg" alt=""></button></div>
     <div class="review-load-state" role="status" data-load-state data-prototype-state>Loading workspace…</div>
+    <form class="review-composer" aria-label="Prototype comment" data-annotation-form data-state="default" hidden>
+      <div class="composer-heading"><span class="anchor-tag" data-anchor-label>Area</span><button type="button" class="composer-close" aria-label="Close comment" data-close-comment><span class="composer-close-icon" aria-hidden="true"><img class="close-icon-default" src="assets/comment-close-default.svg" alt=""><img class="close-icon-active" src="assets/comment-close-active.svg" alt=""></span></button></div>
+      <label class="sr-only" for="annotation-comment">Add your comment</label>
+      <textarea id="annotation-comment" name="feedback" maxlength="16000" placeholder="Add your comment" rows="3"></textarea>
+      <div class="composer-figma-chip" data-annotation-figma-chip hidden><img src="assets/figma-icon.svg" alt=""><span data-annotation-figma-label>Figma design</span><button type="button" data-annotation-figma-remove aria-label="Remove Figma design"><img src="assets/create-chip-close.svg" alt=""></button></div>
+      <div class="composer-footer"><small data-annotation-status>Sent to the connected agent</small><button class="composer-send" type="submit" aria-label="Send comment" disabled><span class="composer-send-label">Send</span><span class="composer-enter-icon" aria-hidden="true"><img class="enter-icon-default" src="assets/comment-enter-default.svg" alt=""><img class="enter-icon-active" src="assets/comment-enter-active.svg" alt=""></span></button></div>
+    </form>
     <div class="review-tools" role="group" aria-label="Comment tools" hidden>
       <button type="button" data-tool="selection" aria-pressed="false" disabled title="Element inspection is not available for this live preview"><svg class="icon"><use href="assets/review-icons.svg#select"/></svg>Select</button>
       <button type="button" data-tool="area" aria-pressed="true"><svg class="icon"><use href="assets/review-icons.svg#area"/></svg>Area</button>

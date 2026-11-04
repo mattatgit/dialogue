@@ -31,12 +31,15 @@ const frame = $('[data-review-frame]'), host = $('.review-frame-host'), hit = $(
 const rail = $('.review-history'), cards = $('[data-history-items]'), composer = $('[data-comment-form]');
 const feedback = $('#review-comment'), send = $('.composer-send'), loadState = $('[data-load-state]');
 const figmaChip = $('[data-comment-figma-chip]'), figmaLabel = $('[data-comment-figma-label]');
+const annotationComposer = $('[data-annotation-form]'), annotationFeedback = $('#annotation-comment');
+const annotationSend = annotationComposer.querySelector('.composer-send');
+const annotationFigmaChip = $('[data-annotation-figma-chip]');
 const shape = $('[data-selection-rect]'), arrow = $('[data-selection-arrow]');
 const viewport = { width: 370, height: 722 };
 let viewScroll = { x: 0, y: 0 };
 let grid = readGrid(), origin = { x: 0, y: 0 }, rootRadius = {}, geometry, mode = 'test', tool = 'area';
 let active = null, requests = [], activity = null, historyWorkspaceId = null, anchor = null, drag = null, figmaUrl = null;
-let sendHoverTimer, toastTimer, hoverPending = false;
+let toastTimer, hoverPending = false, annotationFigmaUrl = null;
 let viewedSnapshot = null, attachedFiles = [], submitting = false, addingFiles = false, followsLatest = true, toolChosen = false;
 const messageScroll = $('.conversation-messages');
 let channel = '', bridgeReady = false, probeId = 0, selectedProbe = 0;
@@ -131,6 +134,28 @@ function drawAnchor(value) {
 function positionComposer() {
   feedback.style.height = 'auto';
   feedback.style.height = `${feedback.value.includes('\n') || feedback.value.length > 42 ? Math.min(240, Math.max(40, feedback.scrollHeight)) : 40}px`;
+  if (!anchor || annotationComposer.hidden || !geometry) return;
+  const width = annotationComposer.offsetWidth, height = annotationComposer.offsetHeight;
+  if (anchor.type === 'arrow') {
+    // The gesture starts at the comment box and ends at the pointed-to target.
+    const terminal = planePoint(anchor.start);
+    const terminalX = terminal.x - scroll.scrollLeft, terminalY = terminal.y - scroll.scrollTop;
+    const fitsRight = terminalX + width <= canvas.clientWidth - 8;
+    const fitsLeft = terminalX - width >= 8;
+    const x = clamp(fitsRight || !fitsLeft ? terminalX : terminalX - width, 8, Math.max(8, canvas.clientWidth - width - 8));
+    const y = clamp(terminalY - 30, 8, Math.max(8, canvas.clientHeight - height - 8));
+    annotationComposer.style.left = `${x}px`; annotationComposer.style.top = `${y}px`;
+    annotationComposer.style.setProperty('--arrow-terminal-x', `${terminalX - x}px`);
+    annotationComposer.style.setProperty('--arrow-terminal-y', `${terminalY - y}px`);
+    return;
+  }
+  annotationComposer.style.removeProperty('--arrow-terminal-x'); annotationComposer.style.removeProperty('--arrow-terminal-y');
+  const target = planePoint({ x: anchor.rect.x, y: anchor.rect.y + anchor.rect.height });
+  const x = clamp(target.x - scroll.scrollLeft, 8, Math.max(8, canvas.clientWidth - width - 8));
+  let y = target.y - scroll.scrollTop + 8;
+  if (y + height > canvas.clientHeight - 72) y = target.y - scroll.scrollTop - height - 16;
+  y = clamp(y, 40, Math.max(40, canvas.clientHeight - height - 72));
+  annotationComposer.style.left = `${x}px`; annotationComposer.style.top = `${y}px`;
 }
 function parseFigmaLink(value) {
   if (!value || value.length > 2048 || /(?:^|\/)(?:\.|%2e){1,2}(?:\/|[?#]|$)/i.test(value)) return null;
@@ -150,20 +175,24 @@ function clearFigmaLink() {
   figmaChip.hidden = true;
   $('[data-composer-status]').hidden = false;
 }
-function resetSendState() {
-  clearTimeout(sendHoverTimer);
-  send.classList.remove('is-hovered', 'is-long-hover', 'is-clicked');
+function resetSendState(button = send) {
+  clearTimeout(button.hoverTimer);
+  button.classList.remove('is-hovered', 'is-long-hover', 'is-clicked');
 }
 function updateComposerState() {
   if (composer.hidden) return;
   const busy = requests.some(r => r.status === 'running');
   composer.dataset.state = feedback.value ? 'typing' : document.activeElement === feedback ? 'focused' : 'default';
   send.disabled = submitting || addingFiles || busy || !!viewedSnapshot || !active?.terminal || !feedback.value.trim();
-  feedback.disabled = !!viewedSnapshot || !active?.terminal;
+  feedback.disabled = submitting || !!viewedSnapshot || !active?.terminal;
   feedback.placeholder = viewedSnapshot ? 'Return to the current build to continue' : !active?.terminal ? 'This working copy is read-only' : 'Ask a question or request a change';
   $('[data-stop-request]').hidden = !busy || !active?.terminal;
   send.hidden = busy || !feedback.value.trim();
   if (send.disabled) resetSendState();
+  annotationComposer.dataset.state = annotationFeedback.value ? 'typing' : document.activeElement === annotationFeedback ? 'focused' : 'default';
+  annotationFeedback.disabled = submitting || busy || !!viewedSnapshot || !active?.terminal;
+  annotationSend.disabled = annotationFeedback.disabled || !anchor || !annotationFeedback.value.trim();
+  if (annotationSend.disabled) resetSendState(annotationSend);
   positionComposer();
 }
 function openComment(value) {
@@ -174,21 +203,21 @@ function openComment(value) {
   if (anchor.rect) anchor.normalizedRect = { x: anchor.rect.x / viewport.width, y: anchor.rect.y / viewport.height,
     width: anchor.rect.width / viewport.width, height: anchor.rect.height / viewport.height };
   $('[data-anchor-label]').textContent = { selection: 'Selection', area: 'Area', arrow: 'Arrow' }[anchor.type];
-  $('.composer-heading').hidden = false;
-  composer.dataset.anchorType = anchor.type;
-  composer.dataset.state = 'default';
-  composer.hidden = false; drawAnchor(anchor); positionComposer(); feedback.focus(); updateComposerState();
+  annotationComposer.dataset.anchorType = anchor.type;
+  annotationComposer.hidden = false; drawAnchor(anchor); positionComposer(); annotationFeedback.focus(); updateComposerState();
 }
 function clearAnchor() {
-  anchor = null; clearShapes(); $('.composer-heading').hidden = true; delete composer.dataset.anchorType;
-}
-function closeComment() {
-  feedback.value = ''; clearFigmaLink(); attachedFiles = []; renderFiles(); clearAnchor(); updateComposerState(); return true;
+  anchor = null; clearShapes(); annotationComposer.hidden = true; annotationFeedback.value = '';
+  annotationFigmaUrl = null; annotationFigmaChip.hidden = true; $('[data-annotation-status]').hidden = false;
+  delete annotationComposer.dataset.anchorType;
+  annotationComposer.style.removeProperty('--arrow-terminal-x'); annotationComposer.style.removeProperty('--arrow-terminal-y');
+  updateComposerState();
 }
 function mayNavigate() { return true; }
 function setMode(next, refresh = true) {
   if (!['test', 'comment'].includes(next) || next === 'comment' && !active) return;
   mode = next; document.body.dataset.mode = mode;
+  if (mode !== 'comment') clearAnchor();
   $$('[data-mode-button]').forEach(b => b.setAttribute('aria-pressed', b.dataset.modeButton === mode));
   rail.hidden = mode !== 'comment';
   hit.hidden = mode !== 'comment' || !active?.terminal || !!viewedSnapshot;
@@ -199,6 +228,7 @@ function setMode(next, refresh = true) {
 }
 function setTool(next) {
   if (!mayNavigate()) return;
+  if (tool !== next) clearAnchor();
   tool = next; hit.dataset.tool = next;
   $$('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === tool));
 }
@@ -460,39 +490,62 @@ $('[data-comment-figma-remove]').addEventListener('click', () => {
   feedback.focus();
   updateComposerState();
 });
-send.addEventListener('pointerenter', () => {
-  if (send.disabled) return;
-  resetSendState(); send.classList.add('is-hovered');
-  sendHoverTimer = setTimeout(() => {
-    if (!send.disabled && send.matches(':hover')) send.classList.add('is-long-hover');
-  }, 300);
-});
-send.addEventListener('pointerleave', resetSendState);
-send.addEventListener('pointerdown', () => {
-  if (send.disabled) return;
-  clearTimeout(sendHoverTimer); send.classList.add('is-clicked');
-});
-send.addEventListener('pointerup', () => send.classList.remove('is-clicked'));
-send.addEventListener('pointercancel', () => send.classList.remove('is-clicked'));
-feedback.addEventListener('keydown', event => {
-  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!send.disabled) composer.requestSubmit(); }
-});
-composer.addEventListener('submit', async event => {
+for (const [form, input, button] of [[composer, feedback, send], [annotationComposer, annotationFeedback, annotationSend]]) {
+  button.addEventListener('pointerenter', () => {
+    if (button.disabled) return;
+    resetSendState(button); button.classList.add('is-hovered');
+    button.hoverTimer = setTimeout(() => { if (!button.disabled && button.matches(':hover')) button.classList.add('is-long-hover'); }, 300);
+  });
+  button.addEventListener('pointerleave', () => resetSendState(button));
+  button.addEventListener('pointerdown', () => { if (!button.disabled) { clearTimeout(button.hoverTimer); button.classList.add('is-clicked'); } });
+  button.addEventListener('pointerup', () => button.classList.remove('is-clicked'));
+  button.addEventListener('pointercancel', () => button.classList.remove('is-clicked'));
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!button.disabled) form.requestSubmit(); }
+  });
+  form.addEventListener('submit', event => submitMessage(event, form, input, button));
+}
+async function submitMessage(event, form, input, button) {
   event.preventDefault();
-  if (!feedback.value.trim() || send.disabled || !active?.terminal || viewedSnapshot) return;
+  if (!input.value.trim() || button.disabled || !active?.terminal || viewedSnapshot) return;
+  const annotated = form === annotationComposer;
+  const design = annotated ? annotationFigmaUrl : figmaUrl;
+  const body = { feedback: input.value, ...(annotated && anchor ? { anchor } : {}), ...(design ? { figmaUrl: design } : {}), attachments: annotated ? [] : attachedFiles };
   submitting = true; followsLatest = true;
-  send.disabled = true;
+  updateComposerState();
   try {
     const response = await fetch(`/api/workspaces/${active.id}/requests`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ feedback: feedback.value, ...(anchor ? { anchor } : {}), ...(figmaUrl ? { figmaUrl } : {}), attachments: attachedFiles })
+      body: JSON.stringify(body)
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'The request could not be sent.');
     upsertRequest(data.request);
-    closeComment(); messageScroll.scrollTop = messageScroll.scrollHeight;
+    if (annotated) clearAnchor();
+    else { feedback.value = ''; clearFigmaLink(); attachedFiles = []; renderFiles(); }
+    messageScroll.scrollTop = messageScroll.scrollHeight;
   } catch (error) { toast(error.message); }
   finally { submitting = false; updateComposerState(); }
+}
+annotationFeedback.addEventListener('focus', updateComposerState);
+annotationFeedback.addEventListener('blur', updateComposerState);
+annotationFeedback.addEventListener('input', updateComposerState);
+annotationFeedback.addEventListener('paste', event => {
+  if (annotationFigmaUrl) return;
+  const pasted = event.clipboardData?.getData('text/plain');
+  if (!pasted) return;
+  for (const match of pasted.matchAll(/https:\/\/(?:www\.)?figma\.com\/[^\s<>"']+/gi)) {
+    const candidate = match[0].replace(/[.,!?;:)\]}]+$/, ''), parsed = parseFigmaLink(candidate);
+    if (!parsed) continue;
+    event.preventDefault();
+    annotationFeedback.setRangeText(pasted.slice(0, match.index) + pasted.slice(match.index + candidate.length), annotationFeedback.selectionStart, annotationFeedback.selectionEnd, 'end');
+    annotationFigmaUrl = parsed.url; $('[data-annotation-figma-label]').textContent = parsed.label;
+    annotationFigmaChip.hidden = false; $('[data-annotation-status]').hidden = true; updateComposerState(); break;
+  }
+});
+$('[data-annotation-figma-remove]').addEventListener('click', () => {
+  annotationFigmaUrl = null; annotationFigmaChip.hidden = true; $('[data-annotation-status]').hidden = false;
+  annotationFeedback.focus(); updateComposerState();
 });
 hit.addEventListener('pointermove', event => {
   if (!geometry || anchor || viewedSnapshot || !active?.terminal) return;
