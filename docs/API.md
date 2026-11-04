@@ -2,7 +2,16 @@
 
 ## Purpose
 
-`server.js` exposes a small localhost HTTP surface used by the Dialogue UI. Workspaces are git worktrees; the API creates, lists, watches and removes them, serves previews, records structured feedback runs and local edit snapshots, publishes numbered Versions, and proxies a terminal to each branch workspace. There is no import route or separate revision store.
+`server.js` exposes a small localhost HTTP surface used by the Dialogue UI. Workspaces are git worktrees; the API creates, lists, watches and removes them, serves previews, records continuing conversations and local edit snapshots, and publishes numbered Versions. Legacy terminal endpoints remain for compatibility, but the current workspace has no console client. There is no import route or separate revision store.
+
+## Conversation additions (2026-11-04)
+
+- `POST /api/workspaces/:id/requests` accepts general prompts or optional `anchor` feedback, with up to 16,000 text characters. It resumes the same branch's native OMP conversation. The ordinary UI leaves intent automatic: questions request discussion without edits, while explicit change requests can edit. Optional API `intent: discuss` enforces read/search tools plus a read-only checkout.
+- Optional `attachments: [{ name, data }]` carries base64 text/code or PNG/JPEG/WebP bytes, at most four files, 2 MiB per file and 4 MiB combined. Only this route permits a 6 MiB JSON body; other routes retain 64 KiB. Invalid types, encodings, size/count or text limits fail before execution. Names are sanitized; files are stored outside the checkout and mounted read-only for this branch. `figmaUrl` retains its existing request-scoped API behavior.
+- Request records add `reply`, `replyTruncated`, `sessionStored`, `intent` and attachment metadata alongside the existing actor, summary, execution status and actual `snapshotSha`. Full final prose is distinct from private tool output/short activity summaries. Replies have a 32,768-character display bound with an explicit truncation marker; no-change discussions receive no edit snapshot.
+- `POST /api/workspaces/:id/requests/stop` requires normal membership, exact Origin and editing ownership. It cancels the running/queued turn, preserves completed file changes and records an interruption. Subsequent prompts resume the branch conversation; they do not create competing runs.
+- `GET /api/workspaces/:id/requests/:request-id/attachments/:index` serves that request's retained file as an authenticated, non-cacheable `application/octet-stream` download with `nosniff`. IDs and file access remain branch-bound; no public attachment or session route exists.
+- Existing activity/request SSE and polling deliver progress and settled full replies. The native `.sessions` directory is private persisted execution state, never the browser's transcript API. Legacy records remain readable; a bounded recap seeds their first native conversation. Missing required native state produces an explicit error instead of resetting history.
 
 All routes bind to `127.0.0.1` in the local build. In the VM nginx proxies them, including WebSockets. Requests whose Host is a preview origin (`<token>.preview.localhost[:port]` or `<token>.<DIALOGUE_PREVIEW_DOMAIN>`) never reach the routes below; see [Preview origins](#preview-origins).
 

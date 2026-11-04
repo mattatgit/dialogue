@@ -398,12 +398,12 @@ function sendText(res, status, text) {
   res.end(text);
 }
 
-async function readJsonBody(req) {
+async function readJsonBody(req, limit = MAX_BODY_BYTES) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'Request body too large.');
+    if (size > limit) throw new HttpError(413, 'Request body too large.');
     chunks.push(chunk);
   }
   if (!chunks.length) return {};
@@ -489,6 +489,10 @@ async function serveEvents(req, res, id) {
   const terminalActivity = await readActivity(activityPath(ACTIVITY_ROOT, id));
   if (!res.writableEnded) res.write(`event: activity\ndata: ${JSON.stringify({ terminalActivity })}\n\n`);
 
+  // A historical canvas can retain the live branch's conversation without
+  // retaining an otherwise unused live preview worker on the small host.
+  if (new URL(req.url, 'http://localhost').searchParams.get('preview') === '0') return;
+
   // Viewing a workspace keeps its preview server running.
   const isDefault = workspace.kind === 'branch' && workspace.ref === (await repo.defaultBranchName());
   const release = await live.open(id, {
@@ -497,6 +501,7 @@ async function serveEvents(req, res, id) {
     dir: workspace.dir,
     repo,
     isDefault,
+    readOnly: workspace.kind !== 'branch',
     head: async () => (await repo.findWorkspace(workspace.ref))?.head?.sha || null
   }, (payload) => {
     if (!res.writableEnded) res.write(`event: runner\ndata: ${JSON.stringify(payload)}\n\n`);
@@ -587,7 +592,7 @@ async function handleApi(req, res, url) {
   if (!['GET', 'HEAD'].includes(req.method)) {
     const match = req.method === 'DELETE'
       ? /^\/api\/workspaces\/(.+)$/.exec(pathname)
-      : /^\/api\/workspaces\/(.+)\/(?:requests|versions|fix-preview|preview\/restart|editing)$/.exec(pathname);
+      : /^\/api\/workspaces\/(.+)\/(?:requests|requests\/stop|versions|fix-preview|preview\/restart|editing)$/.exec(pathname);
     if (match) {
       const id = match[1].includes('/') ? match[1] : decodeURIComponent(match[1]);
       await resolveWorkspace(id);
@@ -803,6 +808,23 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  match = /^\/api\/workspaces\/([^/]+(?:\/[^/]+)?)\/requests\/([0-9a-f-]{36})\/attachments\/(\d)$/.exec(pathname);
+  if (req.method === 'GET' && match) {
+    const id = match[1].includes('/') ? match[1] : decodeURIComponent(match[1]);
+    await resolveWorkspace(id);
+    const file = await requests.attachment(id, match[2], Number(match[3]));
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${file.name}"`, 'Content-Length': file.bytes.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+    res.end(file.bytes); return true;
+  }
+
+  match = /^\/api\/workspaces\/(.+)\/requests\/stop$/.exec(pathname);
+  if (req.method === 'POST' && match) {
+    const id = match[1].includes('/') ? match[1] : decodeURIComponent(match[1]);
+    await resolveWorkspace(id);
+    await requests.stop(id, 'Stopped at your request. File changes made so far are kept.');
+    sendJson(res, 200, { stopped: true }); return true;
+  }
+
   match = /^\/api\/workspaces\/([^/]+(?:\/[^/]+)?)\/requests$/.exec(pathname);
   // The ref portion of a workspace id is encoded already; callers may also
   // URL-encode the whole id, including its separator, once more.
@@ -821,7 +843,7 @@ async function handleApi(req, res, url) {
   }
   if (match && req.method === 'POST') {
     const { repo, workspace } = await resolveWorkspace(requestId);
-    const body = await readJsonBody(req);
+    const body = await readJsonBody(req, 6 * 1024 * 1024);
     try {
       sendJson(res, 201, { request: await requests.start(workspace, repo, body, identityContext.getStore().user) });
     } catch (error) {
@@ -858,7 +880,7 @@ async function handleApi(req, res, url) {
 
   match = /^\/api\/workspaces\/([^/]+\/[^/]+)\/fix-preview$/.exec(pathname);
   if (req.method === 'POST' && match) {
-    const { project, workspace } = await resolveWorkspace(match[1]);
+    const { project, repo, workspace } = await resolveWorkspace(match[1]);
     if (workspace.kind !== 'branch') throw new HttpError(409, 'Only branches have an agent.');
     const failure = fixFailures.get(project.slug) || project.previewSetup?.error || 'The preview did not start.';
     fixFailures.delete(project.slug);
@@ -868,7 +890,7 @@ async function handleApi(req, res, url) {
       .replaceAll('{{setupPromptPath}}', SETUP_PROMPT_PATH)
       .replace(/\s+/g, ' ')
       .trim();
-    await sendPromptWhenReady(workspace, prompt);
+    await requests.start(workspace, repo, { feedback: prompt }, identityContext.getStore().user);
     sendJson(res, 202, { accepted: true });
     return true;
   }
@@ -909,23 +931,6 @@ async function handleApi(req, res, url) {
   }
 
   return false;
-}
-
-// The fix prompt is sent right after the workspace page's terminal connects,
-// which is when its tmux session starts; wait for the session to exist and
-// omp to come up.
-async function sendPromptWhenReady(workspace, prompt) {
-  const deadline = Date.now() + 20000;
-  for (;;) {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      await terminals.sendPrompt(workspace, prompt);
-      return;
-    } catch (error) {
-      if (!(error instanceof TerminalError)) throw error;
-      if (Date.now() > deadline) throw new HttpError(409, error.message);
-    }
-  }
 }
 
 async function requestHandler(req, res) {

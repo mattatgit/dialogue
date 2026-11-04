@@ -8,6 +8,20 @@ Primary design file:
 
 Figma remains the source of truth for intended UI where a design exists.
 
+## Conversation sidebar (2026-11-04)
+
+Matt approved [Commenting, `261:4651`](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=261-4651) as the replacement for the Activity rail and visible OMP console. It is implemented on `codex/conversation-sidebar`, based on the validated isolation branch. The main message frame is `261:4652`, attachment-menu frame `266:5518`, and historical-preview frame `266:5902`.
+
+- Keep only Interact and Comment in the top switch. Comment opens a 312 px conversation rail, with the canvas beginning at x=344 on desktop.
+- The composer remains at the bottom; messages fill from the bottom and scroll above. **Matt explicitly clarified standard chronological chat order:** user prompt above its reply; newest reply nearest the composer. The drawings' reversed timestamps/order must not override this decision.
+- General prompts and Selection/Area/Arrow feedback share the same branch conversation. Keep author identity, timestamps, pale-blue user surfaces, white Dialogue responses, complete final prose and design/file chips. Names and model labels are dynamic; users without avatar uploads use initials.
+- The composer expands for multiline prompts (Enter sends, Shift+Enter inserts a line). The + menu supports bounded text/code/image files and Figma design links. Full replies render safe Markdown/code without exposing raw tool output or reasoning. In-progress work shows bounded status, with Stop available; scroll position is preserved while reading older messages.
+- Matt chose **inference from the message** for discussion versus requested edits. Do not introduce a discussion/edit mode toggle. Questions should be answered without edits; explicit requests can change files.
+- Only a successful turn with an actual snapshot receives **View build**. Confirmed saved versions also remain accessible through Dialogue's saved-version messages, including versions without an attributed prompt. This button changes the canvas in place, not the conversation or working files. A green **Viewing build [name]** indicator, with its close action, returns to the current build. Historical previews are read-only; retain unsent composer text while they are open.
+- **Save a version** now sits immediately before Share in the top-right toolbar (`266:6238`). It retains the existing explicit publication flow and Saving/Saved/error behavior. **Reload** is a 24 px icon control beside Grid at the canvas's top-left. These controls no longer live in Activity cards.
+
+The earlier three-mode switch, terminal styling and card-to-preview sections below describe the superseded interface. They remain historical reference, not the current workspace implementation. The isolated worker boundary remains required; this UI work does not authorize deployment.
+
 ## Figma attachment inputs
 
 The [Figma connection section](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=145-3744) defines two request-scoped attachment surfaces. The second field in **Create a prototype** turns a pasted design/file link into a Figma-icon chip with a shortened filename and remove control (`Create prototype from empty 3`). In the comment composer, pasting a link anywhere in the message extracts it into the same removable chip below the remaining prose (`Comment with Figma link`). The chip is a design reference attached to that request, not inline text or an automatically saved project-wide file.

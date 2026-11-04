@@ -422,7 +422,7 @@ test('readiness, branch kind and bounded input reject without launching an agent
     ctx.agent.ready = true;
     await assert.rejects(ctx.manager.start({ ...ctx.workspace, kind: 'tag' }, ctx.repo, { feedback: 'Change it' }), { status: 409 });
     for (const body of [
-      { feedback: ' ' }, { feedback: 'a'.repeat(4001) },
+      { feedback: ' ' }, { feedback: 'a'.repeat(16001) },
       { feedback: 'Change it', figmaUrl: 'https://figma.com.evil.test/file/x' },
       { feedback: 'Change it', figmaUrl: 'javascript:alert(1)' },
       { feedback: 'Change it', anchor: Array(10).fill(1) },
@@ -460,4 +460,32 @@ test('restart marks in-flight work failed and restores a hidden project .env', a
   } finally {
     await ctx.cleanup();
   }
+});
+
+test('invalid attachment metadata, file types, counts and sizes fail before an agent runs', async () => {
+  const ctx = await fixture();
+  try {
+    for (const attachments of [[{ name: 'file.exe', data: 'aGk=' }], [{ name: 'note.txt', data: '$bad' }], Array(5).fill({name:'a.txt',data:'aGk='})]) {
+      await assert.rejects(ctx.manager.start(ctx.workspace, ctx.repo, { feedback: 'Read this', attachments }), { status: 400 });
+    }
+    await assert.rejects(ctx.manager.start(ctx.workspace, ctx.repo, { feedback: 'Read this', attachments: [{ name: 'huge.txt', data: Buffer.alloc(2 * 1024 * 1024 + 1).toString('base64') }] }), { status: 413 });
+    assert.equal(ctx.manager.list(ctx.workspace.id).length, 0);
+  } finally { await ctx.manager.shutdown(); await ctx.cleanup(); }
+});
+
+test('snapshot attribution waits for the worker scope to stop all descendants', async () => {
+  const ctx = await fixture(); let release, child;
+  ctx.manager.runtime = { spawn: async (bin, args, options) => {
+    child = require('node:child_process').spawn(bin, args, options);
+    child.workerFinished = new Promise(resolve => { release = resolve; }); return child;
+  } };
+  try {
+    await ctx.manager.start(ctx.workspace, ctx.repo, { feedback: 'Change it' });
+    await waitUntil(() => child?.exitCode !== undefined && child.exitCode !== null);
+    assert.equal(ctx.manager.list(ctx.workspace.id)[0].status, 'running');
+    await fsp.writeFile(path.join(ctx.workspace.dir, 'last-descendant.txt'), 'final descendant write');
+    release(); await ctx.manager.active.get(ctx.workspace.id).done;
+    const record = ctx.manager.list(ctx.workspace.id)[0]; assert.equal(record.status, 'completed');
+    assert.equal(sh(ctx.workspace.dir, 'show', record.snapshotSha + ':last-descendant.txt'), 'final descendant write');
+  } finally { release?.(); await ctx.manager.shutdown(); await ctx.cleanup(); }
 });

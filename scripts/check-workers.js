@@ -11,6 +11,7 @@ const { once } = require('node:events');
 const { Workers, workerConfig, killWorker } = require('../server/workers.js');
 const { PreviewRenderer } = require('../server/preview.js');
 const { readProjectFile } = require('../server/project-files.js');
+const { sessionArgs, readReply } = require('../server/conversation.js');
 const exec = promisify(execFile);
 
 async function workerReady(child) {
@@ -34,7 +35,7 @@ async function main() {
   const dir = path.join(root, 'workspaces', 'check', 'main');
   const home = path.join(root, 'users', 'matt', 'home'); const otherHome = path.join(root, 'users', 'saori', 'home');
   const privateFile = path.join(root, 'accounts.sqlite');
-  let server;
+  let server, provider;
   try {
     await fs.mkdir(path.dirname(dir), { recursive: true }); await fs.mkdir(home, { recursive: true }); await fs.mkdir(otherHome, { recursive: true });
     await fs.writeFile(privateFile, 'app-private-canary'); await fs.writeFile(path.join(otherHome, 'credential'), 'other-private-canary'); await fs.writeFile(path.join(home, 'credential'), 'own-profile-canary');
@@ -61,6 +62,35 @@ async function main() {
       await runtime.run(bin, args, { cwd: dir, env: {}, timeout: 15000 }, { kind: 'control', home });
     }
     console.log('PASS: OMP, tmux and ttyd execute inside the namespace');
+    const sessionDir = path.join(root, 'requests', '.sessions', 'check');
+    const attachmentDir = path.join(root, 'requests', '.attachments', 'check');
+    const replyFile = path.join(root, 'requests', '.replies', 'check.json');
+    for (const folder of [sessionDir, attachmentDir, path.dirname(replyFile)]) await fs.mkdir(folder, { recursive: true });
+    const attachment = path.join(attachmentDir, 'notes.txt'); await fs.writeFile(attachment, 'retained design notes');
+    await fs.writeFile(replyFile, '{}');
+    const policy = { kind: 'agent', home, sessionDir, attachmentDir, replyFile, readOnlyWorkspace: true };
+    await runtime.run(process.execPath, ['-e', `const f=require('fs'),a=require('assert/strict');a.throws(()=>f.writeFileSync('worker-file','forbidden'));a.equal(f.readFileSync(${JSON.stringify(attachment)},'utf8'),'retained design notes');a.throws(()=>f.writeFileSync(${JSON.stringify(attachment)},'forbidden'));f.writeFileSync(${JSON.stringify(path.join(sessionDir, 'canary'))},'own session');f.writeFileSync(${JSON.stringify(replyFile)},'{}');`], { cwd: dir, env: {}, timeout: 15000 }, policy);
+    console.log('PASS: selected conversation session/reply are writable; checkout and branch attachments can be read-only');
+    const modelCalls = [];
+    provider = http.createServer((req, res) => {
+      let raw = ''; req.on('data', chunk => { raw += chunk; }); req.on('end', () => {
+        modelCalls.push(JSON.parse(raw));
+        const frame = (delta, finish_reason) => 'data: ' + JSON.stringify({ id: 'check', object: 'chat.completion.chunk', model: 'fake', choices: [{ index: 0, delta, finish_reason }] }) + '\n\n';
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end(frame({ role: 'assistant', content: 'The cobalt penguin decision persists.\n\nA complete user-facing reply.' }, null) + frame({}, 'stop') + 'data: [DONE]\n\n');
+      });
+    });
+    await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
+    const extension = path.join(dir, 'acceptance-provider.js');
+    await fs.writeFile(extension, `export default function(pi){pi.registerProvider('dialogue-check',{baseUrl:'http://127.0.0.1:${provider.address().port}/v1',apiKey:'fake-local-only',api:'openai-completions',models:[{id:'fake',name:'Check',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:128000,maxTokens:1000}]});}`);
+    for (let turn = 0; turn < 2; turn++) {
+      const args = ['-p', '--no-tools', '--no-skills', '--no-rules', '--no-extensions', '-e', extension, '-e', path.resolve(__dirname, '../omp/conversation.js'), ...await sessionArgs(sessionDir, turn > 0), '--model', 'dialogue-check/fake', turn ? 'Explain the earlier decision.' : 'Remember the cobalt penguin decision.'];
+      await runtime.run(process.env.DIALOGUE_OMP || 'omp', args, { cwd: dir, env: { DIALOGUE_REPLY_FILE: replyFile }, timeout: 30000 }, { ...policy, home: turn ? otherHome : home });
+      assert.ok((await readReply(replyFile))?.text.includes('complete user-facing reply'));
+    }
+    assert.ok(JSON.stringify(modelCalls.at(-1).messages).includes('Remember the cobalt penguin decision.'));
+    console.log('PASS: real isolated OMP retains branch conversation and complete replies across member homes');
+    provider.close(); provider = null;
     const survivor = await runtime.spawn(process.execPath, ['-e', `require('child_process').spawn('/bin/sleep',['60'],{detached:true,stdio:'ignore'}).unref();console.log('spawned');setInterval(()=>{},1000);`], { cwd: dir, env: {}, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'agent', home });
     await workerReady(survivor); const closed = once(survivor, 'close'); await killWorker(survivor, 'SIGKILL'); await closed;
     await exec(runtime.config.systemctl, ['--user', 'stop', survivor.workerUnit]).catch(error => { if (!/not loaded|not found|could not be found/i.test(error.stderr || '')) throw error; });
@@ -78,7 +108,7 @@ async function main() {
     assert.ok((await fs.stat(shot)).size > 100); console.log('PASS: Chromium screenshot through loopback with no app/credential mounts');
     console.log('ALL LINUX WORKER CHECKS PASSED');
   } finally {
-    server?.close(); await runtime.shutdown(); await fs.rm(root, { recursive: true, force: true });
+    provider?.close(); server?.close(); await runtime.shutdown(); await fs.rm(root, { recursive: true, force: true });
   }
 }
 main().catch(error => { console.error('WORKER CHECK FAILED:', error.message); process.exitCode = 1; });

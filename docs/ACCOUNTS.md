@@ -4,6 +4,8 @@
 
 `codex/accounts-shared-workspace` adds invitation-only Dialogue accounts to the existing integration build. The first release has one shared workspace, with an owner and editors. Every member can see its connected repositories, previews and project history; only the owner manages membership or removes a project. Personal workspaces, per-project visibility and public sharing are not implemented.
 
+The conversation sidebar resumes the branch’s native session when editing ownership passes to another member; it uses the receiving member’s model home rather than sharing credentials. Full replies and branch-scoped attachments remain shared project context. Historical previews are read-only. See `docs/ARCHITECTURE.md` for continuity, and `docs/DESIGN.md` for the replacement UI.
+
 A Dialogue account is separate from the AI-provider login. Named apps/sites/prototypes and live editing-presence badges remain the next product step. The current Git branch/worktree gallery is retained.
 
 ## Sign-in and account storage

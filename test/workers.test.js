@@ -274,3 +274,36 @@ test('production server exits before opening a listener when isolated workers ar
   let output = ''; child.stdout.on('data', b => { output += b; }); child.stderr.on('data', b => { output += b; });
   const [code] = await once(child, 'exit'); assert.notEqual(code, 0); assert.match(output, /Production requires isolated workers/); assert.doesNotMatch(output, /server running/);
 });
+
+test('conversation workers get only their selected native session, reply and attachment; discussion can mount checkout read-only', async t => {
+  const f = await fixture(t);
+  const sessionDir = path.join(f.data, 'requests', '.sessions', 'selected'); const other = path.join(f.data, 'requests', '.sessions', 'other');
+  const replyFile = path.join(f.data, 'requests', '.replies', 'reply.json'); const attachment = path.join(f.data, 'requests', '.attachments', 'request', 'notes.txt');
+  for (const dir of [sessionDir, other, path.dirname(replyFile), path.dirname(attachment)]) await fs.mkdir(dir, {recursive:true});
+  await fs.writeFile(replyFile, '{}'); await fs.writeFile(attachment, 'design notes');
+  const attachmentDir = path.dirname(attachment);
+  const policy = {kind:'agent',home:f.home,sessionDir,attachmentDir,replyFile,readOnlyFiles:[attachment],readOnlyWorkspace:true};
+  const plan = f.runtime.plan('/usr/bin/omp', [], {cwd:f.dir,env:{DIALOGUE_REPLY_FILE:replyFile}}, policy, 'test.scope');
+  const entries = mounts(plan);
+  assert.ok(entries.some(m=>m.source===f.dir && m.mode==='--ro-bind'));
+  assert.ok(entries.some(m=>m.source===sessionDir && m.mode==='--bind'));
+  assert.ok(entries.some(m=>m.source===replyFile && m.mode==='--bind'));
+  assert.ok(entries.some(m=>m.source===attachment && m.mode==='--ro-bind'));
+  assert.ok(entries.some(m=>m.source===attachmentDir && m.mode==='--ro-bind'));
+  assert.ok(!entries.some(m=>m.source===other || m.source===path.dirname(sessionDir) || m.source===path.dirname(replyFile)));
+  assert.throws(()=>f.runtime.plan('/usr/bin/omp',[],{cwd:f.dir},{...policy,sessionDir:f.other},'test.scope'),/session directory/);
+  assert.throws(()=>f.runtime.plan('/usr/bin/omp',[],{cwd:f.dir},{...policy,replyFile:path.join(f.data,'accounts.sqlite')},'test.scope'),/reply file/);
+  assert.throws(()=>f.runtime.plan('/bin/sh',[],{cwd:f.dir},{...policy,kind:'install'},'test.scope'),/session directory/);
+});
+
+test('a replacement preview waits for a closing scope without exceeding the two-preview limit', async t => {
+  const f=await fixture(t);f.runtime.ready=true;f.runtime.diskReady=async()=>{};f.runtime.prepare=async()=>{};f.runtime.plan=()=>({bin:'mock-launcher',args:[]});
+  const children=[];f.runtime.spawnProcess=()=>{const child=new EventEmitter();child.exitCode=null;children.push(child);return child;};
+  let cleaned;f.runtime.execute=()=>new Promise(resolve=>{cleaned=resolve});
+  const a=await f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});await f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});
+  a.exitCode=0;a.emit('close',0);
+  const replacement=f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});
+  await new Promise(r=>setImmediate(r));assert.equal(children.length,2);assert.equal(f.runtime.budget.pending.length,1);assert.equal(f.runtime.budget.active.size,2);
+  cleaned({});await replacement;assert.equal(children.length,3);assert.equal(f.runtime.budget.active.size,2);
+  f.runtime.execute=async()=>({});for(const child of children.slice(1)){child.exitCode=0;child.emit('close',0);await child.workerFinished;}
+});
