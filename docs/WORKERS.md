@@ -2,6 +2,8 @@
 
 Application implementation: `codex/pilot-isolation`, based on `codex/accounts-shared-workspace`. Updated 2026-11-04.
 
+**Target acceptance:** Setup passed the complete **151-test Linux suite** and **ALL LINUX WORKER CHECKS PASSED** on exact `4fd8279e19522a120d673da05b44ef9202159e38`, including actual native conversation/provider RPC under the revised reservations below. The original 2048 MiB global budget and host slice are unchanged. The native startup failure is resolved for acceptance; application activation still awaits Setup's extended conversation/attachment restore and prelaunch backup checks. A different application candidate requires fresh acceptance.
+
 Native-runtime findings: Setup's Linux suites passed 148 tests on `7a78ff5` and 150 on `f6714bb`, but actual isolated native OMP hit the **768 MiB agent cgroup OOM** before a provider response on both. This was not host exhaustion or timeout. GC hints alone were insufficient; neither candidate may be activated. The next application policy reserves **1280 MiB** for native agent/provider/legacy-terminal trees, with provider operations joining the single heavy queue. The total 2048 MiB admission budget, 2304 MiB host slice and verified cleanup boundaries remain unchanged. Fresh target acceptance is required.
 
 Fixed worker-owned Bun GC hints remain (`BUN_OPTIONS=--smol`, `BUN_JSC_forceRAMSize` set to half the profile's memory, minimum 64 MiB). OMP embeds Bun/JSC; the V8 `NODE_OPTIONS` flag alone does not tune it. These hints never replace kernel enforcement. Project overrides are excluded. [Bun's executable documentation](https://bun.sh/docs/compiler/executables) describes runtime `BUN_OPTIONS`; OMP's own `--smol` argument selects a model and must not be used as a runtime memory flag.

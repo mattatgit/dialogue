@@ -2,14 +2,16 @@
 
 Prepared 2026-11-04 for **Setup & install**. Matt has requested proceeding toward the first hosted pilot now that the conversation UI is implemented. Server changes, activation and deployment stay in that chat.
 
+**Accepted application candidate:** `4fd8279e19522a120d673da05b44ef9202159e38`. Setup's full Linux suite passed all **151 tests** and the updated isolated acceptance passed every phase, including actual native OMP continuation/provider RPC. Local package and full suite also passed. Documentation-only commits after this SHA do not alter the candidate. Extended canonical conversation/attachment restore and a fresh prelaunch backup remain activation gates.
+
 **Initial candidates blocked:** `7a78ff5` passed 148 Linux tests and `f6714bb` passed 150, but both hit the isolated native agent's 768 MiB ceiling before a provider call. GC tuning alone was insufficient. Keep the app stopped. Stage the pinned Build follow-up with 1280 MiB native agent/provider/legacy-terminal reservations and a single heavy queue, retaining the 2048 MiB total budget and 2304 MiB host slice. Provider sign-in releases its login worker before verification starts. Rerun complete acceptance (including real provider RPC), then recovery checks. The initial SHA below is historical evidence, not permission to activate a failing candidate. The new SHA and full-suite evidence accompany the Build handoff.
 
 ## Candidate and evidence
 
 - Repository: `mattatgit/dialogue`; branch `codex/conversation-sidebar`, [PR #10](https://github.com/mattatgit/dialogue/pull/10).
-- Tested application commit: **`7a78ff52b476e1be418b1bc3c0df1a05e83b668d`**. Subsequent documentation-only commits do not change the application candidate. Pin this SHA rather than deploying a moving branch.
+- Tested application commit: **`4fd8279e19522a120d673da05b44ef9202159e38`**. Pin this accepted SHA rather than a moving branch. The earlier `7a78ff5` and `f6714bb` candidates failed native memory acceptance and must not be activated.
 - This commit already contains accounts (PR #8) and isolation (PR #9), followed by the approved conversation UI and refinements. The PRs remain stacked drafts, not merged releases. Staging the exact candidate does not require merging the stack first; do not deploy the older accounts/isolation heads by mistake.
-- Local full suite: **148 passed, zero failed/cancelled/skipped**. Includes real pinned OMP with a disposable provider, member credential handoff, native conversation continuity, attachment/image reopening, branch separation and safe list rendering.
+- Local and Linux full suites: **151 passed, zero failed/cancelled/skipped**. Includes real pinned OMP with a disposable provider, member credential handoff, native conversation continuity, attachment/image reopening, branch separation, safe list rendering and native provider reservation/sign-in regressions.
 - Browser fixtures cover annotations, independent drafts, historical/saved builds, model settings, original SVG icons/working animation, reduced motion, lists, cancellation and responsive layouts. The Nix package builds successfully; the macOS package is not a Linux deployment artifact.
 - No server deployment, production data population, real provider coding requests or unsolicited sign-in emails were performed by this Build work.
 
