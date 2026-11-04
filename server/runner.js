@@ -137,6 +137,7 @@ class Runner extends EventEmitter {
       throw this.fail(`Entry file ${entry} not found under ${this.recipe.root}.`, 'ready');
     }
     await opened.handle.close();
+    if (this.abort.signal.aborted) throw this.fail('The preview was stopped.', 'ready');
     this.target = { kind: 'static', root, boundary: await fsp.realpath(this.dir) };
     this.setState('ready');
   }
@@ -238,6 +239,7 @@ class Runner extends EventEmitter {
     this.starting = null;
     this.target = null;
     if (child) await this.killGroup(child);
+    if (child) await child.workerFinished;
     this.setState('stopped');
   }
 }

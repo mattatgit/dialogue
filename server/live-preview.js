@@ -35,8 +35,11 @@ class LivePreviews {
       this.proxy.register(id, () => this.resolve(entry));
     }
     entry.listeners.add(listener);
-    const stale = !entry.runner || entry.runner !== this.pool.get(id) || entry.runner.state === 'stopped';
-    if (stale) await this.load(entry);
+    const stale = !entry.runner || entry.runner !== this.pool.get(id) || entry.runner.state === 'stopped' && !entry.runner.starting;
+    if (stale) {
+      entry.opening ||= this.load(entry).finally(() => { entry.opening = null; });
+      await entry.opening;
+    }
     this.pool.acquire(id);
     listener(this.payload(entry));
     let released = false;
@@ -45,6 +48,10 @@ class LivePreviews {
       released = true;
       entry.listeners.delete(listener);
       this.pool.release(id);
+      if (!entry.listeners.size && (this.runtime?.isolated || entry.readOnly)) {
+        clearTimeout(entry.shotTimer);
+        this.pool.stop(id).catch(error => console.error('Could not stop an unused preview:', error.message));
+      }
     };
   }
 
@@ -124,7 +131,7 @@ class LivePreviews {
     const state = runner?.state || 'starting';
     const payload = { state, reload, message: MESSAGES[state] || '' };
     if (state === 'crashed') {
-      payload.message = runner.error?.status === 503 ? runner.error.message : 'The preview server stopped. The agent can help: ask it in the terminal, or restart the preview.';
+      payload.message = runner.error?.status === 503 ? runner.error.message : 'The preview server stopped. Ask Dialogue to fix it, or reload the preview.';
       payload.log = runner.logTail(40);
     }
     if (state === 'ready' && entry.restarted) payload.restarted = true;
@@ -148,6 +155,7 @@ class LivePreviews {
   async filesChanged(id) {
     const entry = this.entries.get(id);
     if (!entry) return;
+    if (!entry.listeners.size && (this.runtime?.isolated || entry.readOnly)) return;
     const found = await entry.repo.readRecipe(entry.dir).catch(() => null);
     if ((found?.text ?? null) !== entry.recipeText) {
       await this.load(entry, { restarted: true });

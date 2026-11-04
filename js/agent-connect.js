@@ -356,7 +356,7 @@
     tools.append(modelLabel, modelSelect, modelNote, check);
     host.replaceChildren(flowHost, tools);
 
-    let selected = null;
+    let selected = null, focusModel = location.hash === '#agent-model';
     const fillModels = async () => {
       const [{ model, defaultModel }, { models }] = await Promise.all([status(), api('GET', '/api/agent/models')]);
       selected = model;
@@ -378,6 +378,11 @@
       }
       modelSelect.disabled = modelSelect.options.length === 0;
       modelNote.textContent = model === defaultModel ? 'This is Dialogue\u2019s default choice.' : `Dialogue\u2019s default is ${defaultModel}.`;
+      if (focusModel) {
+        focusModel = false;
+        modelSelect.scrollIntoView({ block: 'center' });
+        modelSelect.focus({ preventScroll: true });
+      }
     };
 
     const panel = flow(flowHost, { onReady: () => fillModels().catch(() => {}) });

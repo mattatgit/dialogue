@@ -291,7 +291,7 @@ class AgentAuth extends EventEmitter {
   }
 
   async runOmp(args, { cwd, timeoutMs }) {
-    const child = await spawnWorker(this.runtime, OMP_BIN, args, { cwd, env: this.spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'control', home: this.ompEnv().HOME, signal: this.abort.signal });
+    const child = await spawnWorker(this.runtime, OMP_BIN, args, { cwd, env: this.spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'provider', home: this.ompEnv().HOME, signal: this.abort.signal });
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
@@ -379,7 +379,7 @@ class AgentAuth extends EventEmitter {
 
   async rpcChild(cwd, signal = this.abort.signal) {
     const child = await spawnWorker(this.runtime, OMP_BIN, ['--mode', 'rpc', ...this.headlessArgs(), '-e', this.bootstrapPath],
-      { cwd, env: this.spawnEnv(), stdio: ['pipe', 'pipe', 'pipe'] }, { kind: 'control', home: this.ompEnv().HOME, signal });
+      { cwd, env: this.spawnEnv(), stdio: ['pipe', 'pipe', 'pipe'] }, { kind: 'provider', home: this.ompEnv().HOME, signal });
     return new RpcChild(child);
   }
 
@@ -459,20 +459,20 @@ class AgentAuth extends EventEmitter {
     session.push('progress', { message: 'Signed in. Checking the connection...' });
     // A provider that cannot serve the current model gets a model of its own.
     const provider = this.model?.split('/')[0];
+    const available = provider !== session.providerId
+      ? await rpc.request({ type: 'get_available_models' }).then((data) => AgentAuth.publicModels(data.models || [])).catch(() => []) : [];
+    // Native login and verification share one heavy reservation. Finish the
+    // login worker before starting a fresh credential/model probe.
+    rpc.close(); await rpc.exited; await rpc.child.workerFinished;
+    if (session.ended) return;
     if (provider !== session.providerId) {
-      const [available, presence] = await Promise.all([
-        rpc.request({ type: 'get_available_models' }).then((data) => AgentAuth.publicModels(data.models || [])).catch(() => []),
-        this.withEmptyCwd((cwd) => this.runOmp(['token', provider], { cwd, timeoutMs: RPC_CALL_TIMEOUT_MS }))
-      ]);
+      const presence = await this.withEmptyCwd((cwd) => this.runOmp(['token', provider], { cwd, timeoutMs: RPC_CALL_TIMEOUT_MS }));
       const picked = presence.code === 0 ? null : AgentAuth.pickModel(available, session.providerId);
-      rpc.close();
       if (picked) {
         session.push('progress', { message: `Using ${picked}. You can change this in Settings.` });
         session.push('done', { status: await this.setModel(picked) });
         return;
       }
-    } else {
-      rpc.close();
     }
     session.push('done', { status: await this.check({ force: true }) });
   }

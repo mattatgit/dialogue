@@ -10,10 +10,11 @@ const { randomUUID, createHash } = require('node:crypto');
 const exec = promisify(execFile);
 const MiB = 1024 * 1024;
 const PROFILES = Object.freeze({
-  agent: { pool: 'heavy', memory: 768, tasks: 96, cpu: 100, seconds: 660 },
+  agent: { pool: 'heavy', memory: 1280, tasks: 96, cpu: 100, seconds: 660 },
+  provider: { pool: 'heavy', memory: 1280, tasks: 96, cpu: 100, seconds: 660 },
   install: { pool: 'heavy', memory: 768, tasks: 96, cpu: 100, seconds: 600 },
   preview: { pool: 'preview', memory: 256, tasks: 64, cpu: 50, seconds: 3600 },
-  terminal: { pool: 'terminal', memory: 384, tasks: 96, cpu: 75, seconds: 3600 },
+  terminal: { pool: 'terminal', memory: 1280, tasks: 96, cpu: 75, seconds: 3600 },
   control: { pool: 'control', memory: 128, tasks: 48, cpu: 50, seconds: 660 },
   browser: { pool: 'browser', memory: 256, tasks: 96, cpu: 75, seconds: 40 }
 });
@@ -33,7 +34,7 @@ function workerConfig(env = process.env, platform = process.platform) {
   if (!['direct', 'isolated'].includes(mode) || (production && mode !== 'isolated')) throw new WorkerError('Production requires isolated workers.', 500);
   if (mode === 'isolated' && platform !== 'linux') throw new WorkerError('Isolated workers require Linux namespaces and systemd.', 500);
   const config = { isolated: mode === 'isolated',
-    budget: integer(env.DIALOGUE_WORKER_BUDGET_MB, 2048, 768, 2304, 'worker memory budget'),
+    budget: integer(env.DIALOGUE_WORKER_BUDGET_MB, 2048, 1280, 2304, 'worker memory budget'),
     queue: integer(env.DIALOGUE_WORKER_QUEUE, 8, 1, 32, 'worker queue size'),
     waitMs: integer(env.DIALOGUE_WORKER_WAIT_MS, 60000, 100, 120000, 'worker wait timeout'),
     diskFloor: integer(env.DIALOGUE_WORKER_DISK_FLOOR_MB, 1024, 256, 8192, 'disk reserve') * MiB,
@@ -43,7 +44,7 @@ function workerConfig(env = process.env, platform = process.platform) {
     prlimit: env.DIALOGUE_PRLIMIT || '/usr/bin/prlimit',
     parentUnit: env.DIALOGUE_WORKER_PARENT_UNIT || 'dialogue.service',
     toolRoots: (env.DIALOGUE_WORKER_TOOL_ROOTS || '').split(path.delimiter).filter(Boolean),
-    counts: { heavy: 1, preview: 2, terminal: 2, control: 2, browser: 1 }
+    counts: { heavy: 1, preview: 2, terminal: 1, control: 2, browser: 1 }
   };
   if (!/^dialogue(?:-[a-z0-9-]+)?\.service$/.test(config.parentUnit)) throw new WorkerError('Invalid worker parent service.', 500);
   if (![config.bwrap, config.systemdRun, config.systemctl, config.prlimit].every(file => path.isAbsolute(file))) throw new WorkerError('Worker supervisor binaries must use absolute paths.', 500);
@@ -64,7 +65,7 @@ class WorkerBudget {
     if (!PROFILES[kind]) return Promise.reject(new WorkerError('Unknown worker type.', 500));
     if (this.closed || signal?.aborted) return Promise.reject(new WorkerError('The worker request was cancelled.'));
     if (!this.pending.length && this.fits(kind)) return Promise.resolve(this.reserve(kind));
-    if (!wait || this.pending.length >= this.config.queue) return Promise.reject(new WorkerError('The server is busy. Close an unused terminal or preview, or try again shortly.'));
+    if (!wait || this.pending.length >= this.config.queue) return Promise.reject(new WorkerError('The server is busy. Close an unused preview, or try again shortly.'));
     return new Promise((resolve, reject) => {
       const entry = { kind, resolve, reject, signal };
       entry.cancel = () => { this.remove(entry); reject(new WorkerError('The worker request was cancelled.')); this.drain(); };
@@ -176,7 +177,7 @@ class Workers {
     // Provider credentials are only present for that member's agent/control
     // worker. Project installs, servers and Chromium never mount a member home.
     let home = '/home/worker';
-    if (policy.home && ['agent', 'terminal', 'control'].includes(kind)) {
+    if (policy.home && ['agent', 'provider', 'terminal', 'control'].includes(kind)) {
       home = this.canonical(policy.home);
       if (!within(home, path.join(this.dataRoot, 'users')) || path.basename(home) !== 'home') throw new WorkerError('Invalid member credential directory.', 500);
       argv.push('--bind', home, home);
@@ -185,7 +186,17 @@ class Workers {
       if (!['install', 'preview'].includes(kind) || !within(cache, path.join(this.dataRoot, 'workers', 'cache'))) throw new WorkerError('Invalid preview cache directory.', 500);
       argv.push('--bind', cache, home);
     } else argv.push('--dir', home);
-    argv.push('--bind', workspaceRoot, workspaceRoot);
+    argv.push(policy.readOnlyWorkspace ? '--ro-bind' : '--bind', workspaceRoot, workspaceRoot);
+    if (policy.sessionDir) {
+      const session = this.canonical(policy.sessionDir);
+      if (kind !== 'agent' || !within(session, path.join(this.dataRoot, 'requests', '.sessions'))) throw new WorkerError('Invalid conversation session directory.', 500);
+      argv.push('--bind', session, session);
+    }
+    if (policy.attachmentDir) {
+      const attachments = this.canonical(policy.attachmentDir);
+      if (kind !== 'agent' || !within(attachments, path.join(this.dataRoot, 'requests', '.attachments'))) throw new WorkerError('Invalid conversation attachment directory.', 500);
+      argv.push('--ro-bind', attachments, attachments);
+    }
     const dotgit = path.join(workspaceRoot, '.git');
     if (fs.existsSync(dotgit)) {
       if (!fs.lstatSync(dotgit).isFile()) throw new WorkerError('Expected a linked Dialogue working copy.', 500);
@@ -200,12 +211,17 @@ class Workers {
     }
     for (const file of policy.readOnlyFiles || []) {
       const real = this.canonical(file);
-      if (!within(real, path.join(this.dataRoot, 'requests', '.figma-snapshots'))) throw new WorkerError('Invalid worker design snapshot.', 500);
+      if (![path.join(this.dataRoot, 'requests', '.figma-snapshots'), path.join(this.dataRoot, 'requests', '.attachments')].some(root => within(real, root))) throw new WorkerError('Invalid worker design snapshot or attachment.', 500);
       argv.push('--ro-bind', real, real);
     }
     if (policy.activityFile) {
       const real = this.canonical(policy.activityFile);
       if (![path.join(this.dataRoot, 'activity'), path.join(this.dataRoot, 'requests', '.activity')].some(root => within(real, root))) throw new WorkerError('Invalid worker activity file.', 500);
+      argv.push('--bind', real, real);
+    }
+    if (policy.replyFile) {
+      const real = this.canonical(policy.replyFile);
+      if (kind !== 'agent' || !within(real, path.join(this.dataRoot, 'requests', '.replies'))) throw new WorkerError('Invalid worker reply file.', 500);
       argv.push('--bind', real, real);
     }
     for (const dir of policy.ipcDirs || []) {
@@ -214,13 +230,17 @@ class Workers {
       argv.push('--bind', real, real);
     }
     const env = options.env || {};
-    const allowed = /^(?:LANG|LC_ALL|TERM|COLORTERM|TZ|CI|FORCE_COLOR|PORT|HOST|BROWSER|DIALOGUE_(?:OMP_ARGS|APP|WORKSPACE|ACTIVITY_FILE|WORKSPACE_DIR|SESSION|TMUX|TMUX_SOCKET|OMP))$/;
+    const allowed = /^(?:LANG|LC_ALL|TERM|COLORTERM|TZ|CI|FORCE_COLOR|PORT|HOST|BROWSER|DIALOGUE_(?:OMP_ARGS|APP|WORKSPACE|ACTIVITY_FILE|REPLY_FILE|WORKSPACE_DIR|SESSION|TMUX|TMUX_SOCKET|OMP))$/;
     for (const [key, value] of Object.entries(env)) if (allowed.test(key)) argv.push('--setenv', key, String(value));
     const safePath = (process.env.PATH || '/usr/local/bin:/usr/bin:/bin').split(path.delimiter).filter(dir => roots.some(root => within(path.resolve(dir), root))).join(path.delimiter);
     const baseEnv = { PATH: safePath, HOME: home, TMPDIR: '/tmp', XDG_CACHE_HOME: `${home}/.cache`, XDG_CONFIG_HOME: `${home}/.config`,
       PI_CODING_AGENT_DIR: `${home}/.omp/agent`, OMP_PROFILE: 'default', PI_PROFILE: 'default',
       GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0',
       DIALOGUE_ACTIVITY_DIRECT: '1', NODE_OPTIONS: '--max-old-space-size=512', PWD: cwd };
+    // Native OMP embeds Bun/JSC, not V8. Fixed low-memory GC hints complement
+    // (never replace) the kernel ceiling, and cannot be supplied by a project.
+    baseEnv.BUN_OPTIONS = '--smol';
+    baseEnv.BUN_JSC_forceRAMSize = String(Math.max(64, Math.floor(profile.memory / 2)) * MiB);
     for (const [key, value] of Object.entries(baseEnv)) argv.push('--setenv', key, value);
     // Hard rlimits cannot be raised by descendants after capabilities are dropped.
     argv.push('--chdir', cwd, '--', this.config.prlimit, '--fsize=268435456:268435456', '--nofile=1024:1024', '--core=0:0', '--', bin, ...args);
@@ -247,7 +267,8 @@ class Workers {
   async spawn(bin, args, options, policy = {}) {
     if (this.stopping || (this.isolated && !this.ready)) throw new WorkerError('The isolated worker runtime is not ready.');
     const kind = policy.kind || 'agent';
-    const release = await this.budget.acquire(kind, { signal: policy.signal, wait: !['preview', 'terminal'].includes(kind) });
+    const closingPreview = this.isolated && kind === 'preview' && [...this.children].some(c => c.workerKind === 'preview' && c.workerClosing);
+    const release = await this.budget.acquire(kind, { signal: policy.signal, wait: closingPreview || !['preview', 'terminal'].includes(kind) });
     let child;
     try {
       if (this.stopping || policy.signal?.aborted) throw new WorkerError('The worker request was cancelled.');
@@ -258,23 +279,30 @@ class Workers {
       const planned = this.isolated ? this.plan(bin, args, options, policy, unit) : { bin, args };
       child = this.spawnProcess(planned.bin, planned.args, { ...options, detached: true, ...(this.isolated ? { env: this.supervisorEnv() } : {}) });
       this.children.add(child);
+      child.workerKind = kind;
+      let finishCleanup, failCleanup;
+      child.workerFinished = new Promise((resolve, reject) => { finishCleanup = resolve; failCleanup = reject; });
+      child.workerFinished.catch(() => {});
       let cleaned = false;
       const cleanup = async () => {
         if (cleaned) return; cleaned = true;
+        child.workerClosing = true;
         if (this.isolated) {
           try { await this.execute(this.config.systemctl, ['--user', 'stop', unit], { env: this.supervisorEnv(), timeout: 5000 }); }
           catch (error) {
             if (!/not loaded|not found|could not be found/i.test(String(error.stderr || ''))) {
               this.ready = false; this.budget.close();
-              console.error('Worker cleanup could not be verified; new worker admission is stopped.'); return;
+              console.error('Worker cleanup could not be verified; new worker admission is stopped.');
+              failCleanup(new WorkerError('Worker cleanup could not be verified. Contact the workspace owner.')); return;
             }
           }
         }
-        release(); this.children.delete(child);
+        release(); this.children.delete(child); finishCleanup();
       };
       child.once('close', cleanup); child.once('error', cleanup);
       if (this.isolated) {
         const stop = signal => {
+          child.workerClosing = true;
           // Cancellation can arrive before systemd-run registers its scope.
           // Stop the launcher too, so a missing unit cannot turn into a late job.
           killProcessGroup(child, signal);
@@ -344,14 +372,30 @@ class Workers {
     }
   }
   async run(bin, args, options, policy) {
-    const child = await this.spawn(bin, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] }, policy);
+    const { timeout: requestedTimeout, ...spawnOptions } = options;
+    const child = await this.spawn(bin, args, { ...spawnOptions, stdio: ['ignore', 'pipe', 'pipe'] }, policy);
     return new Promise((resolve, reject) => {
       let stdout = '', stderr = '';
       child.stdout.on('data', data => { stdout = (stdout + data).slice(-65536); });
       child.stderr.on('data', data => { stderr = (stderr + data).slice(-65536); });
-      const timer = setTimeout(() => killWorker(child, 'SIGKILL'), options.timeout || 30000);
+      let timedOut = false;
+      const timeout = requestedTimeout || 30000;
+      const timer = setTimeout(() => { timedOut = true; killWorker(child, 'SIGKILL'); }, timeout);
       child.once('error', error => { clearTimeout(timer); reject(error); });
-      child.once('close', code => { clearTimeout(timer); if (code !== 0) reject(new WorkerError(`Worker exited (${code}): ${stderr.slice(-1000)}`)); else resolve({ stdout, stderr }); });
+      child.once('close', async (code, signal) => {
+        clearTimeout(timer);
+        try {
+          await child.workerFinished;
+          if (code !== 0 || timedOut) {
+            const kind = policy?.kind || 'agent';
+            const detail = timedOut ? `timed out after ${timeout} ms` : signal ? `terminated on ${signal}` : `exited with code ${code}`;
+            const error = new WorkerError(`Worker ${detail} (${kind}, ${PROFILES[kind].memory} MiB limit)${stderr.trim() ? ': ' + stderr.trim().slice(-1000) : '.'}`);
+            Object.assign(error, { code, signal, timedOut, kind, memoryMiB: PROFILES[kind].memory });
+            reject(error);
+          }
+          else resolve({ stdout, stderr });
+        } catch (error) { reject(error); }
+      });
     });
   }
   async shutdown() {

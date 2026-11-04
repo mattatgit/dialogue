@@ -1,0 +1,98 @@
+/* Conversation replacement for the legacy Activity/terminal surfaces. */
+/* Unmodified Figma SVG exports, at their intrinsic size within 16 px slots.
+   Alpha masks use the button colour for selected and unselected states. */
+.comment-tool-icon{position:relative;display:block;flex:0 0 16px;width:16px;height:16px}
+.comment-tool-icon::before{content:'';position:absolute;left:var(--tool-icon-left,0px);top:var(--tool-icon-top,0px);width:var(--tool-icon-width);height:var(--tool-icon-height);background-color:currentColor;-webkit-mask:var(--tool-icon-image) no-repeat;mask:var(--tool-icon-image) no-repeat}
+.comment-tool-select{--tool-icon-image:url('../assets/comment-tool-select.svg');--tool-icon-width:15.3333px;--tool-icon-height:15.3333px;--tool-icon-left:.3333px;--tool-icon-top:.3333px}
+.comment-tool-area{--tool-icon-image:url('../assets/comment-tool-area.svg');--tool-icon-width:16.0005px;--tool-icon-height:16.002px}
+.comment-tool-arrow{--tool-icon-image:url('../assets/comment-tool-arrow.svg');--tool-icon-width:10.8999px;--tool-icon-height:10.9px;--tool-icon-left:2.5px;--tool-icon-top:2.5px}
+.workspace-review{--history-width:336px}
+.workspace-review .review-mode-switch{width:200px}
+.workspace-review .review-mode-switch button{width:96px;flex:0 0 96px;min-width:0}
+.workspace-review .review-mode-switch button:last-child{width:88px;flex-basis:88px}
+.workspace-review .review-top-actions{gap:8px}
+.workspace-review .review-top-actions .review-button{height:32px;background:#ebebeb;border-radius:8px;padding:8px;gap:8px;font:600 12px/16px 'Inter Tight',Arial,sans-serif}
+.workspace-review [data-save-version]{width:116px}
+.workspace-review [data-review-share]{width:72px}
+.workspace-review [data-review-share] .icon{width:12px;height:12px}
+.workspace-review [data-save-version]>img{display:block;flex:none;width:12.256px;height:12.25px}
+.workspace-review [data-save-version]:disabled{opacity:.55;cursor:default}
+.workspace-review[data-mode=comment] .review-canvas{left:344px}
+.workspace-review .conversation-sidebar{width:312px;top:80px;left:16px;bottom:8px;padding:0;display:flex;flex-direction:column;gap:8px;overflow:visible;scrollbar-gutter:auto}
+.conversation-messages{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#d9d9d9 transparent;display:flex;flex-direction:column;overflow-anchor:none}
+.conversation-messages>[data-history-items]{margin-top:auto;flex:none}
+.conversation-message{background:#fff;border-radius:16px;padding:16px 16px 12px 15px;margin:0 0 8px;color:#171717;font:500 12px/16px Inter,Arial,sans-serif;overflow-wrap:anywhere}
+.conversation-message:last-child{margin-bottom:0}
+.conversation-message.is-dialogue{padding-bottom:20px}
+.conversation-message.is-dialogue header{gap:9px;margin-bottom:12px}
+.conversation-message.is-dialogue .message-dialogue-avatar{margin-left:1px}
+.conversation-message.is-user{background:#eef8fe}
+.conversation-message header{min-height:32px;display:flex;gap:10px;align-items:flex-start;margin-bottom:12px}
+.conversation-message header>div{min-width:0;flex:1}
+.conversation-message strong{font:600 12px/16px 'Inter Tight',Arial,sans-serif;color:#000}
+.conversation-message time{font:500 10px/16px Inter,Arial,sans-serif;color:#9ea39e;margin-left:4px;white-space:nowrap}
+.message-avatar,.message-dialogue-avatar{display:block;flex:0 0 32px;width:32px;height:32px;border-radius:8px}
+.message-working-avatar{position:relative;background:#f8f8f8}
+.message-working-avatar img{position:absolute;left:7px;top:7px;display:block;width:16px;height:18px}
+.message-avatar{display:grid;place-items:center;background:#d6e9f2;color:#41606e;font:600 12px/16px 'Inter Tight',Arial,sans-serif}
+.message-kind{display:inline-block;height:16px;border-radius:4px;background:#fff;padding:0 6px;font:500 10px/16px 'Inter Tight',Arial,sans-serif}
+.workspace-review .message-view-build{display:inline-flex;align-items:center;gap:4px;height:16px;min-height:0;padding:0 4px 0 8px;border:0;border-radius:4px;background:#177967;color:#fff;font:500 10px/16px 'Inter Tight',Arial,sans-serif;transform:none}
+.message-view-build>span{width:16px;height:16px;display:grid;place-items:center;transform:rotate(180deg) scaleY(-1)}
+.message-view-build img{display:block;width:6.5px;height:6.5px}
+.message-body{white-space:pre-wrap;overflow-wrap:anywhere}
+.message-body p{margin:0 0 10px}.message-body p:last-child{margin-bottom:0}
+.message-body ul,.message-body ol{margin:10px 0 10px 8px;padding-left:18px;line-height:20px;white-space:normal;list-style-position:outside}
+.message-body ul{list-style-type:disc}.message-body ol{list-style-type:decimal}
+.message-body li+li{margin-top:6px}.message-body li>p{margin-bottom:6px}.message-body li>p:last-child{margin-bottom:0}
+.message-body li>ul,.message-body li>ol{margin:6px 0 0;padding-left:18px}
+.message-body>ul:first-child,.message-body>ol:first-child{margin-top:0}.message-body>ul:last-child,.message-body>ol:last-child{margin-bottom:0}
+.message-body a{color:#177967;text-decoration:underline;text-underline-offset:2px}
+.message-body code{font:11px/16px monospace;background:#f8f8f8;border-radius:3px;padding:1px 3px}
+.message-body pre{white-space:pre;overflow:auto;background:#f8f8f8;padding:10px;border-radius:8px;margin:8px 0}
+.message-body pre code{background:none;padding:0}
+.message-limit,.conversation-empty{color:#9ea39e;font:12px/18px Inter,Arial,sans-serif;margin:12px 16px}
+.message-file{display:inline-flex;align-items:center;gap:8px;max-width:100%;min-height:24px;margin:8px 4px 0 0;padding:4px 8px;background:#f8f8f8;border-radius:8px;font:600 12px/16px 'Inter Tight',Arial,sans-serif;color:#171717;text-decoration:none;overflow-wrap:anywhere}
+.message-file img{display:block;width:16px;height:16px;flex:none}
+.conversation-message.is-working .message-body{color:#9ea39e}
+.workspace-review .conversation-composer{position:relative;flex:none;min-height:80px;padding:7px 8px;border:.5px solid #ebebeb;border-radius:16px;background:#fff;font:12px/16px Inter,Arial,sans-serif;box-shadow:none}
+.conversation-composer textarea{display:block;box-sizing:border-box;min-height:40px;max-height:min(240px,35dvh);width:100%;border:0;background:transparent;resize:none;outline:none;color:#171717;font:400 12px/18px Inter,Arial,sans-serif;padding:3px 8px 5px;overflow:auto;box-shadow:none!important}
+.workspace-review .conversation-composer textarea:focus,.workspace-review .conversation-composer textarea:focus-visible{outline:none;outline-offset:0;box-shadow:none}
+.conversation-composer textarea::placeholder{color:#9ea39e}.conversation-composer textarea:disabled{opacity:1}
+.conversation-composer .composer-heading{height:auto;min-height:24px;padding:0 8px 4px;align-items:center}
+.conversation-composer .anchor-tag{font:500 10px/16px 'Inter Tight',Arial,sans-serif;padding:0 6px;background:#eef8fe;border-radius:4px;color:#171717}
+.conversation-composer .composer-close{margin:0;width:20px;height:20px;color:#9ea39e}
+.conversation-composer-footer{position:relative;display:flex;align-items:center;height:24px;gap:4px}
+.conversation-composer-footer .conversation-add{width:24px;height:24px;flex:none;padding:6px;border:0;border-radius:8px;background:transparent;display:grid;place-items:center;transform:none!important}
+.conversation-add img{display:block;width:12px;height:12px}
+.conversation-composer .conversation-add:hover,.conversation-composer .conversation-add:focus-visible,.conversation-composer .conversation-add[aria-expanded=true],.conversation-model:hover,.conversation-model:focus-visible{background:#f8f8f8}
+.conversation-model{display:block;height:24px;margin-left:auto;color:#9ea39e;font:400 12px/16px Inter,Arial,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;padding:4px 8px;border-radius:8px;text-decoration:none}
+.conversation-composer .composer-send{position:relative;flex:none;right:auto;top:auto;width:24px;height:24px;border-radius:8px;background:#ebebeb}
+.conversation-composer .composer-send::before,.conversation-composer .composer-send-label{display:none}
+.conversation-composer .composer-enter-icon{left:0;width:24px;height:24px}
+.conversation-composer .composer-enter-icon img{width:24px;height:24px}
+.conversation-stop{height:24px;border:0;border-radius:8px;background:#ebebeb;padding:0 8px;color:#171717;font:600 12px/16px 'Inter Tight',Arial,sans-serif}
+.conversation-add-menu{position:absolute;bottom:calc(100% + 8px);left:0;width:100%;background:#fff;border-radius:8px;padding:12px 8px;box-shadow:0 0 20px #00000014;z-index:35}
+.conversation-add-menu button{display:flex;gap:8px;align-items:center;justify-content:flex-start;width:100%;height:24px;min-height:0;padding:4px 8px;border:0;border-radius:4px;background:#fff;color:#171717;font:400 12px/16px Inter,Arial,sans-serif;text-align:left;transform:none!important}
+.conversation-add-menu button:hover{background:#f8f8f8}
+.conversation-add-menu img{display:block;width:16px;height:16px;flex:none}
+.conversation-composer .composer-figma-chip{position:static;display:flex;width:max-content;max-width:100%;height:32px;margin:4px 8px;padding:4px 8px;background:#f8f8f8;border-radius:8px}
+.composer-files{display:flex;flex-wrap:wrap;gap:4px;padding:0 8px}
+.composer-files:empty{display:none}
+.composer-file{display:inline-flex;align-items:center;gap:4px;max-width:100%;border-radius:6px;background:#f8f8f8;padding:4px 6px;overflow-wrap:anywhere}
+.composer-file button{padding:0;width:16px;height:16px;border:0;background:transparent;color:#9ea39e}
+.conversation-figma-input{position:absolute;bottom:calc(100% + 8px);left:0;right:0;padding:16px;background:#fff;border-radius:12px;box-shadow:0 0 20px #00000014;z-index:35;display:flex;gap:6px;flex-wrap:wrap}
+.conversation-figma-input label{width:100%}.conversation-figma-input input{min-width:0;flex:1;font:12px/18px Inter,Arial,sans-serif;padding:6px;border:1px solid #ebebeb;border-radius:6px}
+.conversation-figma-input button{padding:4px 8px;border:0;border-radius:6px;background:#f8f8f8}
+.reload-toggle{left:40px}
+.grid-toggle img{display:block;width:12px;height:12px}
+.viewing-build{position:absolute;left:72px;top:8px;z-index:12;display:flex;align-items:center;gap:8px;height:24px;padding:0 4px 0 8px;background:#177967;color:white;border-radius:8px;font:500 12px/16px Inter,Arial,sans-serif;max-width:calc(100% - 88px)}
+.viewing-build span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.viewing-build button{height:16px;width:16px;flex:none;min-height:0;border:0;border-radius:4px;background:#0c4d41;color:#fff;padding:0;font:12px/16px Inter,Arial,sans-serif;display:grid;place-items:center}
+.viewing-build button img{display:block}
+.conversation-composer .composer-close{display:grid;place-items:center}
+.conversation-composer .composer-close img{width:8px;height:8px}
+.conversation-jump{align-self:center;position:absolute;bottom:100px;border:1px solid #ebebeb;border-radius:12px;background:#fff;box-shadow:0 2px 10px #0001;padding:6px 12px;font:12px/16px 'Inter Tight',Arial,sans-serif;z-index:25}
+@media(max-width:1100px){.workspace-review .conversation-sidebar{top:112px}}
+@media(max-width:980px){.workspace-review .conversation-sidebar{width:280px}.workspace-review[data-mode=comment] .review-canvas{left:312px}}
+@media(max-width:680px){.workspace-review .review-header{height:96px}.workspace-review .review-top-actions{top:56px}.workspace-review .review-mode-switch{width:200px;left:8px;top:48px}.workspace-review .review-mode-switch button{font-size:12px}.workspace-review .review-canvas,.workspace-review[data-mode=comment] .review-canvas{top:112px;left:8px}.workspace-review .conversation-sidebar{left:8px;right:8px;bottom:8px;top:auto;width:auto;height:42dvh}.workspace-review[data-mode=comment] .review-canvas{bottom:calc(42dvh + 16px)}.workspace-review .review-crumb{max-width:calc(100% - 48px)}}
+@media(max-width:440px){.workspace-review .review-header{height:144px}.workspace-review .review-top-actions{top:104px}.workspace-review .review-canvas,.workspace-review[data-mode=comment] .review-canvas{top:160px}}

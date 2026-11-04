@@ -4,6 +4,20 @@ This document records the current architecture direction. It distinguishes the *
 
 The private pilot targets BinaryLane Ubuntu 24.04 (2 vCPUs / 4 GB). Setup & install owns deployment; the application-side execution policy and host contract are in `docs/WORKERS.md`. The development architecture below remains useful for local work.
 
+## Continuing branch conversations (2026-11-04)
+
+The visible console is replaced by the designed conversation sidebar. OMP remains the execution engine; neither a React migration nor a replacement LLM backend is required. Nix remains optional tooling, Ubuntu the production target, and the older NixOS packaging/demo are optional rather than product requirements.
+
+`server/requests.js` still serializes observed agent jobs and records real Git edit snapshots. Each repository/ref workspace now owns a private native OMP session under `requests/.sessions/<sha256(workspace-id)>`. A new worker resumes that directory with `--continue --session-dir`; OMP's native conversation/context compaction survives process exits and service restarts. Different branches have different sessions. A member handoff resumes the branch session using the receiving member's own model home. Required session data disappearing is an error, never a silent fresh conversation. Existing pre-conversation request records are imported as a bounded legacy recap on the first native turn; old one-line summaries cannot be reconstructed into full replies or terminal discussions that were never recorded.
+
+The ordinary request record stores author, full prompt, visual anchor/design reference, attachment metadata, complete user-facing reply, snapshot SHA and observed outcome. `omp/conversation.js` exports only final assistant text into a request-specific reply sidecar; raw tool results and thinking do not become replies. Long replies are bounded at 32,768 characters with an explicit truncation indicator. The prior 180-character activity sidecar remains progress/legacy-summary data, not the conversation transcript. Interrupted/failed turns do not advertise successful edits or completed replies.
+
+Uploaded files live under `requests/.attachments/<sha256(workspace-id)>/<request-id>/`. Workers mount only their selected branch's attachment directory read-only, their selected session directory read-write and their current reply file. This permits reopening earlier references after compaction or member handoff without sharing another member's credential/blob home. Native image caches can be user-specific; prompts point back to durable source attachments when a cached image is omitted. Figma API capabilities remain request-scoped; historical designs are not granted permanent API access.
+
+Natural-language prompts ask the agent to discuss questions without editing and to implement only explicit change requests, as Matt requested. This automatic intent decision is agent behavior, not a guaranteed read-only sandbox. The API's explicit `intent: discuss` additionally uses read/search tools and a read-only checkout, but no extra mode toggle appears in the UI. Worker/session limits, cancellation, authorization and actual-file-change attribution apply in either case. Snapshot attribution waits for verified scope cleanup so detached descendants cannot continue changing a supposedly finished build.
+
+The public conversation is fetched through the existing authenticated activity/request API and refreshed via SSE/polling; complete final replies settle at job completion. Viewing a snapshot swaps the preview runner in place while the live branch continues to supply conversation events. The working branch and unsent draft remain unchanged; returning to current re-enables editing. Version publication retains the trusted Git API and the new toolbar button. Legacy terminal endpoints remain for compatibility, but the workspace no longer loads xterm/ttyd client code or opens terminal connections. Preview repair now submits an ordinary conversation request instead of typing into tmux.
+
 ## Architectural principles that remain stable
 
 Regardless of hosting/provider choices:

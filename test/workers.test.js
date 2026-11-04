@@ -101,6 +101,7 @@ test('production cannot disable isolation, run on unsupported hosts, or silently
   assert.throws(() => workerConfig({ DIALOGUE_MODE: 'development', NODE_ENV: 'production', DIALOGUE_WORKER_MODE: 'direct' }, 'linux'), /requires isolated/);
   assert.throws(() => workerConfig({ DIALOGUE_MODE: 'production' }, 'darwin'), /require Linux/);
   assert.throws(() => workerConfig({ DIALOGUE_MODE: 'test', DIALOGUE_WORKER_BUDGET_MB: '-1' }), /budget/);
+  assert.throws(() => workerConfig({ DIALOGUE_WORKER_BUDGET_MB: '768' }), /budget/);
   assert.throws(() => workerConfig({ DIALOGUE_WORKER_PARENT_UNIT: 'unrelated.service' }), /parent/);
   assert.equal(workerConfig({ DIALOGUE_MODE: 'development' }).isolated, false);
 });
@@ -117,7 +118,7 @@ test('bounded FIFO reservations serialize expensive work, cancel queued jobs and
   const cancelled = assert.rejects(budget.acquire('install', { signal: abort.signal }), /cancelled/); abort.abort(); await cancelled;
   await assert.rejects(budget.acquire('agent'), /still busy/); a();
   const leases = [];
-  for (const kind of ['agent', 'terminal', 'terminal', 'preview', 'preview']) leases.push(await budget.acquire(kind));
+  for (const kind of ['agent', 'preview', 'preview', 'browser']) leases.push(await budget.acquire(kind));
   assert.equal([...budget.active.values()].reduce((n, k) => n + PROFILES[k].memory, 0), 2048);
   await assert.rejects(budget.acquire('control', { wait: false }), /busy/);
   leases.forEach(done => done()); budget.close(); await assert.rejects(budget.acquire('control'), /cancelled/);
@@ -128,6 +129,48 @@ test('queue capacity is bounded and shutdown releases pending callers', async ()
   const release = await budget.acquire('agent');
   const pending = assert.rejects(budget.acquire('install'), /stopping/);
   await assert.rejects(budget.acquire('install'), /busy/); budget.close(); await pending; release();
+});
+
+test('native Bun GC settings are fixed per worker ceiling and cannot inherit project overrides', async t => {
+  const f = await fixture(t);
+  for (const kind of ['agent', 'provider', 'control', 'terminal', 'preview', 'install']) {
+    const plan = f.runtime.plan('/usr/bin/omp', [], { cwd: f.dir, env: { BUN_OPTIONS: '--eval=private', BUN_JSC_forceRAMSize: '99999999999' } }, { kind, home: f.home }, 'dialogue-test.scope');
+    const values = new Map();
+    for (let i = 0; i < plan.args.length; i++) if (plan.args[i] === '--setenv') values.set(plan.args[i + 1], plan.args[i + 2]);
+    assert.equal(values.get('BUN_OPTIONS'), '--smol');
+    assert.equal(values.get('BUN_JSC_forceRAMSize'), String(Math.max(64, Math.floor(PROFILES[kind].memory / 2)) * 1024 * 1024));
+    assert.ok(!plan.args.includes('--eval=private'));
+    assert.ok(plan.args.includes(`--property=MemoryMax=${PROFILES[kind].memory}M`));
+  }
+});
+
+test('worker failures distinguish signals, timeouts and exit codes without losing cleanup', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dialogue-worker-errors-'));
+  const runtime = new Workers({ dataRoot: dir, appRoot: dir, config: workerConfig({ DIALOGUE_MODE: 'test' }) });
+  t.after(async () => { await runtime.shutdown(); await fs.rm(dir, { recursive: true, force: true }); });
+  const run = (source, timeout = 5000) => runtime.run(process.execPath, ['-e', source], { cwd: dir, timeout }, { kind: 'control' });
+  await assert.rejects(run("process.kill(process.pid,'SIGTERM')"), e => e.signal === 'SIGTERM' && !e.timedOut && /terminated on SIGTERM/.test(e.message));
+  await assert.rejects(run('setInterval(()=>{},1000)', 30), e => e.signal === 'SIGKILL' && e.timedOut && /timed out after 30 ms/.test(e.message));
+  await assert.rejects(run("process.stderr.write('x'.repeat(2000));process.exit(7)"), e => e.code === 7 && !e.timedOut && e.message.length < 1200);
+  assert.equal(runtime.budget.active.size, 0);
+});
+
+test('provider probes and RPC reserve the native profile and retain the selected member home', async t => {
+  const f = await fixture(t), calls = [];
+  const runtime = { spawn: async (_bin, args, options, policy) => {
+    calls.push(policy);
+    const source = args.includes('rpc') ? 'console.log(JSON.stringify({type:"ready"}));process.stdin.resume()' : 'console.log("OK")';
+    return spawn(process.execPath, ['-e', source], { ...options, detached: true });
+  } };
+  const auth = new AgentAuth({ dataRoot: f.data, appRoot: path.resolve(__dirname, '..'), env: { HOME: f.home }, runtime });
+  t.after(() => auth.shutdown());
+  assert.equal((await auth.runOmp(['-p', 'probe'], { cwd: f.dir, timeoutMs: 5000 })).code, 0);
+  const rpc = await auth.rpcChild(f.dir); await rpc.ready; rpc.close(); await rpc.exited;
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(policy => policy.kind === 'provider' && policy.home === f.home));
+  assert.equal(PROFILES.provider.pool, PROFILES.agent.pool);
+  const plan = f.runtime.plan('/usr/bin/omp', [], { cwd: f.dir, env: {} }, { kind: 'provider', home: f.home }, 'dialogue-test.scope');
+  assert.ok(mounts(plan).some(m => m.source === f.home && m.mode === '--bind'));
 });
 
 test('agent policy exposes only its selected checkout, own home and read-only Git metadata', async t => {
@@ -148,7 +191,7 @@ test('agent policy exposes only its selected checkout, own home and read-only Gi
   assert.ok(plan.args.includes('--unshare-pid')); assert.ok(plan.args.includes('--disable-userns')); assert.ok(plan.args.includes('--clearenv'));
   assert.ok(plan.args.includes('--expand-environment=no'));
   assert.ok(plan.args.includes('--property=BindsTo=dialogue.service'));
-  assert.ok(plan.args.includes('--property=MemoryMax=768M'));
+  assert.ok(plan.args.includes('--property=MemoryMax=1280M'));
   assert.ok(plan.args.includes('--property=TasksMax=96'));
   assert.ok(plan.args.includes('a literal $HOME and $(echo nope)'));
 });
@@ -273,4 +316,37 @@ test('production server exits before opening a listener when isolated workers ar
   }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; child.stdout.on('data', b => { output += b; }); child.stderr.on('data', b => { output += b; });
   const [code] = await once(child, 'exit'); assert.notEqual(code, 0); assert.match(output, /Production requires isolated workers/); assert.doesNotMatch(output, /server running/);
+});
+
+test('conversation workers get only their selected native session, reply and attachment; discussion can mount checkout read-only', async t => {
+  const f = await fixture(t);
+  const sessionDir = path.join(f.data, 'requests', '.sessions', 'selected'); const other = path.join(f.data, 'requests', '.sessions', 'other');
+  const replyFile = path.join(f.data, 'requests', '.replies', 'reply.json'); const attachment = path.join(f.data, 'requests', '.attachments', 'request', 'notes.txt');
+  for (const dir of [sessionDir, other, path.dirname(replyFile), path.dirname(attachment)]) await fs.mkdir(dir, {recursive:true});
+  await fs.writeFile(replyFile, '{}'); await fs.writeFile(attachment, 'design notes');
+  const attachmentDir = path.dirname(attachment);
+  const policy = {kind:'agent',home:f.home,sessionDir,attachmentDir,replyFile,readOnlyFiles:[attachment],readOnlyWorkspace:true};
+  const plan = f.runtime.plan('/usr/bin/omp', [], {cwd:f.dir,env:{DIALOGUE_REPLY_FILE:replyFile}}, policy, 'test.scope');
+  const entries = mounts(plan);
+  assert.ok(entries.some(m=>m.source===f.dir && m.mode==='--ro-bind'));
+  assert.ok(entries.some(m=>m.source===sessionDir && m.mode==='--bind'));
+  assert.ok(entries.some(m=>m.source===replyFile && m.mode==='--bind'));
+  assert.ok(entries.some(m=>m.source===attachment && m.mode==='--ro-bind'));
+  assert.ok(entries.some(m=>m.source===attachmentDir && m.mode==='--ro-bind'));
+  assert.ok(!entries.some(m=>m.source===other || m.source===path.dirname(sessionDir) || m.source===path.dirname(replyFile)));
+  assert.throws(()=>f.runtime.plan('/usr/bin/omp',[],{cwd:f.dir},{...policy,sessionDir:f.other},'test.scope'),/session directory/);
+  assert.throws(()=>f.runtime.plan('/usr/bin/omp',[],{cwd:f.dir},{...policy,replyFile:path.join(f.data,'accounts.sqlite')},'test.scope'),/reply file/);
+  assert.throws(()=>f.runtime.plan('/bin/sh',[],{cwd:f.dir},{...policy,kind:'install'},'test.scope'),/session directory/);
+});
+
+test('a replacement preview waits for a closing scope without exceeding the two-preview limit', async t => {
+  const f=await fixture(t);f.runtime.ready=true;f.runtime.diskReady=async()=>{};f.runtime.prepare=async()=>{};f.runtime.plan=()=>({bin:'mock-launcher',args:[]});
+  const children=[];f.runtime.spawnProcess=()=>{const child=new EventEmitter();child.exitCode=null;children.push(child);return child;};
+  let cleaned;f.runtime.execute=()=>new Promise(resolve=>{cleaned=resolve});
+  const a=await f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});await f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});
+  a.exitCode=0;a.emit('close',0);
+  const replacement=f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});
+  await new Promise(r=>setImmediate(r));assert.equal(children.length,2);assert.equal(f.runtime.budget.pending.length,1);assert.equal(f.runtime.budget.active.size,2);
+  cleaned({});await replacement;assert.equal(children.length,3);assert.equal(f.runtime.budget.active.size,2);
+  f.runtime.execute=async()=>({});for(const child of children.slice(1)){child.exitCode=0;child.emit('close',0);await child.workerFinished;}
 });

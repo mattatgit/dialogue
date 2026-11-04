@@ -2,6 +2,8 @@
 
 ## Current state
 
+The active conversation work is `codex/conversation-sidebar`, based on the validated worker branch. The workspace now has one native continuing OMP conversation per branch, a fixed bottom composer and explicit build links. No visible terminal is loaded. General prompts, visual comments, file/design references and full replies use one stream; see `docs/DESIGN.md`, `docs/ARCHITECTURE.md` and `docs/API.md`. `test/conversation.e2e.test.js` uses the real pinned OMP binary and a disposable local provider to verify reload, member handoff, earlier image reads and branch separation without personal credentials. The full suite requires OMP on PATH; use the existing devshell or equivalent native tools. Rerun the updated target `check:workers` before deployment.
+
 For the 2026-11-04 shared BinaryLane pilot, production now requires the user-service/namespace/cgroup contract in `docs/WORKERS.md`. Setup & install owns the configured infrastructure and rollout. The older NixOS demo/module and deferred-hosting discussion below do not satisfy that production contract. Local direct-mode development remains available; run the full suite for every code change, plus the supplied acceptance check on the target Linux host before launch.
 
 `develop` contains the git-workspace + web-terminal functional build plus durable project documentation.

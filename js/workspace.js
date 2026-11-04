@@ -7,11 +7,6 @@
   const projectNode = document.querySelector('[data-project-title]');
   const projectLink = document.querySelector('[data-project-link]');
   const restartButton = document.querySelector('[data-restart]');
-  const terminalPane = document.querySelector('[data-terminal-pane]');
-  const terminalHost = document.querySelector('[data-terminal-host]');
-  const overlay = document.querySelector('[data-terminal-overlay]');
-  const overlayText = document.querySelector('[data-terminal-overlay-text]');
-  const modelLabel = document.querySelector('[data-terminal-model]');
   const params = new URLSearchParams(window.location.search);
   const workspaceId = params.get('id');
   let wantsFix = params.get('fix') === '1';
@@ -20,7 +15,8 @@
   let channel = '';
   let reloadMode = 'dialogue';
   let setupStatus = '';
-  let terminal = null;
+  let previewWorkspaceId = workspaceId;
+  let snapshotEvents = null, branchEvents = null, branchPreview = true;
 
   if (!frame || !frameShell || !state || !body) return;
 
@@ -50,7 +46,7 @@
 
   const restartPreview = async () => {
     showState('Restarting the preview…');
-    await fetch(`/api/workspaces/${workspaceId}/preview/restart`, { method: 'POST', cache: 'no-store' }).catch(() => {});
+    await fetch(`/api/workspaces/${previewWorkspaceId}/preview/restart`, { method: 'POST', cache: 'no-store' }).catch(() => {});
   };
 
   // The preview server's lifecycle, pushed over SSE as `runner` events.
@@ -113,56 +109,12 @@
     get ready() { return Boolean(currentSource); }
   };
 
-  const setOverlay = (message) => {
-    if (!overlay) return;
-    overlay.hidden = !message;
-    if (overlayText) overlayText.textContent = message || '';
-  };
-
-  let mountingTerminal = false;
-  const mountTerminal = async () => {
-    if (!terminalPane || !terminalHost || !window.DialogueTerminal || terminal || mountingTerminal) return;
-    mountingTerminal = true;
-    try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/editing`, { method: 'POST' });
-      if (!response.ok) { const payload = await response.json(); setOverlay(payload.error || 'This working copy is being edited elsewhere.'); terminalPane.hidden = false; return; }
-      terminalPane.hidden = false;
-      if (modelLabel) fetch('/api/agent', { cache: 'no-store' })
-        .then((response) => response.ok ? response.json() : null)
-        .then((agent) => {
-          if (!agent?.model) return;
-          modelLabel.textContent = agent.model.split('/').at(-1);
-          modelLabel.title = agent.model;
-        })
-        .catch(() => {});
-      terminal = window.DialogueTerminal.mount(terminalHost, workspaceId, {
-        onStatus: (kind, detail) => {
-          if (kind === 'connected') { setOverlay(''); requestFix(); }
-          else if (kind === 'connecting') setOverlay('Connecting…');
-          else if (kind === 'reconnecting') setOverlay('Reconnecting…');
-          else if (kind === 'error') setOverlay(detail || 'The agent terminal could not be started.');
-        }
-      });
-      overlay?.addEventListener('click', () => terminal?.retry());
-    } catch (error) { setOverlay(error.message || 'The terminal could not be opened.'); }
-    finally { mountingTerminal = false; }
-  };
-
-  window.addEventListener('dialogue:mode', (event) => {
-    if (!terminalPane) return;
-    if (event.detail === 'terminal') {
-      if (terminal) terminalPane.hidden = false;
-      else mountTerminal();
-    } else {
-      terminalPane.hidden = true;
-    }
-  });
-
-  const subscribe = () => {
-    const events = new EventSource(`/api/workspaces/${workspaceId}/events`);
+  const subscribe = (preview = true) => {
+    branchEvents?.close(); branchPreview = preview;
+    const events = branchEvents = new EventSource(`/api/workspaces/${workspaceId}/events${preview ? '' : '?preview=0'}`);
     events.addEventListener('runner', (event) => {
       try {
-        renderRunner(JSON.parse(event.data));
+        if (previewWorkspaceId === workspaceId) renderRunner(JSON.parse(event.data));
       } catch {
         // ignore malformed frames
       }
@@ -177,7 +129,7 @@
         // ignore malformed frames
       }
       // Dev servers with their own live reload handle file changes.
-      if (files && reloadMode === 'dialogue') reloadPrototype();
+      if (previewWorkspaceId === workspaceId && files && reloadMode === 'dialogue') reloadPrototype();
     });
     events.addEventListener('request', (event) => {
       try { window.dispatchEvent(new CustomEvent('dialogue:request', { detail: JSON.parse(event.data) })); } catch {}
@@ -185,6 +137,24 @@
     events.addEventListener('activity', (event) => {
       try { window.dispatchEvent(new CustomEvent('dialogue:activity', { detail: JSON.parse(event.data) })); } catch {}
     });
+  };
+
+  window.DialogueWorkspace.view = async (workspace) => {
+    snapshotEvents?.close(); snapshotEvents = null;
+    previewWorkspaceId = workspace.id;
+    if (branchPreview !== (workspace.id === workspaceId)) subscribe(workspace.id === workspaceId);
+    previewUrl = workspace.previewUrl || ''; currentSource = '';
+    renderRunner(workspace.runner || { state: 'starting' });
+    if (workspace.id !== workspaceId) {
+      snapshotEvents = new EventSource(`/api/workspaces/${workspace.id}/events`);
+      snapshotEvents.addEventListener('runner', event => { try { renderRunner(JSON.parse(event.data)); } catch {} });
+    }
+  };
+  window.DialogueWorkspace.returnToCurrent = async () => {
+    const response = await fetch(`/api/workspaces/${workspaceId}`, { cache: 'no-store' });
+    const payload = await response.json();
+    if (!response.ok || !payload.workspace) throw new Error(payload.error || 'Could not return to the current build.');
+    await window.DialogueWorkspace.view(payload.workspace);
   };
 
   const load = async () => {
@@ -211,6 +181,7 @@
 
       window.dispatchEvent(new CustomEvent('dialogue:workspace', { detail: workspace }));
       subscribe();
+      if (wantsFix) requestFix();
     } catch (error) {
       showError(error.message || 'Could not load this workspace.');
     }

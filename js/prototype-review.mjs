@@ -1,42 +1,27 @@
-import { chronological, stageGeometry, rootClipPath, rectFromPoints, validRect, safeSelection, clamp } from './review-model.mjs';
+import { stageGeometry, rootClipPath, rectFromPoints, validRect, safeSelection, clamp } from './review-model.mjs';
 import { readGrid, writeGrid } from './review-preferences.mjs';
+import { replyMarkdown } from './reply-markdown.mjs';
 
 // Branch activity combines the live Draft, private edit snapshots, published Versions, and execution records.
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-// Request summaries come from agent text: render only supported inline Markdown,
-// escaping all other markup instead of treating it as trusted HTML.
-function inlineMarkdown(value) {
-  const text = String(value ?? '');
-  const token = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|`([^`\n]+)`|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
-  let html = '', position = 0;
-  for (const match of text.matchAll(token)) {
-    html += esc(text.slice(position, match.index));
-    if (match[1]) {
-      try {
-        const url = new URL(match[2]);
-        html += `<a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(match[1])}</a>`;
-      } catch { html += esc(match[0]); }
-    } else if (match[3] || match[4]) html += `<strong>${esc(match[3] || match[4])}</strong>`;
-    else if (match[5]) html += `<code>${esc(match[5])}</code>`;
-    else if (match[6]) html += `<del>${esc(match[6])}</del>`;
-    else html += `<em>${esc(match[7] || match[8])}</em>`;
-    position = match.index + match[0].length;
-  }
-  return html + esc(text.slice(position));
-}
 const canvas = $('.review-canvas'), plane = $('.review-plane'), scroll = $('.review-scroll');
 const frame = $('[data-review-frame]'), host = $('.review-frame-host'), hit = $('.review-hit-layer');
 const rail = $('.review-history'), cards = $('[data-history-items]'), composer = $('[data-comment-form]');
 const feedback = $('#review-comment'), send = $('.composer-send'), loadState = $('[data-load-state]');
 const figmaChip = $('[data-comment-figma-chip]'), figmaLabel = $('[data-comment-figma-label]');
+const annotationComposer = $('[data-annotation-form]'), annotationFeedback = $('#annotation-comment');
+const annotationSend = annotationComposer.querySelector('.composer-send');
+const annotationFigmaChip = $('[data-annotation-figma-chip]');
 const shape = $('[data-selection-rect]'), arrow = $('[data-selection-arrow]');
 const viewport = { width: 370, height: 722 };
 let viewScroll = { x: 0, y: 0 };
 let grid = readGrid(), origin = { x: 0, y: 0 }, rootRadius = {}, geometry, mode = 'test', tool = 'area';
 let active = null, requests = [], activity = null, historyWorkspaceId = null, anchor = null, drag = null, figmaUrl = null;
-let sendHoverTimer, toastTimer, hoverPending = false;
+let toastTimer, hoverPending = false, annotationFigmaUrl = null;
+let viewedSnapshot = null, attachedFiles = [], submitting = false, addingFiles = false, followsLatest = true, toolChosen = false;
+const messageScroll = $('.conversation-messages');
 let channel = '', bridgeReady = false, probeId = 0, selectedProbe = 0;
 let refreshTimer = null, activitySequence = 0, draftSelected = false, savingVersion = false, saveError = '';
 let saveConfirmed = false, saveConfirmationTimer = null;
@@ -127,32 +112,30 @@ function drawAnchor(value) {
   }
 }
 function positionComposer() {
-  if (!anchor || composer.hidden || !geometry) return;
-  const width = composer.offsetWidth, height = composer.offsetHeight;
+  feedback.style.height = 'auto';
+  feedback.style.height = `${feedback.value.includes('\n') || feedback.value.length > 42 ? Math.min(240, Math.max(40, feedback.scrollHeight)) : 40}px`;
+  if (!anchor || annotationComposer.hidden || !geometry) return;
+  const width = annotationComposer.offsetWidth, height = annotationComposer.offsetHeight;
   if (anchor.type === 'arrow') {
-    // Arrow gestures begin where the comment belongs and end at the target.
-    // Keep that start point canvas-wide (it may sit outside the prototype).
+    // The gesture starts at the comment box and ends at the pointed-to target.
     const terminal = planePoint(anchor.start);
-    const terminalX = terminal.x - scroll.scrollLeft;
-    const terminalY = terminal.y - scroll.scrollTop;
+    const terminalX = terminal.x - scroll.scrollLeft, terminalY = terminal.y - scroll.scrollTop;
     const fitsRight = terminalX + width <= canvas.clientWidth - 8;
     const fitsLeft = terminalX - width >= 8;
-    let x = fitsRight || !fitsLeft ? terminalX : terminalX - width;
-    x = clamp(x, 8, Math.max(8, canvas.clientWidth - width - 8));
+    const x = clamp(fitsRight || !fitsLeft ? terminalX : terminalX - width, 8, Math.max(8, canvas.clientWidth - width - 8));
     const y = clamp(terminalY - 30, 8, Math.max(8, canvas.clientHeight - height - 8));
-    composer.style.left = `${x}px`; composer.style.top = `${y}px`;
-    composer.style.setProperty('--arrow-terminal-x', `${terminalX - x}px`);
-    composer.style.setProperty('--arrow-terminal-y', `${terminalY - y}px`);
+    annotationComposer.style.left = `${x}px`; annotationComposer.style.top = `${y}px`;
+    annotationComposer.style.setProperty('--arrow-terminal-x', `${terminalX - x}px`);
+    annotationComposer.style.setProperty('--arrow-terminal-y', `${terminalY - y}px`);
     return;
   }
-  composer.style.removeProperty('--arrow-terminal-x');
-  composer.style.removeProperty('--arrow-terminal-y');
+  annotationComposer.style.removeProperty('--arrow-terminal-x'); annotationComposer.style.removeProperty('--arrow-terminal-y');
   const target = planePoint({ x: anchor.rect.x, y: anchor.rect.y + anchor.rect.height });
   const x = clamp(target.x - scroll.scrollLeft, 8, Math.max(8, canvas.clientWidth - width - 8));
   let y = target.y - scroll.scrollTop + 8;
   if (y + height > canvas.clientHeight - 72) y = target.y - scroll.scrollTop - height - 16;
   y = clamp(y, 40, Math.max(40, canvas.clientHeight - height - 72));
-  composer.style.left = `${x}px`; composer.style.top = `${y}px`;
+  annotationComposer.style.left = `${x}px`; annotationComposer.style.top = `${y}px`;
 }
 function parseFigmaLink(value) {
   if (!value || value.length > 2048 || /(?:^|\/)(?:\.|%2e){1,2}(?:\/|[?#]|$)/i.test(value)) return null;
@@ -172,16 +155,25 @@ function clearFigmaLink() {
   figmaChip.hidden = true;
   $('[data-composer-status]').hidden = false;
 }
-function resetSendState() {
-  clearTimeout(sendHoverTimer);
-  send.classList.remove('is-hovered', 'is-long-hover', 'is-clicked');
+function resetSendState(button = send) {
+  clearTimeout(button.hoverTimer);
+  button.classList.remove('is-hovered', 'is-long-hover', 'is-clicked');
 }
 function updateComposerState() {
   if (composer.hidden) return;
-  const hasText = feedback.value.length > 0;
-  composer.dataset.state = hasText ? 'typing' : document.activeElement === feedback ? 'focused' : 'default';
-  send.disabled = !feedback.value.trim();
+  const busy = requests.some(r => r.status === 'running');
+  composer.dataset.state = feedback.value ? 'typing' : document.activeElement === feedback ? 'focused' : 'default';
+  send.disabled = submitting || addingFiles || busy || !!viewedSnapshot || !active?.terminal || !feedback.value.trim();
+  feedback.disabled = submitting || !!viewedSnapshot || !active?.terminal;
+  feedback.placeholder = viewedSnapshot ? 'Return to the current build to continue' : !active?.terminal ? 'This working copy is read-only' : 'Ask a question or request a change';
+  $('[data-stop-request]').hidden = !busy || !active?.terminal;
+  send.hidden = busy || !feedback.value.trim();
   if (send.disabled) resetSendState();
+  annotationComposer.dataset.state = annotationFeedback.value ? 'typing' : document.activeElement === annotationFeedback ? 'focused' : 'default';
+  annotationFeedback.disabled = submitting || busy || !!viewedSnapshot || !active?.terminal;
+  annotationSend.disabled = annotationFeedback.disabled || !anchor || !annotationFeedback.value.trim();
+  if (annotationSend.disabled) resetSendState(annotationSend);
+  positionComposer();
 }
 function openComment(value) {
   if (!active?.terminal) { toast('Open a branch to send feedback to the agent.'); return; }
@@ -191,32 +183,32 @@ function openComment(value) {
   if (anchor.rect) anchor.normalizedRect = { x: anchor.rect.x / viewport.width, y: anchor.rect.y / viewport.height,
     width: anchor.rect.width / viewport.width, height: anchor.rect.height / viewport.height };
   $('[data-anchor-label]').textContent = { selection: 'Selection', area: 'Area', arrow: 'Arrow' }[anchor.type];
-  composer.dataset.anchorType = anchor.type;
-  composer.dataset.state = 'default';
-  composer.hidden = false; drawAnchor(anchor); positionComposer(); feedback.focus(); updateComposerState();
+  annotationComposer.dataset.anchorType = anchor.type;
+  annotationComposer.hidden = false; drawAnchor(anchor); positionComposer(); annotationFeedback.focus(); updateComposerState();
 }
-function closeComment() {
-  // Commenting is intentionally low-friction: closing, changing tools/modes or
-  // navigating away discards an unsent draft without a browser confirmation.
-  composer.hidden = true; feedback.value = ''; clearFigmaLink(); send.disabled = true; resetSendState(); composer.dataset.state = 'default'; delete composer.dataset.anchorType;
-  composer.style.removeProperty('--arrow-terminal-x'); composer.style.removeProperty('--arrow-terminal-y');
-  anchor = null; clearShapes(); return true;
+function clearAnchor() {
+  anchor = null; clearShapes(); annotationComposer.hidden = true; annotationFeedback.value = '';
+  annotationFigmaUrl = null; annotationFigmaChip.hidden = true; $('[data-annotation-status]').hidden = false;
+  delete annotationComposer.dataset.anchorType;
+  annotationComposer.style.removeProperty('--arrow-terminal-x'); annotationComposer.style.removeProperty('--arrow-terminal-y');
+  updateComposerState();
 }
-function mayNavigate() { return composer.hidden || closeComment(); }
+function mayNavigate() { return true; }
 function setMode(next, refresh = true) {
-  if (mode === next || (next === 'comment' && !active) || (next === 'terminal' && !active?.terminal)) return;
-  if (!mayNavigate()) return;
+  if (!['test', 'comment'].includes(next) || next === 'comment' && !active) return;
   mode = next; document.body.dataset.mode = mode;
+  if (mode !== 'comment') clearAnchor();
   $$('[data-mode-button]').forEach(b => b.setAttribute('aria-pressed', b.dataset.modeButton === mode));
   rail.hidden = mode !== 'comment';
-  hit.hidden = mode !== 'comment' || !active?.terminal;
-  $('.review-tools').hidden = mode !== 'comment' || !active?.terminal;
+  hit.hidden = mode !== 'comment' || !active?.terminal || !!viewedSnapshot;
+  $('.review-tools').hidden = mode !== 'comment' || !active?.terminal || !!viewedSnapshot;
   window.dispatchEvent(new CustomEvent('dialogue:mode', { detail: mode }));
-  updateGeometry();
-  if (mode === 'comment' && refresh) refreshActivity().catch(error => toast(`Could not update activity: ${error.message}`));
+  updateGeometry(); updateComposerState();
+  if (mode === 'comment' && refresh) refreshActivity().catch(error => toast(`Could not update conversation: ${error.message}`));
 }
 function setTool(next) {
   if (!mayNavigate()) return;
+  if (tool !== next) clearAnchor();
   tool = next; hit.dataset.tool = next;
   $$('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === tool));
 }
@@ -237,10 +229,10 @@ function formatTime(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.valueOf())) return '';
   const now = new Date();
-  if (now.valueOf() - d.valueOf() < 60000) return 'Just now';
+
   const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-  if (sameDay) return `Today ${time}`;
+  if (sameDay) return time;
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
   if (d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate()) return `Yesterday ${time}`;
   return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -263,6 +255,7 @@ function upsertRequest(request) {
   const index = requests.findIndex(item => item.id === request.id);
   const previous = requests[index];
   if (previous && previous.status !== 'running' && request.status === 'running') return;
+  if (previous && JSON.stringify(previous) === JSON.stringify(request)) return;
   if (request.status === 'running') draftSelected = false;
   showCompletion(previous && [previous], request);
   if (index === -1) requests.push(request);
@@ -286,106 +279,48 @@ async function refreshActivity() {
   scheduleRefresh();
 }
 function renderHistory() {
-  const oldTop = rail.scrollTop;
-  const focused = cards.contains(document.activeElement) ? document.activeElement : null;
-  const focusKey = focused?.dataset.cardFocus;
-  const focusPreview = focused?.dataset.previewId;
-  const { draft, edits, versions, terminalActivity } = activity || {};
-  if (!draft) { cards.replaceChildren(); return; }
-  const readonly = !active?.terminal;
-  const working = requests.some(request => request.status === 'running') || terminalActivity?.state === 'working';
-  const editsByRequest = new Map(edits.map(edit => [edit.requestId, edit]));
-  const versionByRequest = new Map(versions.filter(version => version.requestId).map(version => [version.requestId, version]));
-  const latestVersion = versions.at(-1);
-  const creation = requests.find(request => request.kind === 'create') ||
-    requests.find(request => !request.kind && !request.anchor);
-  const summaryFor = (request, fallback) => {
-    const text = request?.summary?.trim();
-    return text && !/^[^.!?]{1,48}:$/.test(text) ? text : fallback;
-  };
-  const modelIcon = model => {
-    if (!model) return '';
-    const name = model.split('/').at(-1);
-    const provider = model.toLowerCase();
-    const icon = /anthropic|claude/.test(provider) ? 'history-anthropic.svg'
-      : /qwen/.test(provider) ? 'history-qwen.svg'
-        : /kimi|moonshot/.test(provider) ? 'history-kimi.svg'
-          : /openai|gpt-/.test(provider) ? 'history-model.svg' : null;
-    const glyph = icon ? `<img src="assets/${icon}" alt="" aria-hidden="true">` : esc(name.charAt(0).toUpperCase());
-    return `<span class="activity-model" title="${esc(model)}" aria-label="${esc(name)}">${glyph}</span>`;
-  };
-  const statusBar = (text, complete = false) => `<p class="activity-live ${complete ? 'is-complete' : ''}" role="status">${complete
-    ? '<img src="assets/history-complete.svg" alt="" aria-hidden="true">'
-    : '<picture class="activity-wait-mark" aria-hidden="true"><source media="(prefers-reduced-motion: reduce)" srcset="assets/history-wait-static.svg"><img src="assets/history-wait.svg" alt=""></picture>'}<span>${esc(text)}</span></p>`;
-  const entries = requests.map(request => {
-    const edit = editsByRequest.get(request.id);
-    const version = versionByRequest.get(request.id);
-    const isCreation = request === creation;
-    const completing = completionTransitions.has(request.id);
-    const live = request.status === 'running' || completing || !working &&
-      (version ? !draft.canSave && latestVersion === version : draft.requestId === request.id);
-    return {
-      type: 'request', request, version, edit,
-      sha: version?.sha || edit?.sha,
-      label: request.status === 'running' || completing ? 'Working' : request.status === 'failed' ? 'Failed'
-        : version?.label || (edit ? isCreation ? 'Created' : 'Edited' : isCreation ? 'No changes' : 'Commented'),
-      createdAt: version?.createdAt || request.finishedAt || request.startedAt || request.createdAt,
-      current: !readonly && live,
-      live,
-      busy: request.status === 'running' || completing,
-      completing
-    };
-  });
-  for (const version of versions) {
-    if (versionByRequest.has(version.requestId) && requests.some(request => request.id === version.requestId)) continue;
-    const live = !working && !draft.canSave && version === latestVersion;
-    entries.push({ type: 'version', version, sha: version.sha, label: version.label, createdAt: version.createdAt,
-      current: !readonly && live, live });
-  }
-  const attributed = requests.some(request => request.id === draft.requestId && !versionByRequest.has(request.id));
-  if (!attributed && !working && (draft.canSave || (!versions.length && !requests.some(request => editsByRequest.has(request.id))))) {
-    entries.push({ type: 'draft', label: 'Draft', createdAt: new Date().toISOString(), current: !readonly, live: true,
-      detail: draft.pending ? 'A previous save is ready to retry.' : draft.canSave ? 'Changes are ready to save.' : 'Current working prototype.' });
-  }
-  if (terminalActivity) entries.push({ type: 'terminal', turn: terminalActivity, label: terminalActivity.state === 'working' ? 'Working' : 'Activity',
-    createdAt: terminalActivity.updatedAt, busy: terminalActivity.state === 'working' });
-  const selectedSha = readonly ? active?.head?.sha : null;
-  const ordered = chronological(entries);
-  const workingIndex = ordered.findIndex(entry => entry.type === 'request' && entry.busy);
-  if (workingIndex > 0) ordered.unshift(...ordered.splice(workingIndex, 1));
-  cards.innerHTML = ordered.map(entry => {
-    const { request, version, turn, current, busy, sha, label, createdAt } = entry;
-    const selected = Boolean(!entry.live && sha && selectedSha === sha);
-    const canSave = !readonly && current && !working && draft.canSave && entry.type !== 'terminal';
-    const showSaved = !readonly && current && saveConfirmed && Boolean(version);
-    const expanded = draftSelected && (canSave || showSaved);
-    const actions = expanded ? `<div class="card-actions"><button class="review-button" type="button" data-card-cancel data-card-focus="cancel" ${savingVersion || saveConfirmed ? 'disabled' : ''}>Cancel</button><button class="review-button primary save-version-button ${saveConfirmed ? 'is-saved' : ''}" type="button" data-card-save data-card-focus="save" ${!canSave || savingVersion || saveConfirmed ? 'disabled' : ''}>${saveConfirmed ? 'Saved a version' : savingVersion ? 'Saving…' : 'Save a version'}</button></div>` : '';
-    const preview = !entry.live && sha && /^[a-f0-9]{40}$/.test(sha) ? `data-preview-id="${sha}" tabindex="0" title="Open ${esc(label)} as a read-only preview"` : '';
-    const draftControl = canSave || showSaved || readonly && entry.live
-      ? `data-draft-card data-card-focus="draft" tabindex="0" aria-expanded="${expanded}" title="${readonly ? 'Open current build' : 'Select current draft'}"` : '';
-    const meta = `<div class="activity-meta"><span class="revision-badge">${esc(label)}</span>${busy ? '' : `<time datetime="${esc(createdAt)}">${esc(formatTime(createdAt))}</time>`}</div>`;
-    const classes = `activity-card ${current || busy && entry.type === 'request' ? 'is-current' : selected ? 'is-selected' : 'is-past'} ${busy ? 'is-working' : ''} ${entry.edit && request !== creation ? 'is-edit' : ''} ${version ? 'is-version' : ''} ${actions ? 'has-actions' : ''}`;
-    let content;
-    if (request) {
-      const fallback = entry.edit ? 'Changes from this comment are ready to review.' : 'The agent finished without changing files.';
-      const summary = request.status === 'failed' ? request.error || 'The request failed.' : summaryFor(request, fallback);
-      content = `<p class="activity-request" title="${esc(request.feedback)}"><span class="activity-request-text">${esc(request.feedback)}</span></p>${busy
-        ? statusBar(entry.completing ? 'Task completed' : request.workingDetail || (request === creation ? 'Creating your prototype…' : 'Working on your comment…'), entry.completing)
-        : `<div class="activity-response">${modelIcon(request.model)}<p class="${request.status === 'failed' ? 'activity-error' : 'activity-summary'}">${request.status === 'failed' ? esc(summary) : inlineMarkdown(summary)}</p></div>`}`;
-    } else if (turn) {
-      content = `<p class="activity-request">Agent terminal</p>${busy ? statusBar(turn.text) : `<p class="activity-summary">${esc(turn.text)}</p>`}`;
-    } else {
-      content = `<p class="activity-request"><span class="activity-request-text">${esc(entry.type === 'draft' ? 'Changes on ' + (active?.ref || 'this branch') : 'Published version')}</span></p><p class="activity-summary">${esc(entry.detail || 'Saved to the repository.')}</p>`;
+  const oldTop = messageScroll.scrollTop;
+  const workingAvatars = new Map([...cards.querySelectorAll('.is-working[data-message-reply]')].map(card => [card.dataset.messageReply, card.querySelector('.message-dialogue-avatar')]));
+  const focusPreview = cards.contains(document.activeElement) ? document.activeElement?.dataset.previewId : null;
+  const atBottom = messageScroll.scrollHeight - oldTop - messageScroll.clientHeight < 48;
+  const initial = !cards.children.length;
+  const ordered = [...requests, ...(activity?.versions || []).map(v => ({ ...v, versionEvent: true }))].sort((a,b) => (Date.parse(a.createdAt)||0) - (Date.parse(b.createdAt)||0));
+  cards.innerHTML = ordered.map(request => {
+    if (request.versionEvent) {
+      const link = /^[a-f0-9]{40}$/.test(request.sha || '') ? `<button type="button" class="message-view-build" data-preview-id="${request.sha}" data-preview-label="${esc(request.label)}">View build<span aria-hidden="true"><img src="assets/conversation-build-arrow.svg" alt=""></span></button>` : '';
+      return `<article class="conversation-message is-dialogue is-version-event"><header><img class="message-dialogue-avatar" src="assets/conversation-dialogue.svg" alt=""><div><strong>Dialogue</strong> <time datetime="${esc(request.createdAt)}">${esc(formatTime(request.createdAt))}</time><div>${link}</div></div></header><div class="message-body">Saved ${esc(request.label)} to the repository.</div></article>`;
     }
-    return `<article class="${classes}" ${draftControl || preview} ${draftControl && preview ? preview.replace('tabindex="0"', '') : ''} ${request ? `data-card-id="${esc(request.id)}"` : ''} aria-busy="${Boolean(busy)}" ${current ? 'aria-current="true"' : ''}>
-      ${meta}<div class="activity-content">${content}${saveError && current ? `<p class="activity-error" role="alert">${esc(saveError)}</p>` : ''}</div>${actions}</article>`;
+    const name = request.actor?.name || 'Member';
+    const label = { selection: 'Selection', area: 'Area', arrow: 'Arrow' }[request.anchor?.type] || 'Prompt';
+    const initials = name.trim().split(/\s+/).slice(0,2).map(w => w[0]).join('').toUpperCase();
+    const files = (request.attachments || []).map((f,i) => `<a class="message-file" href="/api/workspaces/${historyWorkspaceId}/requests/${request.id}/attachments/${i}" download>${esc(f.name)}</a>`).join('');
+    const figma = request.figmaUrl ? `<a class="message-file" href="${esc(request.figmaUrl)}" target="_blank" rel="noopener noreferrer"><img src="assets/conversation-figma.svg" alt="">${esc(parseFigmaLink(request.figmaUrl)?.label || 'Figma design')}</a>` : '';
+    const user = `<article class="conversation-message is-user" data-message-user="${esc(request.id)}"><header><span class="message-avatar" aria-hidden="true">${esc(initials)}</span><div><strong>${esc(name)}</strong> <time datetime="${esc(request.createdAt)}">${esc(formatTime(request.createdAt))}</time><div><span class="message-kind">${label}</span></div></div></header><div class="message-body">${esc(request.feedback)}</div>${figma}${files}</article>`;
+    const busy = request.status === 'running';
+    const snapshot = request.status === 'completed' && /^[a-f0-9]{40}$/.test(request.snapshotSha || '') ? request.snapshotSha : null;
+    const reply = busy ? request.workingDetail || 'Working on your request…' : request.status === 'failed' ? request.error || 'The request failed.' : request.reply || request.summary || 'The agent finished without a reply.';
+    const build = snapshot ? `<button type="button" class="message-view-build" data-preview-id="${snapshot}">View build<span aria-hidden="true"><img src="assets/conversation-build-arrow.svg" alt=""></span></button>` : '';
+    const avatar = busy
+      ? '<picture class="message-dialogue-avatar message-working-avatar" aria-hidden="true"><source media="(prefers-reduced-motion: reduce)" srcset="assets/history-wait-static.svg"><img src="assets/history-wait.svg" alt=""></picture>'
+      : '<img class="message-dialogue-avatar" src="assets/conversation-dialogue.svg" alt="">';
+    const answer = `<article class="conversation-message is-dialogue ${busy ? 'is-working' : ''}" data-message-reply="${esc(request.id)}" aria-busy="${busy}"><header>${avatar}<div><strong>Dialogue</strong> <time datetime="${esc(request.finishedAt || request.createdAt)}">${esc(formatTime(request.finishedAt || request.createdAt))}</time><div>${build}</div></div></header><div class="message-body ${request.status === 'failed' ? 'activity-error' : ''}">${busy ? `<span role="status">${esc(reply)}</span>` : replyMarkdown(reply)}</div>${request.replyTruncated ? '<p class="message-limit">Reply exceeded the display limit; ask for a shorter response or continue the discussion.</p>' : ''}</article>`;
+    return user + answer;
   }).join('');
-  const last = cards.lastElementChild;
-  $('.history-spacer').style.height = `${Math.max(0, rail.clientHeight - (last?.offsetHeight || 0) - 8)}px`;
-  rail.scrollTop = oldTop;
-  const nextFocus = focusKey ? [...cards.querySelectorAll('[data-card-focus]')].find(element => element.dataset.cardFocus === focusKey)
-    : focusPreview ? [...cards.querySelectorAll('[data-preview-id]')].find(element => element.dataset.previewId === focusPreview) : null;
-  (nextFocus?.disabled ? cards.querySelector('[data-draft-card]') : nextFocus)?.focus({ preventScroll: true });
+  // Progress updates must not restart the existing SVG animation.
+  for (const card of cards.querySelectorAll('.is-working[data-message-reply]')) {
+    const avatar = workingAvatars.get(card.dataset.messageReply);
+    if (avatar) card.querySelector('.message-dialogue-avatar').replaceWith(avatar);
+  }
+  if (!ordered.length) cards.innerHTML = '<p class="conversation-empty">Ask a question, request a change, or select part of the prototype to start a conversation.</p>';
+  if (initial || followsLatest && atBottom) messageScroll.scrollTop = messageScroll.scrollHeight;
+  else messageScroll.scrollTop = oldTop;
+  $('[data-jump-latest]').hidden = followsLatest;
+  const canSave = !!active?.terminal && !viewedSnapshot && !!activity?.draft?.canSave && !requests.some(r => r.status === 'running') && !savingVersion && !saveConfirmed;
+  const save = $('[data-save-version]'); save.disabled = !canSave;
+  save.querySelector('span').textContent = savingVersion ? 'Saving…' : saveConfirmed ? 'Saved a version' : 'Save a version';
+  save.title = saveError || (viewedSnapshot ? 'Return to the current build to save a version' : canSave ? 'Publish the current draft as a version' : 'No new changes to save');
+  updateComposerState();
+  if (focusPreview) cards.querySelector(`[data-preview-id="${focusPreview}"]`)?.focus({ preventScroll: true });
 }
 async function saveVersion(retry = false) {
   if (savingVersion || saveConfirmed || !active?.terminal || !activity?.draft?.canSave || !historyWorkspaceId
@@ -443,10 +378,14 @@ addEventListener('dialogue:workspace', async event => {
     completionTransitions.clear();
   }
   historyWorkspaceId = nextWorkspaceId;
+  if (params.get('source') && active.kind !== 'branch') {
+    viewedSnapshot = { sha: active.ref, workspace: active };
+    $('[data-viewing-build-label]').textContent = `Viewing build ${active.ref.slice(0,7)}`;
+    $('[data-viewing-build]').hidden = false;
+  }
   origin = { x: 0, y: 0 }; rootRadius = {};
-  $('[data-mode-button="terminal"]').disabled = !active.terminal;
-  if (active.terminal && params.get('fix') === '1') setMode('terminal');
-  else if (params.get('mode') === 'comment') setMode('comment', false);
+  setMode(params.get('mode') === 'test' ? 'test' : 'comment', false);
+  fetch('/api/agent', { cache: 'no-store' }).then(r => r.json()).then(r => { const id = r.model?.split('/').at(-1) || 'AI model'; const label = id.replace(/^gpt-([0-9.]+)-(.+)$/, (_,version,name) => `ChatGPT ${version} ${name.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')}`); $('[data-conversation-model]').textContent = label; $('[data-conversation-model]').title = r.model || label; }).catch(() => {});
   updateGeometry();
   try { await refreshActivity(); } catch (error) { toast(`Could not load activity: ${error.message}`); }
 });
@@ -486,13 +425,14 @@ addEventListener('message', event => {
     || event.origin !== new URL(frame.src).origin || m?.scope !== 'dialogue-review' || m.channel !== channel) return;
   if (m.type === 'layout' && validRect(m.origin)) {
     bridgeReady = true;
-    $('[data-tool="selection"]').disabled = false;
+    $('[data-tool="selection"]').disabled = !!viewedSnapshot || !active?.terminal;
+    if (!toolChosen && !viewedSnapshot && active?.terminal) setTool('selection');
     viewScroll = { x: clamp(m.scroll?.x, 0, 100000), y: clamp(m.scroll?.y, 0, 100000) };
     origin = { x: clamp(m.origin.x, -viewport.width, viewport.width), y: clamp(m.origin.y, -viewport.height, viewport.height),
       width: clamp(m.origin.width, 0, viewport.width * 4), height: clamp(m.origin.height, 0, viewport.height * 4) };
     rootRadius = m.radius && typeof m.radius === 'object' ? m.radius : {};
     updateGeometry();
-  } else if (m.type === 'selection' && mode === 'comment' && tool === 'selection' && composer.hidden) {
+  } else if (m.type === 'selection' && mode === 'comment' && tool === 'selection' && !anchor) {
     const selection = safeSelection(m.selection);
     if (!selection) return;
     if (m.action === 'select' && m.requestId === selectedProbe) openComment(selection);
@@ -500,11 +440,12 @@ addEventListener('message', event => {
   } else if (m.type === 'restart-shortcut' && mode === 'test' && !$('.review-share-dialog').open) restartPrototype();
 });
 $$('[data-mode-button]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.modeButton)));
-$$('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+$$('button[data-tool]').forEach(b => b.addEventListener('click', () => { toolChosen = true; setTool(b.dataset.tool); }));
 $('[data-grid-toggle]').addEventListener('click', () => { grid = writeGrid({ ...grid, enabled: !grid.enabled }); gridButton(); updateGeometry(); });
 addEventListener('storage', () => { grid = readGrid(); gridButton(); updateGeometry(); });
 $('[data-reload]').addEventListener('click', restartPrototype);
-$('[data-close-comment]').addEventListener('click', () => closeComment());
+$('[data-close-comment]').addEventListener('click', () => clearAnchor());
+$('[data-save-version]').addEventListener('click', () => saveVersion());
 feedback.addEventListener('focus', updateComposerState);
 feedback.addEventListener('blur', updateComposerState);
 feedback.addEventListener('input', () => { updateComposerState(); positionComposer(); });
@@ -533,40 +474,65 @@ $('[data-comment-figma-remove]').addEventListener('click', () => {
   feedback.focus();
   updateComposerState();
 });
-send.addEventListener('pointerenter', () => {
-  if (send.disabled) return;
-  resetSendState(); send.classList.add('is-hovered');
-  sendHoverTimer = setTimeout(() => {
-    if (!send.disabled && send.matches(':hover')) send.classList.add('is-long-hover');
-  }, 300);
-});
-send.addEventListener('pointerleave', resetSendState);
-send.addEventListener('pointerdown', () => {
-  if (send.disabled) return;
-  clearTimeout(sendHoverTimer); send.classList.add('is-clicked');
-});
-send.addEventListener('pointerup', () => send.classList.remove('is-clicked'));
-send.addEventListener('pointercancel', () => send.classList.remove('is-clicked'));
-feedback.addEventListener('keydown', event => {
-  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!send.disabled) composer.requestSubmit(); }
-});
-composer.addEventListener('submit', async event => {
+for (const [form, input, button] of [[composer, feedback, send], [annotationComposer, annotationFeedback, annotationSend]]) {
+  button.addEventListener('pointerenter', () => {
+    if (button.disabled) return;
+    resetSendState(button); button.classList.add('is-hovered');
+    button.hoverTimer = setTimeout(() => { if (!button.disabled && button.matches(':hover')) button.classList.add('is-long-hover'); }, 300);
+  });
+  button.addEventListener('pointerleave', () => resetSendState(button));
+  button.addEventListener('pointerdown', () => { if (!button.disabled) { clearTimeout(button.hoverTimer); button.classList.add('is-clicked'); } });
+  button.addEventListener('pointerup', () => button.classList.remove('is-clicked'));
+  button.addEventListener('pointercancel', () => button.classList.remove('is-clicked'));
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!button.disabled) form.requestSubmit(); }
+  });
+  form.addEventListener('submit', event => submitMessage(event, form, input, button));
+}
+async function submitMessage(event, form, input, button) {
   event.preventDefault();
-  if (!anchor || !feedback.value.trim() || send.disabled || !active?.terminal) return;
-  send.disabled = true;
+  if (!input.value.trim() || button.disabled || !active?.terminal || viewedSnapshot) return;
+  const annotated = form === annotationComposer;
+  const design = annotated ? annotationFigmaUrl : figmaUrl;
+  const body = { feedback: input.value, ...(annotated && anchor ? { anchor } : {}), ...(design ? { figmaUrl: design } : {}), attachments: annotated ? [] : attachedFiles };
+  submitting = true; followsLatest = true;
+  updateComposerState();
   try {
     const response = await fetch(`/api/workspaces/${active.id}/requests`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ feedback: feedback.value, anchor, ...(figmaUrl ? { figmaUrl } : {}) })
+      body: JSON.stringify(body)
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'The request could not be sent.');
     upsertRequest(data.request);
-    closeComment(); rail.scrollTop = 0;
-  } catch (error) { toast(error.message); updateComposerState(); }
+    if (annotated) clearAnchor();
+    else { feedback.value = ''; clearFigmaLink(); attachedFiles = []; renderFiles(); }
+    messageScroll.scrollTop = messageScroll.scrollHeight;
+  } catch (error) { toast(error.message); }
+  finally { submitting = false; updateComposerState(); }
+}
+annotationFeedback.addEventListener('focus', updateComposerState);
+annotationFeedback.addEventListener('blur', updateComposerState);
+annotationFeedback.addEventListener('input', updateComposerState);
+annotationFeedback.addEventListener('paste', event => {
+  if (annotationFigmaUrl) return;
+  const pasted = event.clipboardData?.getData('text/plain');
+  if (!pasted) return;
+  for (const match of pasted.matchAll(/https:\/\/(?:www\.)?figma\.com\/[^\s<>"']+/gi)) {
+    const candidate = match[0].replace(/[.,!?;:)\]}]+$/, ''), parsed = parseFigmaLink(candidate);
+    if (!parsed) continue;
+    event.preventDefault();
+    annotationFeedback.setRangeText(pasted.slice(0, match.index) + pasted.slice(match.index + candidate.length), annotationFeedback.selectionStart, annotationFeedback.selectionEnd, 'end');
+    annotationFigmaUrl = parsed.url; $('[data-annotation-figma-label]').textContent = parsed.label;
+    annotationFigmaChip.hidden = false; $('[data-annotation-status]').hidden = true; updateComposerState(); break;
+  }
+});
+$('[data-annotation-figma-remove]').addEventListener('click', () => {
+  annotationFigmaUrl = null; annotationFigmaChip.hidden = true; $('[data-annotation-status]').hidden = false;
+  annotationFeedback.focus(); updateComposerState();
 });
 hit.addEventListener('pointermove', event => {
-  if (!geometry || !composer.hidden) return;
+  if (!geometry || anchor || viewedSnapshot || !active?.terminal) return;
   const p = framePoint(event);
   if (drag) {
     drag.end = tool === 'arrow'
@@ -578,7 +544,7 @@ hit.addEventListener('pointermove', event => {
   } else if (!inFrame(p)) clearShapes();
 });
 hit.addEventListener('pointerdown', event => {
-  if (event.button !== 0 || !geometry || !composer.hidden) return;
+  if (event.button !== 0 || !geometry || anchor || viewedSnapshot || !active?.terminal) return;
   const p = framePoint(event);
   if (tool === 'selection') {
     if (inFrame(p)) probe(p, 'select');
@@ -598,8 +564,8 @@ hit.addEventListener('pointerup', event => {
   openComment(tool === 'arrow' ? { type: tool, start: saved.start, end: saved.end } : { type: tool, rect: r });
 });
 hit.addEventListener('pointercancel', () => { drag = null; clearShapes(); });
-hit.addEventListener('pointerleave', () => { if (!drag && composer.hidden) clearShapes(); });
-async function openCommit(sha) {
+hit.addEventListener('pointerleave', () => { if (!drag && !anchor) clearShapes(); });
+async function openCommit(sha, label = sha.slice(0,7)) {
   if (!active?.project?.slug || !/^[a-f0-9]{40}$/.test(sha)) return;
   try {
     const response = await fetch(`/api/projects/${encodeURIComponent(active.project.slug)}/workspaces`, {
@@ -607,43 +573,29 @@ async function openCommit(sha) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.workspace) throw new Error(data.error || 'Could not open that commit.');
-    const url = new URL(data.workspace.viewerUrl, location.href);
-    url.searchParams.set('source', historyWorkspaceId);
-    url.searchParams.set('mode', 'comment');
-    location.href = url.href;
+    viewedSnapshot = { sha, workspace: data.workspace };
+    await window.DialogueWorkspace.view(data.workspace);
+    $('[data-viewing-build-label]').textContent = `Viewing build ${label}`;
+    $('[data-viewing-build]').hidden = false;
+    clearAnchor(); setMode('comment', false); renderHistory();
   } catch (error) { toast(error.message); }
 }
-function activateCard(target) {
-  if (target.closest('.activity-summary a')) return;
-  if (target.closest('[data-inert]')) return;
-  if (target.closest('[data-card-cancel]')) {
-    draftSelected = false; saveError = ''; renderHistory(); return;
-  }
-  if (target.closest('[data-card-save]')) { saveVersion(); return; }
-  const draftCard = target.closest('[data-draft-card]');
-  if (draftCard) {
-    if (!active?.terminal) location.href = `workspace.html?id=${encodeURIComponent(historyWorkspaceId)}&mode=comment`;
-    else {
-      draftSelected = true;
-      renderHistory();
-      cards.querySelector('[data-draft-card]')?.focus({ preventScroll: true });
-    }
-    return;
-  }
-  const card = target.closest('[data-preview-id]');
-  if (card) openCommit(card.dataset.previewId);
-}
-cards.addEventListener('click', event => activateCard(event.target));
-cards.addEventListener('keydown', event => {
-  if (!['Enter', ' '].includes(event.key) || event.target.closest('button,summary,a')) return;
-  const card = event.target.closest('[data-draft-card],[data-preview-id]');
-  if (card) { event.preventDefault(); activateCard(card); }
+cards.addEventListener('click', event => {
+  const link = event.target.closest('[data-preview-id]');
+  if (link) openCommit(link.dataset.previewId, link.dataset.previewLabel);
+});
+$('[data-return-current]').addEventListener('click', async () => {
+  try {
+    if (active.kind !== 'branch') { location.href = `workspace.html?id=${encodeURIComponent(historyWorkspaceId)}&mode=comment`; return; }
+    await window.DialogueWorkspace.returnToCurrent(); viewedSnapshot = null;
+    $('[data-viewing-build]').hidden = true; setMode('comment', false); renderHistory();
+  } catch (error) { toast(error.message); }
 });
 scroll.addEventListener('scroll', positionComposer);
 new ResizeObserver(updateGeometry).observe(canvas);
 addEventListener('keydown', event => {
   if ($('.review-share-dialog').open) return;
-  if (event.key === 'Escape' && !composer.hidden) { closeComment(); return; }
+  if (event.key === 'Escape') { clearAnchor(); closeMenus(); return; }
   if (event.key.toLowerCase() === 'r' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
     && !event.target.closest('input,textarea,select,[contenteditable],.terminal-pane')) {
     event.preventDefault(); restartPrototype();
@@ -662,3 +614,58 @@ $('[data-copy-local]').addEventListener('click', async () => {
 });
 gridButton();
 setTool('area');
+
+function closeMenus() {
+  $('#attachment-menu').hidden = true; $('[data-figma-input]').hidden = true;
+  $('[data-add-attachment]').setAttribute('aria-expanded', 'false');
+}
+function renderFiles() {
+  $('[data-composer-files]').innerHTML = attachedFiles.map((file, i) => `<span class="composer-file">${esc(file.name)}<button type="button" data-remove-file="${i}" aria-label="Remove ${esc(file.name)}">×</button></span>`).join('');
+  positionComposer();
+}
+$('[data-add-attachment]').addEventListener('click', () => {
+  const menu = $('#attachment-menu'); menu.hidden = !menu.hidden;
+  $('[data-add-attachment]').setAttribute('aria-expanded', String(!menu.hidden));
+});
+$('[data-add-file]').addEventListener('click', () => { closeMenus(); $('[data-file-input]').click(); });
+$('[data-file-input]').addEventListener('change', async event => {
+  addingFiles = true; updateComposerState();
+  try {
+    const next = [...event.target.files];
+    if (attachedFiles.length + next.length > 4 || next.some(f => f.size > 2 * 1024 * 1024) || [...attachedFiles.map(f => f.size), ...next.map(f => f.size)].reduce((a,b) => a+b,0) > 4 * 1024 * 1024) throw new Error('Attach up to four files, 2 MiB each and 4 MiB total.');
+    for (const file of next) {
+      const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(file); });
+      attachedFiles.push({ name: file.name, size: file.size, data });
+    }
+    renderFiles();
+  } catch (error) { toast(error.message || 'Could not read the file.'); }
+  finally { event.target.value = ''; addingFiles = false; updateComposerState(); }
+});
+$('[data-composer-files]').addEventListener('click', event => {
+  const remove = event.target.closest('[data-remove-file]');
+  if (remove) { attachedFiles.splice(Number(remove.dataset.removeFile), 1); renderFiles(); }
+});
+$('[data-add-figma]').addEventListener('click', () => { closeMenus(); $('[data-figma-input]').hidden = false; $('#figma-link').focus(); });
+$('[data-close-figma]').addEventListener('click', closeMenus);
+$('[data-confirm-figma]').addEventListener('click', () => {
+  const parsed = parseFigmaLink($('#figma-link').value.trim());
+  if (!parsed) { toast('Paste a valid Figma design link.'); return; }
+  figmaUrl = parsed.url; figmaLabel.textContent = parsed.label; figmaChip.hidden = false;
+  $('#figma-link').value = ''; closeMenus(); feedback.focus();
+});
+$('#figma-link').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); $('[data-confirm-figma]').click(); } });
+document.addEventListener('click', event => { if (!composer.contains(event.target)) closeMenus(); });
+$('[data-stop-request]').addEventListener('click', async event => {
+  event.target.disabled = true;
+  try {
+    const response = await fetch(`/api/workspaces/${historyWorkspaceId}/requests/stop`, { method: 'POST' });
+    if (!response.ok) throw new Error((await response.json()).error || 'Could not stop the request.');
+    await refreshActivity();
+  } catch (error) { toast(error.message); }
+  finally { event.target.disabled = false; }
+});
+messageScroll.addEventListener('scroll', () => {
+  followsLatest = messageScroll.scrollHeight - messageScroll.scrollTop - messageScroll.clientHeight < 48;
+  $('[data-jump-latest]').hidden = followsLatest;
+});
+$('[data-jump-latest]').addEventListener('click', () => { followsLatest = true; messageScroll.scrollTop = messageScroll.scrollHeight; $('[data-jump-latest]').hidden = true; });
