@@ -45,6 +45,11 @@ export async function writeActivity(file, state, text) {
   const temporary = join(directory, `.${basename(file)}.${randomUUID()}.tmp`);
   const activity = { state, text: text.slice(0, 180), updatedAt: new Date().toISOString() };
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  if (process.env.DIALOGUE_ACTIVITY_DIRECT === '1') {
+    // Isolated workers can write this one mounted sidecar, never its parent.
+    await fs.writeFile(file, JSON.stringify(activity), { mode: 0o600 });
+    return;
+  }
   try {
     await fs.writeFile(temporary, JSON.stringify(activity), { mode: 0o600 });
     await fs.rename(temporary, file);

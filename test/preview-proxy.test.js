@@ -7,6 +7,22 @@ const path = require('node:path');
 
 const { PreviewProxy } = require('../server/preview-proxy.js');
 
+test('static directory indexes and a replaced preview-root symlink cannot expose app files', async t => {
+  const root = await fsp.realpath(await fsp.mkdtemp(path.join(os.tmpdir(), 'dialogue-static-boundary-')));
+  t.after(() => fsp.rm(root, { recursive: true, force: true }));
+  const work = path.join(root, 'work'); const site = path.join(work, 'site'); const outside = path.join(root, 'private');
+  await fsp.mkdir(site, { recursive: true }); await fsp.mkdir(outside); await fsp.mkdir(path.join(site, 'folder'));
+  await fsp.writeFile(path.join(site, 'index.html'), 'safe page'); await fsp.writeFile(path.join(outside, 'index.html'), 'APP SECRET');
+  await fsp.symlink(path.join(outside, 'index.html'), path.join(site, 'folder', 'index.html'));
+  const proxy = new PreviewProxy({ domain: null }); const token = proxy.register('static-boundary', () => ({ kind: 'static', root: site, boundary: work }));
+  const served = await serveProxy(proxy); t.after(() => served.close());
+  const host = `${token}.preview.localhost`;
+  assert.equal((await request(served.port, { host })).body, 'safe page');
+  const index = await request(served.port, { host, path: '/folder/' }); assert.equal(index.status, 404); assert.doesNotMatch(index.body, /APP SECRET/);
+  await fsp.rename(site, path.join(work, 'previous')); await fsp.symlink(outside, site);
+  const swapped = await request(served.port, { host }); assert.equal(swapped.status, 404); assert.doesNotMatch(swapped.body, /APP SECRET/);
+});
+
 // Serve a PreviewProxy on a random port; returns { port, close }.
 function serveProxy(proxy) {
   const server = http.createServer((req, res) => {

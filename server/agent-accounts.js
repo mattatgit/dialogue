@@ -7,13 +7,13 @@ const { AgentAuth } = require('./agent-auth.js');
 // Each account owns its model selection and OMP profile. The owner can retain
 // the existing local profile; other members never inherit its API-key env.
 class AccountAgents extends EventEmitter {
-  constructor({ accounts, context, dataRoot, appRoot }) {
-    super(); Object.assign(this, { accounts, context, dataRoot, appRoot }); this.agents = new Map();
+  constructor({ accounts, context, dataRoot, appRoot, runtime = null }) {
+    super(); Object.assign(this, { accounts, context, dataRoot, appRoot, runtime }); this.agents = new Map();
   }
   current() { return this.forUser(this.context.getStore()?.user.id || this.accounts.ownerId); }
   forUser(id) {
     if (this.agents.has(id)) return this.agents.get(id);
-    const owner = id === this.accounts.ownerId;
+    const owner = id === this.accounts.ownerId && !this.runtime?.isolated;
     const root = owner ? this.dataRoot : path.join(this.dataRoot, 'users', id);
     const env = { DIALOGUE_TMUX_SERVER: `dialogue-${createHash('sha256').update(root).digest('hex').slice(0, 16)}` };
     if (!owner) {
@@ -21,7 +21,7 @@ class AccountAgents extends EventEmitter {
       for (const key of Object.keys(process.env)) if (/(?:API_KEY|API_TOKEN|ACCESS_TOKEN)$/.test(key) || /^(?:OMP_PROFILE|PI_PROFILE|PI_CODING_AGENT_DIR|OMP_CONFIG_DIR|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_CACHE_HOME)$/.test(key)) env[key] = '';
       Object.assign(env, { HOME: home, USERPROFILE: home, OMP_PROFILE: 'default', PI_PROFILE: 'default', PI_CODING_AGENT_DIR: path.join(home, '.omp', 'agent') });
     }
-    const agent = new AgentAuth({ dataRoot: root, appRoot: this.appRoot, env });
+    const agent = new AgentAuth({ dataRoot: root, appRoot: this.appRoot, env, runtime: this.runtime });
     agent.on('ready', value => this.emit('ready', { userId: id, ...value }));
     agent.on('model', () => this.emit('model', id));
     this.agents.set(id, agent); return agent;

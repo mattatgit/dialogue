@@ -32,27 +32,25 @@ Development identities require an explicit development mode, a loopback listener
 
 `dev` uses `http://localhost:8080` by default, sets its public account origin, and preserves it through `browser-sync.config.cjs`. Previews still go directly to the upstream preview port. `npm start` uses the origin in `.env`.
 
-Local passkeys belong to the local RP hostname. Enroll passkeys again on the final deployment hostname; local credentials are not deployment credentials. The selected production app origin is `https://build.idealogue.studio`; its DNS/TLS and mail delivery are not configured yet.
+Local passkeys belong to the local RP hostname. Enroll passkeys again on the final deployment hostname; local credentials are not deployment credentials. The selected production app origin is `https://build.idealogue.studio`; hosting, DNS/TLS, Resend and encrypted infrastructure backups are configured in Setup & install. Application rollout and Linux worker acceptance remain separate launch gates; see `docs/WORKERS.md`.
 
 ## Per-person AI connections and working copies
 
-The existing integration owner retains their local OMP profile and saved model. Other members receive separate OMP homes, model settings and tmux servers under `.dialogue-data/users/<user-id>/`; inherited provider API-key variables are cleared for them. Provider login state and login streams are scoped to the signed-in person. Structured requests record their actor. Preview setup uses the requesting member's model; older projects without that attribution use the owner.
+In local direct mode, the integration owner retains their existing OMP profile and saved model. Production gives every member, including the owner, a separate OMP home and model settings under `.dialogue-data/users/<user-id>/`; inherited provider API keys are excluded. Production terminals have individually isolated tmux sockets. Provider login state and login streams are scoped to the signed-in person. Structured requests record their actor. Preview setup uses the requesting member's model; older projects without that attribution use the owner.
 
 Before an agent, terminal, version save or other working-copy mutation starts, that working copy is reserved to an editor. Another member can view it read-only and work on a different copy in the same repository. An owner or the reserving editor can release it from Settings. Release refuses while a structured request, version save or preview setup is running; it closes the terminal while keeping file changes. Terminal reconnects cannot silently reclaim a released copy. Removing a member also retires their reserved terminals, including persistent tmux sessions.
 
 These reservations are explicit working-copy ownership, **not live presence**. They do not yet implement the proposed automatic unit-level lease or avatar badge. Git branches also remain distinct from the planned named app/site/prototype identities.
 
-Separate credential homes prevent accidental reuse through Dialogue's routing; they are not OS security isolation. Agents and project preview/install processes still run as the service user and need process/filesystem isolation before deploying the shared instance. Authentication alone does not make arbitrary repository code safe.
+Production now requires the namespace/cgroup launcher in `server/workers.js`. Workers cannot mount account/session data, deploy keys or unrelated member homes; installs/previews receive no model credentials. Local direct mode remains convenient for development and does not provide this boundary. Read `docs/WORKERS.md` for the policy, Git/terminal differences and mandatory target-Linux acceptance before launch.
 
 ## Production configuration
 
 The selected app origin is `https://build.idealogue.studio`. At deployment, set `DIALOGUE_ORIGIN=https://build.idealogue.studio` (or Nix `services.dialogue.publicOrigin` to that value), `DIALOGUE_MODE=production` and `NODE_ENV=production`. This also scopes passkeys to `build.idealogue.studio`; keep that hostname stable. Keep the local `.env` on its loopback origin. Configure the owner/member emails, `DIALOGUE_SMTP_URL` (SMTP with required STARTTLS or SMTPS), and `DIALOGUE_MAIL_FROM` in the deployment's private environment file. Production refuses missing origin, owner or mail settings. Mail credentials are captured and removed from the environment before launching child processes.
 
-`preview.idealogue.io` is the planned namespace for future public prototypes, using an individual hostname such as `<share-id>.preview.idealogue.io` per prototype. Public sharing is not implemented: existing working-preview capabilities remain session-bound and must not be repurposed as public links. A preview domain needs wildcard DNS/TLS; choosing a domain does not itself publish a prototype.
+`preview.idealogue.studio` is the configured preview namespace, with an individual `<token>.preview.idealogue.studio` origin. This supersedes the earlier `.io` plan. Both origins are same-site: retain host-only cookies and exact Origin checks. Public sharing is not implemented; working-preview capabilities remain session-bound.
 
-Matt manages DNS for both domains at iwantmyname. Verify supported DNS automation and credential scope when implementing wildcard certificate renewal; if needed, delegate only ACME validation to an automation-capable DNS zone rather than moving the domains. Standard app HTTPS can use HTTP validation. See [Let’s Encrypt challenge types](https://letsencrypt.org/docs/challenge-types/). DNS records and certificate renewal have not been configured.
-
-The Nix package installs pinned npm dependencies with a fixed dependency hash. The NixOS module defaults to production and exposes `publicOrigin`; `development` is an explicit loopback-only demo option. Keep preview DNS/TLS, backups, process isolation and real email/passkey device verification on the deployment checklist. Do not expose the developer server publicly.
+Setup & install owns the configured hosting, iwantmyname DNS, HTTPS, Resend and encrypted infrastructure backups. It must install the worker user-service/slice contract, service-specific private app environment and consistent application backup coverage described in `docs/WORKERS.md`. The existing NixOS system-service module does not satisfy the new production worker contract. Keep real email/passkey device checks, hosted two-member workflows and a tested application restore on the launch checklist.
 
 ## Testing
 

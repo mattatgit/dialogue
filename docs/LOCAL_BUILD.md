@@ -74,7 +74,7 @@ Install dependencies with `npm ci` and configure the private `.env` account sett
 
 The **Create a prototype** modal accepts a pasted Figma design/file link in its second field and turns it into a removable chip. In Comment mode, a Figma link pasted anywhere in the message becomes a separate removable chip while the surrounding prose remains. Both submit `figmaUrl` with the feedback. Dialogue reads the file outline or selected node using its server-only `FIGMA_ACCESS_TOKEN`, stages design JSON outside the checkout for the agent, and lets a running request inspect deeper frame nodes on demand. For nodes configured for SVG or PNG export in that snapshot or an inspected frame, the agent can fetch the actual binary at Figma's configured scale through a short-lived URL; it then decides which downloaded assets to add to the worktree. Nothing is exported solely by pasting a link. If the token is missing or Figma denies access, the request is rejected with a specific error; the link alone is not treated as a connected design.
 
-Closing the tab does not end the agent: the omp session lives in tmux and reattaches when the workspace is reopened. Opening a **tag** or commit directly starts in full-width Interact mode with no terminal. Opening a historical card from Activity instead keeps Comment selected with the read-only preview; selecting the current build returns to the live branch in Comment mode, where its tag is green rather than the historical preview's blue.
+Closing the tab does not end the agent: the omp session lives in tmux and reattaches when the workspace is reopened. Production terminal workers stop on service restart or after one hour; local direct-mode sessions retain their existing restart behavior. Opening a **tag** or commit directly starts in full-width Interact mode with no terminal. Opening a historical card from Activity instead keeps Comment selected with the read-only preview; selecting the current build returns to the live branch in Comment mode, where its tag is green rather than the historical preview's blue.
 
 Deleting a workspace (`DELETE /api/workspaces/:id`) stops its terminal and preview server and removes the worktree; the bare mirror and the remote are untouched.
 
@@ -89,19 +89,19 @@ Deleting a workspace (`DELETE /api/workspaces/:id`) stops its terminal and previ
 
 Each workspace's preview is served on its own browser origin (`<token>.preview.localhost:<port>`), separate from Dialogue's, so prototype JavaScript cannot reach Dialogue's session, storage or pages; the iframe sandbox therefore allows same-origin behaviour for the prototype itself. `*.localhost` resolves to loopback in current browsers, so this works on one machine and through the VM's forwarded port; other machines need `services.dialogue.previewDomain` with wildcard DNS.
 
-This is **not yet the final production security boundary**: preview servers run the repository's own install/start commands, and the agent runs, with the Dialogue process's own privileges.
+Local direct mode runs repository commands with the developer's privileges. Production instead requires Bubblewrap namespaces and bounded systemd user scopes, verified before startup. See `docs/WORKERS.md` for the filesystem/process boundary, shared networking, resource policy and host acceptance gate.
 
-The planned production addresses retain separate app and prototype origins:
+The configured production addresses retain separate app and prototype origins:
 
 - trusted app: `build.idealogue.studio`
-- untrusted prototype code: `<token>.preview.idealogue.io`
+- untrusted prototype code: `<token>.preview.idealogue.studio`
 
 ## Known limitations
 
-- accounts protect the app and terminal; real deployment still requires HTTPS/mail settings and process isolation
+- accounts protect the app and terminal; production requires the Linux worker contract and target acceptance in `docs/WORKERS.md`
 - the terminal is the raw omp TUI in an xterm.js pane, not a designed conversation UI
 - developer shortcuts are loopback-only; the VM has an explicit local development mode
-- omp is authenticated through `OPENROUTER_API_KEY` in `.env` (dev and VM) or by signing in under Settings → AI model (or `/login` in the terminal). Git push uses the generated deploy key; the private key lives unencrypted in `.dialogue-data/keys/` and is readable by the agent process
+- omp is authenticated through `OPENROUTER_API_KEY` in `.env` (dev and VM) or by signing in under Settings → AI model (or `/login` in the terminal). Git push uses the generated deploy key; the private key lives unencrypted in `.dialogue-data/keys/` and remains outside isolated production workers
 - one shared workspace supports owner/editor accounts; named units, live presence and private-project access are still planned
 - no public sharing implementation
 - screenshots exist only for commits whose preview has run (setup, opened workspaces, default-branch refresh); other tiles show the default branch's image

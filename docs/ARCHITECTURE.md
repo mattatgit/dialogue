@@ -2,7 +2,7 @@
 
 This document records the current architecture direction. It distinguishes the **lightweight development architecture being built now** from the likely **production architecture later**.
 
-The production decision is intentionally deferred until the core Dialogue workflow has been proven with a real designer-driven change made through the embedded agent.
+The private pilot targets BinaryLane Ubuntu 24.04 (2 vCPUs / 4 GB). Setup & install owns deployment; the application-side execution policy and host contract are in `docs/WORKERS.md`. The development architecture below remains useful for local work.
 
 ## Architectural principles that remain stable
 
@@ -26,7 +26,13 @@ The implementation described below still uses a repository/ref workspace and a r
 
 ### Account implementation
 
-The accounts branch adds a transactional SQLite identity store (`server/accounts.js`), HTTP account routes, passkey verification through pinned SimpleWebAuthn, and SMTP delivery through pinned Nodemailer. It provides invitation-only accounts, one shared workspace, hashed persistent sessions and same-origin authorization. Browser preview capabilities are session-bound. OMP model selection, member credential homes and tmux servers are routed per person; the owner retains the existing local profile. Temporary per-working-copy reservations protect shared editable state and terminal sessions, without claiming live presence or implementing named units. See `docs/ACCOUNTS.md` for configuration, security boundaries and test fixtures.
+The accounts branch adds a transactional SQLite identity store (`server/accounts.js`), HTTP account routes, passkey verification through pinned SimpleWebAuthn, and SMTP delivery through pinned Nodemailer. It provides invitation-only accounts, one shared workspace, hashed persistent sessions and same-origin authorization. Browser preview capabilities are session-bound. OMP model selection, member credential homes and tmux servers are routed per person; the owner retains the existing profile only in local direct mode. Temporary per-working-copy reservations protect shared editable state and terminal sessions, without claiming live presence or implementing named units. See `docs/ACCOUNTS.md` for configuration, security boundaries and test fixtures.
+
+### Production worker boundary
+
+`server/workers.js` is the common launcher for structured agents, setup, installs, preview servers, provider RPC, terminals and screenshots. Production startup proves a real Bubblewrap namespace and kernel cgroup limits before listening. Each worker sees its selected working copy and public tools, with read-only Git metadata; only agent/provider/terminal workers receive their member's private model home. The trusted app performs Git publication. A bounded FIFO admission queue reserves at most 2048 MiB across workers, with per-class concurrency, memory, CPU, task and lifetime ceilings. Worker scopes bind to the app user service, and shutdown/cancellation stops descendants before capacity is released.
+
+`server/project-files.js` verifies opened Linux descriptors and bounds reads when the app handles project-controlled files. Static previews stream verified descriptors. Worker networking remains shared with the host; this is a process/filesystem boundary, not network isolation. Development uses direct processes, while production has no direct fallback. See `docs/WORKERS.md` for precise mounts, limits, terminal lifetime/Git differences, disk controls, backup requirements and required Linux validation.
 
 ### Existing implementation
 

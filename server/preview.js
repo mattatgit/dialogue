@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const { readProjectFile } = require('./project-files.js');
 
 const execFileAsync = promisify(execFile);
 const WIDTH = 370;
@@ -44,8 +45,9 @@ function findChromium() {
 }
 
 class PreviewRenderer {
-  constructor(root) {
+  constructor(root, { runtime = null } = {}) {
     this.root = root;
+    this.runtime = runtime;
     this.chromium = findChromium();
     this.queue = Promise.resolve(); // one Chromium at a time
   }
@@ -82,19 +84,24 @@ class PreviewRenderer {
   }
 
   async render(url, files) {
+    if (!this.runtime && (process.env.DIALOGUE_MODE === 'production' || process.env.NODE_ENV === 'production')) throw new PreviewError('Production screenshots require the isolated worker runtime.');
     const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'dialogue-preview-'));
     try {
       const out = path.join(tmp, 'shot.png');
-      await execFileAsync(this.chromium, [
+      const args = [
         '--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
         `--user-data-dir=${path.join(tmp, 'profile')}`, `--window-size=${WIDTH},${HEIGHT}`, `--screenshot=${out}`,
         '--virtual-time-budget=5000', url
-      ], { timeout: RENDER_TIMEOUT_MS, env: { ...process.env, HOME: tmp } });
+      ];
+      if (this.runtime) await this.runtime.run(this.chromium, args, { cwd: tmp, timeout: RENDER_TIMEOUT_MS, env: { ...process.env, HOME: tmp } }, { kind: 'browser' });
+      else await execFileAsync(this.chromium, args, { timeout: RENDER_TIMEOUT_MS, env: { ...process.env, HOME: tmp } });
+      const image = await readProjectFile(tmp, out, 16 * 1024 * 1024);
+      if (!image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new PreviewError('The screenshot is not a PNG image.');
       for (const file of files) {
         await fsp.mkdir(path.dirname(file), { recursive: true });
         // copy to a sibling then rename: readers never see a half-written file,
         // and tmp may be on another filesystem.
-        await fsp.copyFile(out, `${file}.tmp`);
+        await fsp.writeFile(`${file}.tmp`, image);
         await fsp.rename(`${file}.tmp`, file);
       }
     } catch (error) {
