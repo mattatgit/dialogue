@@ -3,11 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const vm = require('node:vm');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { EventEmitter } = require('node:events');
-const { Workers, WorkerBudget, workerConfig, killWorker, PROFILES } = require('../server/workers.js');
+const { Workers, WorkerBudget, workerConfig, killWorker, isolationProbe, PROFILES } = require('../server/workers.js');
 const { readProjectFile } = require('../server/project-files.js');
 const { Runner } = require('../server/runner.js');
 const { Accounts, accountConfig } = require('../server/accounts.js');
@@ -33,6 +34,66 @@ function mounts(plan) {
   for (let i = 0; i < plan.args.length; i++) if (['--bind', '--ro-bind'].includes(plan.args[i])) entries.push({ mode: plan.args[i], source: plan.args[i + 1], target: plan.args[i + 2] });
   return entries;
 }
+
+// Execute the same serialized function used by assertReady, against procfs
+// fixtures. These are regression tests, not claims of actual Linux isolation.
+function probeFixture({ own = 'pid:[200]', init = own, visible = [], noNewPrivs = 1 } = {}) {
+  const source = `(${isolationProbe.toString()})('/private/canary', 'pid:[100]');`;
+  const reads = [], output = [];
+  const procfs = {
+    existsSync: file => visible.includes(file),
+    readFileSync(file) {
+      reads.push(file);
+      if (file === '/proc/self/status') return `NoNewPrivs:\t${noNewPrivs}\n`;
+      if (file === '/proc/1/cmdline') return `bwrap\0--\0node\0-e\0${source}`;
+      throw new Error(`Unexpected procfs read: ${file}`);
+    },
+    readlinkSync(file) {
+      reads.push(file);
+      if (file === '/proc/self/ns/pid') return own;
+      if (file === '/proc/1/ns/pid') return init;
+      throw new Error(`Unexpected namespace read: ${file}`);
+    }
+  };
+  const context = {
+    require: name => { assert.equal(name, 'node:fs'); return procfs; },
+    process: { exit: code => { throw Object.assign(new Error('probe exit'), { code }); }, stdin: { resume() {}, on() {} } },
+    console: { log: value => output.push(value) }
+  };
+  return { source, procfs, reads, output, run: () => vm.runInNewContext(source, context, { timeout: 1000 }) };
+}
+
+test('namespace probe accepts isolated bwrap PID 1 even when its argv contains the probe source', () => {
+  const fixture = probeFixture();
+  assert.ok(fixture.procfs.readFileSync('/proc/1/cmdline').includes('systemd'));
+  fixture.reads.length = 0;
+  fixture.run();
+  assert.deepEqual(fixture.output, ['isolated']);
+  assert.ok(!fixture.reads.includes('/proc/1/cmdline'));
+  assert.ok(fixture.reads.includes('/proc/self/ns/pid'));
+  assert.ok(fixture.reads.includes('/proc/1/ns/pid'));
+});
+
+test('namespace probe refuses a worker that still shares the parent PID namespace', () => {
+  const fixture = probeFixture({ own: 'pid:[100]' });
+  assert.throws(fixture.run, { code: 13 });
+  assert.deepEqual(fixture.output, []);
+});
+
+test('namespace probe refuses procfs whose PID 1 belongs to another namespace', () => {
+  const fixture = probeFixture({ init: 'pid:[100]' });
+  assert.throws(fixture.run, { code: 13 });
+  assert.deepEqual(fixture.output, []);
+});
+
+test('namespace probe still refuses exposed private files and missing no-new-privileges', () => {
+  for (const file of ['/private/canary', '/etc/dialogue/mail.env', '/run/systemd', '/sys/fs/cgroup']) {
+    const fixture = probeFixture({ visible: [file] });
+    assert.throws(fixture.run, { code: 11 });
+    assert.deepEqual(fixture.output, []);
+  }
+  assert.throws(probeFixture({ noNewPrivs: 0 }).run, { code: 12 });
+});
 
 test('production cannot disable isolation, run on unsupported hosts, or silently misconfigure limits', () => {
   assert.equal(workerConfig({ DIALOGUE_MODE: 'production' }, 'linux').isolated, true);

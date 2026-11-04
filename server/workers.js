@@ -107,6 +107,20 @@ async function spawnWorker(runtime, bin, args, options, policy = {}) {
   return spawn(bin, args, options);
 }
 
+// Serialized into the worker so the check executes inside its namespaces.
+// Compare kernel namespace identities: PID 1's argv can contain this probe's
+// own source (including 'systemd') when Bubblewrap is the namespace init.
+function isolationProbe(canary, parentPidNamespace) {
+  const fs = require('node:fs');
+  if (fs.existsSync(canary) || fs.existsSync('/etc/dialogue/mail.env') || fs.existsSync('/run/systemd') || fs.existsSync('/sys/fs/cgroup')) process.exit(11);
+  if (!/NoNewPrivs:\s+1/.test(fs.readFileSync('/proc/self/status', 'utf8'))) process.exit(12);
+  const ownPidNamespace = fs.readlinkSync('/proc/self/ns/pid');
+  if (ownPidNamespace === parentPidNamespace || fs.readlinkSync('/proc/1/ns/pid') !== ownPidNamespace) process.exit(13);
+  process.stdin.resume();
+  process.stdin.on('end', () => process.exit(0));
+  console.log('isolated');
+}
+
 class Workers {
   constructor({ dataRoot, appRoot, config = workerConfig(), execute = exec, spawnProcess = spawn }) {
     this.dataRoot = path.resolve(dataRoot); this.appRoot = path.resolve(appRoot); this.config = config;
@@ -300,13 +314,16 @@ class Workers {
     this.ready = true;
     let child;
     try {
-      const code = `const fs=require('node:fs');if(fs.existsSync(${JSON.stringify(canary)})||fs.existsSync('/etc/dialogue/mail.env')||fs.existsSync('/run/systemd')||fs.existsSync('/sys/fs/cgroup'))process.exit(11);if(!/NoNewPrivs:\\s+1/.test(fs.readFileSync('/proc/self/status','utf8')))process.exit(12);if(fs.readFileSync('/proc/1/cmdline','utf8').includes('systemd'))process.exit(13);process.stdin.resume();process.stdin.on('end',()=>process.exit(0));console.log('isolated');`;
+      const parentPidNamespace = await fsp.readlink('/proc/self/ns/pid');
+      const code = `(${isolationProbe.toString()})(${JSON.stringify(canary)},${JSON.stringify(parentPidNamespace)});`;
       child = await this.spawn(process.execPath, ['-e', code], { cwd, env: {}, stdio: ['pipe', 'pipe', 'pipe'] }, { kind: 'control' });
       await new Promise((resolve, reject) => {
+        let stderr = '';
+        child.stderr.on('data', data => { stderr = (stderr + data).slice(-2048); });
         const timer = setTimeout(() => reject(new Error('Namespace probe did not start.')), 10000);
         child.stdout.once('data', data => { clearTimeout(timer); if (String(data).trim() === 'isolated') resolve(); else reject(new Error('Unexpected namespace probe result.')); });
         child.once('error', error => { clearTimeout(timer); reject(error); });
-        child.once('close', () => { clearTimeout(timer); reject(new Error('Namespace probe exited early.')); });
+        child.once('close', (code, signal) => { clearTimeout(timer); reject(new Error(`Namespace probe exited early (${signal || code})${stderr.trim() ? ': ' + stderr.trim() : '.'}`)); });
       });
       const { stdout: groupOutput } = await this.execute(this.config.systemctl, ['--user', 'show', child.workerUnit, '-p', 'ControlGroup'], { env: this.supervisorEnv(), timeout: 5000 });
       const group = groupOutput.trim().replace(/^ControlGroup=/, '');
@@ -345,4 +362,4 @@ class Workers {
     }));
   }
 }
-module.exports = { Workers, WorkerBudget, WorkerError, workerConfig, spawnWorker, killWorker, PROFILES, MiB };
+module.exports = { Workers, WorkerBudget, WorkerError, workerConfig, spawnWorker, killWorker, isolationProbe, PROFILES, MiB };
