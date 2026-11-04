@@ -236,6 +236,10 @@ class Workers {
       PI_CODING_AGENT_DIR: `${home}/.omp/agent`, OMP_PROFILE: 'default', PI_PROFILE: 'default',
       GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0',
       DIALOGUE_ACTIVITY_DIRECT: '1', NODE_OPTIONS: '--max-old-space-size=512', PWD: cwd };
+    // Native OMP embeds Bun/JSC, not V8. Fixed low-memory GC hints complement
+    // (never replace) the kernel ceiling, and cannot be supplied by a project.
+    baseEnv.BUN_OPTIONS = '--smol';
+    baseEnv.BUN_JSC_forceRAMSize = String(Math.max(64, Math.floor(profile.memory / 2)) * MiB);
     for (const [key, value] of Object.entries(baseEnv)) argv.push('--setenv', key, value);
     // Hard rlimits cannot be raised by descendants after capabilities are dropped.
     argv.push('--chdir', cwd, '--', this.config.prlimit, '--fsize=268435456:268435456', '--nofile=1024:1024', '--core=0:0', '--', bin, ...args);
@@ -367,18 +371,27 @@ class Workers {
     }
   }
   async run(bin, args, options, policy) {
-    const child = await this.spawn(bin, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] }, policy);
+    const { timeout: requestedTimeout, ...spawnOptions } = options;
+    const child = await this.spawn(bin, args, { ...spawnOptions, stdio: ['ignore', 'pipe', 'pipe'] }, policy);
     return new Promise((resolve, reject) => {
       let stdout = '', stderr = '';
       child.stdout.on('data', data => { stdout = (stdout + data).slice(-65536); });
       child.stderr.on('data', data => { stderr = (stderr + data).slice(-65536); });
-      const timer = setTimeout(() => killWorker(child, 'SIGKILL'), options.timeout || 30000);
+      let timedOut = false;
+      const timeout = requestedTimeout || 30000;
+      const timer = setTimeout(() => { timedOut = true; killWorker(child, 'SIGKILL'); }, timeout);
       child.once('error', error => { clearTimeout(timer); reject(error); });
-      child.once('close', async code => {
+      child.once('close', async (code, signal) => {
         clearTimeout(timer);
         try {
           await child.workerFinished;
-          if (code !== 0) reject(new WorkerError(`Worker exited (${code}): ${stderr.slice(-1000)}`));
+          if (code !== 0 || timedOut) {
+            const kind = policy?.kind || 'agent';
+            const detail = timedOut ? `timed out after ${timeout} ms` : signal ? `terminated on ${signal}` : `exited with code ${code}`;
+            const error = new WorkerError(`Worker ${detail} (${kind}, ${PROFILES[kind].memory} MiB limit)${stderr.trim() ? ': ' + stderr.trim().slice(-1000) : '.'}`);
+            Object.assign(error, { code, signal, timedOut, kind, memoryMiB: PROFILES[kind].memory });
+            reject(error);
+          }
           else resolve({ stdout, stderr });
         } catch (error) { reject(error); }
       });

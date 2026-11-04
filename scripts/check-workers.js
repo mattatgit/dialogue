@@ -8,10 +8,11 @@ const assert = require('node:assert/strict');
 const { promisify } = require('node:util');
 const { execFile } = require('node:child_process');
 const { once } = require('node:events');
-const { Workers, workerConfig, killWorker } = require('../server/workers.js');
+const { Workers, workerConfig, killWorker, PROFILES } = require('../server/workers.js');
 const { PreviewRenderer } = require('../server/preview.js');
 const { readProjectFile } = require('../server/project-files.js');
 const { sessionArgs, readReply } = require('../server/conversation.js');
+const { AgentAuth } = require('../server/agent-auth.js');
 const exec = promisify(execFile);
 
 async function workerReady(child) {
@@ -85,11 +86,25 @@ async function main() {
     await fs.writeFile(extension, `export default function(pi){pi.registerProvider('dialogue-check',{baseUrl:'http://127.0.0.1:${provider.address().port}/v1',apiKey:'fake-local-only',api:'openai-completions',models:[{id:'fake',name:'Check',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:128000,maxTokens:1000}]});}`);
     for (let turn = 0; turn < 2; turn++) {
       const args = ['-p', '--no-tools', '--no-skills', '--no-rules', '--no-extensions', '-e', extension, '-e', path.resolve(__dirname, '../omp/conversation.js'), ...await sessionArgs(sessionDir, turn > 0), '--model', 'dialogue-check/fake', turn ? 'Explain the earlier decision.' : 'Remember the cobalt penguin decision.'];
-      await runtime.run(process.env.DIALOGUE_OMP || 'omp', args, { cwd: dir, env: { DIALOGUE_REPLY_FILE: replyFile }, timeout: 30000 }, { ...policy, home: turn ? otherHome : home });
+      const started = Date.now();
+      try {
+        await runtime.run(process.env.DIALOGUE_OMP || 'omp', args, { cwd: dir, env: { DIALOGUE_REPLY_FILE: replyFile }, timeout: 30000 }, { ...policy, home: turn ? otherHome : home });
+      } catch (error) { throw new Error(`Native conversation turn ${turn + 1} failed after ${Date.now() - started} ms (${modelCalls.length} provider calls): ${error.message}`); }
       assert.ok((await readReply(replyFile))?.text.includes('complete user-facing reply'));
     }
     assert.ok(JSON.stringify(modelCalls.at(-1).messages).includes('Remember the cobalt penguin decision.'));
     console.log('PASS: real isolated OMP retains branch conversation and complete replies across member homes');
+    // --version does not initialize the provider/RPC runtime. Exercise the
+    // actual Settings catalog path with disposable credentials under its cap.
+    const extensions = path.join(home, '.omp', 'agent', 'extensions');
+    await fs.mkdir(extensions, { recursive: true });
+    await fs.copyFile(extension, path.join(extensions, 'acceptance-provider.js'));
+    const auth = new AgentAuth({ dataRoot: path.dirname(home), appRoot: path.resolve(__dirname, '..'), env: { HOME: home }, runtime });
+    let models;
+    try { models = await auth.models(); }
+    catch (error) { throw new Error(`Native provider RPC failed under its ${PROFILES.control.memory} MiB limit: ${error.message}`); }
+    assert.ok(models.some(model => model.id === 'dialogue-check/fake'));
+    console.log('PASS: real isolated provider RPC initializes and lists a model under the control memory limit');
     provider.close(); provider = null;
     const survivor = await runtime.spawn(process.execPath, ['-e', `require('child_process').spawn('/bin/sleep',['60'],{detached:true,stdio:'ignore'}).unref();console.log('spawned');setInterval(()=>{},1000);`], { cwd: dir, env: {}, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'agent', home });
     await workerReady(survivor); const closed = once(survivor, 'close'); await killWorker(survivor, 'SIGKILL'); await closed;

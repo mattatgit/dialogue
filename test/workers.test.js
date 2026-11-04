@@ -130,6 +130,30 @@ test('queue capacity is bounded and shutdown releases pending callers', async ()
   await assert.rejects(budget.acquire('install'), /busy/); budget.close(); await pending; release();
 });
 
+test('native Bun GC settings are fixed per worker ceiling and cannot inherit project overrides', async t => {
+  const f = await fixture(t);
+  for (const kind of ['agent', 'control', 'terminal', 'preview', 'install']) {
+    const plan = f.runtime.plan('/usr/bin/omp', [], { cwd: f.dir, env: { BUN_OPTIONS: '--eval=private', BUN_JSC_forceRAMSize: '99999999999' } }, { kind, home: f.home }, 'dialogue-test.scope');
+    const values = new Map();
+    for (let i = 0; i < plan.args.length; i++) if (plan.args[i] === '--setenv') values.set(plan.args[i + 1], plan.args[i + 2]);
+    assert.equal(values.get('BUN_OPTIONS'), '--smol');
+    assert.equal(values.get('BUN_JSC_forceRAMSize'), String(Math.max(64, Math.floor(PROFILES[kind].memory / 2)) * 1024 * 1024));
+    assert.ok(!plan.args.includes('--eval=private'));
+    assert.ok(plan.args.includes(`--property=MemoryMax=${PROFILES[kind].memory}M`));
+  }
+});
+
+test('worker failures distinguish signals, timeouts and exit codes without losing cleanup', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dialogue-worker-errors-'));
+  const runtime = new Workers({ dataRoot: dir, appRoot: dir, config: workerConfig({ DIALOGUE_MODE: 'test' }) });
+  t.after(async () => { await runtime.shutdown(); await fs.rm(dir, { recursive: true, force: true }); });
+  const run = (source, timeout = 5000) => runtime.run(process.execPath, ['-e', source], { cwd: dir, timeout }, { kind: 'control' });
+  await assert.rejects(run("process.kill(process.pid,'SIGTERM')"), e => e.signal === 'SIGTERM' && !e.timedOut && /terminated on SIGTERM/.test(e.message));
+  await assert.rejects(run('setInterval(()=>{},1000)', 30), e => e.signal === 'SIGKILL' && e.timedOut && /timed out after 30 ms/.test(e.message));
+  await assert.rejects(run("process.stderr.write('x'.repeat(2000));process.exit(7)"), e => e.code === 7 && !e.timedOut && e.message.length < 1200);
+  assert.equal(runtime.budget.active.size, 0);
+});
+
 test('agent policy exposes only its selected checkout, own home and read-only Git metadata', async t => {
   const f = await fixture(t);
   const snapshot = path.join(f.data, 'requests', '.figma-snapshots', 'one.json'); await fs.mkdir(path.dirname(snapshot), { recursive: true }); await fs.writeFile(snapshot, '{}');
