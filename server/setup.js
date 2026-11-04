@@ -6,12 +6,15 @@
 // heavy). Node builtins only.
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const { execFile, spawn } = require('node:child_process');
+const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { EventEmitter } = require('node:events');
 
 const { RECIPE_PATH, guessStaticRecipe, parseRecipe } = require('./recipe.js');
 const { Runner } = require('./runner.js');
+const { spawnWorker, killWorker } = require('./workers.js');
+const { readProjectFile } = require('./project-files.js');
+const readRecipe = dir => readProjectFile(dir, path.join(dir, RECIPE_PATH)).then(bytes => bytes.toString('utf8')).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
 
 const APP_ROOT = path.resolve(__dirname, '..');
 const AGENT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -58,11 +61,13 @@ class PreviewSetup extends EventEmitter {
     configPath = path.join(APP_ROOT, 'omp', 'config.yml'),
     promptPath = path.join(APP_ROOT, 'omp', 'preview-setup-prompt.md'),
     env = {},
-    maxAttempts = 3,
+    maxAttempts = 3, runtime = null,
     createRunner = (options) => new Runner(options)
   }) {
     super();
     Object.assign(this, { projects, repoFor, agent, agentFor, reserveWorkspace, previews, screenshot, setupRoot, ompBin, configPath, promptPath, env, maxAttempts, createRunner });
+    this.runtime = runtime;
+    this.logBytes = new Map();
     this.queue = Promise.resolve();
     this.pending = new Set(); // "<kind>:<slug>" queued or running
     this.waiting = new Set(); // slugs parked until the agent is ready
@@ -105,12 +110,20 @@ class PreviewSetup extends EventEmitter {
     this.pending.add(key);
     this.queue = this.queue
       .then(job)
-      .catch((error) => console.error(`Preview ${kind} for ${slug} failed: ${error.stack || error.message}`))
+      .catch(async (error) => {
+        console.error(`Preview ${kind} for ${slug} failed: ${error.stack || error.message}`);
+        if (kind === 'setup') await this.projects.setPreviewSetup(slug, { status: 'failed', error: error.message, finishedAt: new Date().toISOString() }).catch(() => {});
+      })
       .finally(() => this.pending.delete(key));
   }
 
   async log(slug, text) {
-    await fsp.appendFile(this.logFile(slug), text.endsWith('\n') ? text : `${text}\n`);
+    const current = this.logBytes.get(slug) || 0;
+    const remaining = 4 * 1024 * 1024 - current;
+    if (remaining <= 0) return;
+    const bytes = Buffer.from(text.endsWith('\n') ? text : `${text}\n`).subarray(0, remaining);
+    this.logBytes.set(slug, current + bytes.length);
+    await fsp.appendFile(this.logFile(slug), bytes);
   }
 
   async runSetup(slug) {
@@ -118,6 +131,7 @@ class PreviewSetup extends EventEmitter {
     const agent = this.agentFor(project);
     await fsp.mkdir(this.dir(slug), { recursive: true });
     await fsp.writeFile(this.logFile(slug), '');
+    this.logBytes.set(slug, 0);
     const repo = await this.repoFor(slug);
     let place;
     try { place = await this.workplace(repo, slug); }
@@ -126,7 +140,7 @@ class PreviewSetup extends EventEmitter {
 
     // A recipe already in the repository gets checked before any agent run.
     let failure = null;
-    const existing = await fsp.readFile(path.join(place.dir, RECIPE_PATH), 'utf8').catch(() => null);
+    const existing = await readRecipe(place.dir);
     if (existing !== null) {
       await this.log(slug, `== Checking the recipe already in the repository`);
       failure = await this.validate(slug, place.dir);
@@ -160,7 +174,7 @@ class PreviewSetup extends EventEmitter {
         failure = { step: 'agent', exitCode: agentRun.exitCode, message: 'The agent stopped with an error.', log: tail(agentRun.output) };
         continue;
       }
-      recipeText = await fsp.readFile(path.join(place.dir, RECIPE_PATH), 'utf8').catch(() => null);
+      recipeText = await readRecipe(place.dir);
       failure = await this.validate(slug, place.dir);
       if (!failure) return this.succeed(slug, repo, place, attempt);
     }
@@ -210,23 +224,22 @@ class PreviewSetup extends EventEmitter {
     const moved = await fsp.rename(envFile, hidden).then(() => true, () => false);
     try {
       const args = ['-p', '--approval-mode', 'yolo', '--config', this.configPath, ...agent.ompArgs(), prompt];
-      return await new Promise((resolve) => {
-        const child = spawn(this.ompBin, args, {
+      const child = await spawnWorker(this.runtime, this.ompBin, args, {
           cwd: dir,
           env: { ...process.env, ...this.env, ...agent.ompEnv() },
           stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: AGENT_TIMEOUT_MS,
-          killSignal: 'SIGKILL'
-        });
+        }, { kind: 'agent', home: agent.ompEnv().HOME, signal: agent.abort?.signal });
+      return await new Promise((resolve) => {
+        const timer = setTimeout(() => killWorker(child, 'SIGKILL'), AGENT_TIMEOUT_MS);
         let output = '';
         const collect = (chunk) => {
-          output += chunk;
+          output = (output + chunk).slice(-65536);
           this.log(slug, String(chunk)).catch(() => {});
         };
         child.stdout.on('data', collect);
         child.stderr.on('data', collect);
-        child.on('error', (error) => resolve({ exitCode: -1, output: `${output}\n${error.message}` }));
-        child.on('close', (code) => resolve({ exitCode: code ?? -1, output }));
+        child.on('error', (error) => { clearTimeout(timer); resolve({ exitCode: -1, output: `${output}\n${error.message}` }); });
+        child.on('close', (code) => { clearTimeout(timer); resolve({ exitCode: code ?? -1, output }); });
       });
     } finally {
       if (moved) await fsp.rename(hidden, envFile).catch(() => {});
@@ -236,7 +249,7 @@ class PreviewSetup extends EventEmitter {
   // Run the recipe like a workspace would, screenshot it, stop it. Returns
   // null on success or a failure { step, exitCode, message, log }.
   async validate(slug, dir, shotFile = this.shotFile(slug)) {
-    const text = await fsp.readFile(path.join(dir, RECIPE_PATH), 'utf8').catch(() => null);
+    const text = await readRecipe(dir);
     if (text === null) return { step: 'recipe', exitCode: null, message: `${RECIPE_PATH} was not written.`, log: '' };
     const parsed = parseRecipe(text);
     if (!parsed.ok) return { step: 'recipe', exitCode: null, message: parsed.error, log: '' };
@@ -244,7 +257,7 @@ class PreviewSetup extends EventEmitter {
     // Previews run in every branch checkout, so they must not leave changes
     // there (a generated lockfile would show up as uncommitted work).
     const before = await checkoutChanges(dir);
-    const runner = this.createRunner({ dir, recipe: parsed.recipe, stampDir: path.join(this.dir(slug), 'stamps', path.basename(dir)) });
+    const runner = this.createRunner({ dir, runtime: this.runtime, recipe: parsed.recipe, stampDir: path.join(this.dir(slug), 'stamps', path.basename(dir)) });
     runner.on('log', (line) => this.log(slug, line).catch(() => {}));
     try {
       await runner.start();

@@ -21,6 +21,7 @@ buildNpmPackage {
     fileset = lib.fileset.unions [
       ../server.js
       ../server
+      ../scripts
       ../omp
       ../css
       ../js

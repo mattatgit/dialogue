@@ -8,6 +8,7 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const { Accounts, AccountError, accountConfig, mailer } = require('./server/accounts.js');
 const { accountHttp } = require('./server/account-http.js');
 const { AccountAgents } = require('./server/agent-accounts.js');
+const { Workers, WorkerError, workerConfig } = require('./server/workers.js');
 
 const git = require('./server/git.js');
 const { DeployKeys, classifyPushError, hostingSetup, pushUrl } = require('./server/deploy-key.js');
@@ -34,7 +35,8 @@ delete process.env.FIGMA_ACCESS_TOKEN;
 const ROOT = __dirname;
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4173);
-const DATA_ROOT = path.resolve(process.env.DIALOGUE_DATA || path.join(ROOT, '.dialogue-data'));
+fs.mkdirSync(path.resolve(process.env.DIALOGUE_DATA || path.join(ROOT, '.dialogue-data')), { recursive: true, mode: 0o700 });
+const DATA_ROOT = fs.realpathSync(path.resolve(process.env.DIALOGUE_DATA || path.join(ROOT, '.dialogue-data')));
 const identityContext = new AsyncLocalStorage();
 const accountsConfig = accountConfig();
 const accounts = new Accounts({ dataRoot: DATA_ROOT, config: accountsConfig, sendMail: mailer(accountsConfig, DATA_ROOT) });
@@ -89,25 +91,26 @@ class HttpError extends Error {
   }
 }
 
-const agentAuth = new AccountAgents({ accounts, context: identityContext, dataRoot: DATA_ROOT, appRoot: ROOT });
-const terminals = new TerminalManager({ appRoot: ROOT, agentAuth, activityRoot: ACTIVITY_ROOT });
+const workers = new Workers({ dataRoot: DATA_ROOT, appRoot: ROOT, config: workerConfig() });
+const agentAuth = new AccountAgents({ accounts, context: identityContext, dataRoot: DATA_ROOT, appRoot: ROOT, runtime: workers });
+const terminals = new TerminalManager({ appRoot: ROOT, agentAuth, runtime: workers, activityRoot: ACTIVITY_ROOT });
 // Open terminals keep the model they started with; new connections pick up
 // the new one because attach.sh rotates the tmux session on changed args.
 agentAuth.on('model', (userId) => {
   for (const [id, record] of terminals.terminals) if (record.userId === userId) terminals.stop(id);
 });
 const requests = new WorkspaceRequests({
-  root: REQUESTS_ROOT, workspacesRoot: WORKSPACES_ROOT, agent: agentAuth,
+  root: REQUESTS_ROOT, workspacesRoot: WORKSPACES_ROOT, agent: agentAuth, runtime: workers,
   configPath: path.join(ROOT, 'omp', 'config.yml'), activityExtension: path.join(ROOT, 'omp', 'activity.js'), figmaToken,
   internalOrigin: accountsConfig.origin
 });
 const watchers = new WatchRegistry();
 const deployKeys = new DeployKeys(KEYS_ROOT);
-const previews = new PreviewRenderer(PREVIEWS_ROOT);
+const previews = new PreviewRenderer(PREVIEWS_ROOT, { runtime: workers });
 const proxy = new PreviewProxy();
 const previewSessions = new Map();
 const accountConnections = new Set();
-const live = new LivePreviews({ proxy, previews, stampsRoot: STAMPS_ROOT, internalPort: PORT });
+const live = new LivePreviews({ proxy, previews, runtime: workers, stampsRoot: STAMPS_ROOT, internalPort: PORT });
 const repos = new Map();
 const fixFailures = new Map(); // slug -> setup error handed to "Fix with agent"
 
@@ -129,6 +132,8 @@ const handleAccounts = accountHttp({ accounts, readJson: readJsonBody, sendJson,
     for (const entry of accountConnections) if (entry.identity.user.id === userId && (!sessionHash || entry.identity.session.hash === sessionHash)) entry.stream.destroy();
     for (const [id, identity] of previewSessions) if (identity.user.id === userId && (!sessionHash || identity.session.hash === sessionHash)) { proxy.unregister(id); previewSessions.delete(id); }
     if (!sessionHash) {
+      agentAuth.agents.get(userId)?.shutdown();
+      agentAuth.agents.delete(userId);
       for (const [id] of requests.active) if (requests.list(id).some(r => r.status === 'running' && r.actor?.id === userId)) await requests.stop(id);
       for (const copy of copies) {
         const found = await resolveWorkspace(copy.id).catch(() => null);
@@ -159,6 +164,7 @@ async function screenshotTarget(target, files, entry = '/') {
 }
 
 const setup = new PreviewSetup({
+  runtime: workers,
   projects,
   repoFor: async (slug) => repoFor(await findProject(slug)),
   agent: agentAuth,
@@ -959,7 +965,7 @@ async function requestHandler(req, res) {
     if (!/^\/(?:assets|css|js)\//.test(url.pathname) && !['/', '/index.html'].includes(url.pathname) && !identity) { res.writeHead(302, { Location: `/?next=${encodeURIComponent(url.pathname + url.search)}` }); res.end(); return; }
     await serveAppFile(res, url.pathname);
   } catch (error) {
-    const known = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError || error instanceof AccountError;
+    const known = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError || error instanceof AccountError || error instanceof WorkerError;
     const status = known ? error.status : 500;
     const message = known ? error.message : 'Unexpected local server error.';
     if (!res.headersSent) {
@@ -1013,8 +1019,8 @@ async function upgradeHandler(req, socket, head) {
     ({ socketPath } = await identityContext.run(identity, () => terminals.ensure(workspace)));
     trackConnection(identity, socket);
   } catch (error) {
-    const message = error instanceof HttpError || error instanceof TerminalError || error instanceof AccountError ? error.message : 'Terminal could not be started.';
-    if (!(error instanceof HttpError) && !(error instanceof TerminalError) && !(error instanceof AccountError)) console.error(error);
+    const message = error instanceof HttpError || error instanceof TerminalError || error instanceof AccountError || error instanceof WorkerError ? error.message : 'Terminal could not be started.';
+    if (!(error instanceof HttpError) && !(error instanceof TerminalError) && !(error instanceof AccountError) && !(error instanceof WorkerError)) console.error(error);
     rejectUpgrade(socket, req, 1011, message);
     return;
   }
@@ -1054,6 +1060,7 @@ async function shutdown() {
   await requests.shutdown().catch((error) => console.error(error));
   // Preview servers run in their own process groups: stop them explicitly.
   await live.shutdown().catch(() => {});
+  await workers.shutdown();
   accounts.close();
   process.exit(0);
 }
@@ -1061,6 +1068,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 ensureData()
+  .then(() => workers.assertReady())
   .then(() => {
     server.listen(PORT, HOST, () => {
       console.log(`Dialogue local server running at http://${HOST}:${PORT}`);

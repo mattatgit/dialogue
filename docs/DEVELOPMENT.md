@@ -2,6 +2,8 @@
 
 ## Current state
 
+For the 2026-11-04 shared BinaryLane pilot, production now requires the user-service/namespace/cgroup contract in `docs/WORKERS.md`. Setup & install owns the configured infrastructure and rollout. The older NixOS demo/module and deferred-hosting discussion below do not satisfy that production contract. Local direct-mode development remains available; run the full suite for every code change, plus the supplied acceptance check on the target Linux host before launch.
+
 `develop` contains the git-workspace + web-terminal functional build plus durable project documentation.
 
 The three earlier functional milestones (Landline V22, V23, V24; see `docs/CURRENT.md`) used a separate revision store. That model was replaced on 2026-09-23 by git worktrees and an embedded `omp` terminal (`docs/superpowers/specs/2026-09-23-git-workspaces-web-terminal-design.md`).

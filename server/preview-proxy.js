@@ -10,6 +10,7 @@ const fsp = require('node:fs/promises');
 const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
+const { openProjectFile, readOpenedFile, inside } = require('./project-files.js');
 
 const LOCAL_SUFFIX = '.preview.localhost';
 
@@ -141,7 +142,7 @@ const MIME = {
 // Maps a request path onto a file inside root, or null when it points
 // anywhere else. Decoding happens before resolving so encoded dots cannot
 // sneak past, and realpath catches symlinks that leave the root.
-async function resolveStatic(root, urlPath) {
+async function resolveStatic(root, urlPath, boundary) {
   let decoded;
   try {
     decoded = decodeURIComponent(urlPath);
@@ -150,6 +151,8 @@ async function resolveStatic(root, urlPath) {
   }
   if (decoded.includes('\0')) return null;
   const rootReal = await fsp.realpath(root);
+  boundary = boundary || rootReal;
+  if (!inside(rootReal, boundary)) return null;
   const candidate = path.resolve(rootReal, `.${path.posix.normalize(`/${decoded}`)}`);
   if (candidate !== rootReal && !candidate.startsWith(rootReal + path.sep)) return null;
   let real;
@@ -168,17 +171,24 @@ async function resolveStatic(root, urlPath) {
       return null;
     }
   }
-  return stat.isFile() ? { file: real, size: stat.size } : null;
+  if (!stat.isFile()) return null;
+  try {
+    const opened = await openProjectFile(boundary, real);
+    if (!inside(opened.file, rootReal)) { await opened.handle.close(); return null; }
+    return opened;
+  } catch { return null; }
 }
 
-async function serveStatic(req, res, root) {
+async function serveStatic(req, res, root, boundary) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { allow: 'GET, HEAD', 'cache-control': 'no-store' });
     return res.end();
   }
   const url = new URL(req.url, 'http://preview.localhost');
-  const found = await resolveStatic(root, url.pathname);
+  const found = await resolveStatic(root, url.pathname, boundary);
   if (!found) return sendHtml(res, 404, statusPage({ title: 'Not found', message: 'No such file in this preview.' }));
+  let streamed = false;
+  try {
   const type = MIME[path.extname(found.file).toLowerCase()] || 'application/octet-stream';
   const channel = url.searchParams.get('reviewChannel');
   const parent = url.searchParams.get('reviewOrigin');
@@ -192,10 +202,10 @@ async function serveStatic(req, res, root) {
       // Invalid review origins never change the preview response.
     }
   }
-  if (reviewOrigin) {
+  if (reviewOrigin && found.size <= 2 * 1024 * 1024) {
     // Instrument only this response, never the checked-out file. Server
     // recipes stay byte-for-byte proxied; their Select tool remains unavailable.
-    const html = await fsp.readFile(found.file, 'utf8');
+    const html = (await readOpenedFile(found, 2 * 1024 * 1024)).toString('utf8');
     const script = `<script src="${escapeHtml(reviewOrigin)}/js/prototype-review-bridge.js" data-review-channel="${channel}"></script>`;
     const injected = html.replace(/<\/body\s*>/i, `${script}</body>`);
     const output = Buffer.from(injected === html ? `${html}${script}` : injected);
@@ -203,11 +213,13 @@ async function serveStatic(req, res, root) {
     return req.method === 'HEAD' ? res.end() : res.end(output);
   }
   res.writeHead(200, { 'content-type': type, 'content-length': found.size, 'cache-control': 'no-store' });
-  if (req.method === 'HEAD') return res.end();
-  const stream = fs.createReadStream(found.file);
+  if (req.method === 'HEAD' || found.size === 0) return res.end();
+  const stream = found.handle.createReadStream({ autoClose: true, start: 0, end: found.size - 1 });
+  streamed = true;
   stream.on('error', () => res.destroy());
   res.on('close', () => stream.destroy());
   stream.pipe(res);
+  } finally { if (!streamed) await found.handle.close(); }
 }
 
 class PreviewProxy {
@@ -286,7 +298,7 @@ class PreviewProxy {
         proxyRequest(req, res, target, this.originFor(req));
         break;
       case 'static':
-        serveStatic(req, res, target.root).catch(() => {
+        serveStatic(req, res, target.root, target.boundary).catch(() => {
           if (!res.headersSent) sendHtml(res, 500, statusPage({ title: 'Preview error', message: 'The file could not be read.' }));
           else res.destroy();
         });

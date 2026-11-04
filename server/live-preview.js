@@ -19,8 +19,8 @@ const MESSAGES = {
 };
 
 class LivePreviews {
-  constructor({ proxy, previews, stampsRoot, internalPort, idleMs, createRunner = (options) => new Runner(options) }) {
-    Object.assign(this, { proxy, previews, stampsRoot, internalPort, createRunner });
+  constructor({ proxy, previews, stampsRoot, internalPort, idleMs, runtime = null, createRunner = (options) => new Runner(options) }) {
+    Object.assign(this, { proxy, previews, stampsRoot, internalPort, createRunner, runtime });
     this.pool = new RunnerPool({ idleMs });
     this.entries = new Map(); // workspace id -> entry
   }
@@ -94,6 +94,7 @@ class LivePreviews {
     entry.recipe = parsed.recipe;
     const runner = this.createRunner({
       dir: entry.dir,
+      runtime: this.runtime,
       recipe: parsed.recipe,
       stampDir: path.join(this.stampsRoot, entry.slug, encodeURIComponent(entry.ref))
     });
@@ -123,7 +124,7 @@ class LivePreviews {
     const state = runner?.state || 'starting';
     const payload = { state, reload, message: MESSAGES[state] || '' };
     if (state === 'crashed') {
-      payload.message = 'The preview server stopped. The agent can help: ask it in the terminal, or restart the preview.';
+      payload.message = runner.error?.status === 503 ? runner.error.message : 'The preview server stopped. The agent can help: ask it in the terminal, or restart the preview.';
       payload.log = runner.logTail(40);
     }
     if (state === 'ready' && entry.restarted) payload.restarted = true;

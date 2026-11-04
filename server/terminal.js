@@ -6,10 +6,11 @@ const fsp = require('node:fs/promises');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const { execFile, spawn } = require('node:child_process');
+const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { createHash } = require('node:crypto');
 const { activityPath } = require('./activity.js');
+const { spawnWorker, killWorker } = require('./workers.js');
 
 const execFileAsync = promisify(execFile);
 
@@ -73,9 +74,10 @@ function waitForSocket(socketPath, child) {
 }
 
 class TerminalManager {
-  constructor({ appRoot, agentAuth, activityRoot = path.join(appRoot, '.dialogue-data', 'activity') }) {
+  constructor({ appRoot, agentAuth, runtime = null, activityRoot = path.join(appRoot, '.dialogue-data', 'activity') }) {
     this.appRoot = appRoot;
     this.agentAuth = agentAuth;
+    this.runtime = runtime;
     this.activityRoot = activityRoot;
     this.terminals = new Map();
     this.socketDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dialogue-term-'));
@@ -100,7 +102,11 @@ class TerminalManager {
 
   async start(workspace, record) {
     const prefix = sessionPrefix(workspace);
-    const socketPath = path.join(this.socketDir, `${prefix.slice('dialogue-'.length)}.sock`);
+    const ipcDir = this.runtime?.isolated ? await this.runtime.directory('terminal') : this.socketDir;
+    record.ipcDir = ipcDir;
+    const socketPath = path.join(ipcDir, `${prefix.slice('dialogue-'.length)}.sock`);
+    const tmuxSocket = this.runtime?.isolated ? path.join(ipcDir, 'tmux.sock') : null;
+    record.tmuxArgs = tmuxSocket ? ['-S', tmuxSocket] : ['-L', this.agentAuth.ompEnv().DIALOGUE_TMUX_SERVER || 'dialogue'];
     await Promise.all([fsp.rm(socketPath, { force: true }), installTheme(this.appRoot, { ...process.env, ...this.agentAuth.ompEnv() })]);
 
     // ttyd runs omp/attach.sh per client; the script owns the tmux session
@@ -114,7 +120,7 @@ class TerminalManager {
       '/bin/sh', path.join(this.appRoot, 'omp', 'attach.sh')
     ];
 
-    const child = spawn(TTYD_BIN, ttydArgs, {
+    const child = await spawnWorker(this.runtime, TTYD_BIN, ttydArgs, {
       cwd: workspace.dir,
       env: {
         ...process.env,
@@ -127,15 +133,17 @@ class TerminalManager {
         DIALOGUE_WORKSPACE_DIR: workspace.dir,
         DIALOGUE_SESSION: prefix,
         DIALOGUE_TMUX: TMUX_BIN,
+        ...(tmuxSocket ? { DIALOGUE_TMUX_SOCKET: tmuxSocket } : {}),
         DIALOGUE_OMP: OMP_BIN
       },
       stdio: ['ignore', 'ignore', 'pipe']
-    });
+    }, { kind: 'terminal', home: this.agentAuth.ompEnv().HOME, activityFile: activityPath(this.activityRoot, workspace.id), ipcDirs: tmuxSocket ? [ipcDir] : [] });
     record.child = child;
     record.socketPath = socketPath;
     child.on('exit', () => {
       if (this.terminals.get(workspace.id) === record) this.terminals.delete(workspace.id);
       fsp.rm(socketPath, { force: true }).catch(() => {});
+      if (this.runtime?.isolated) fsp.rm(ipcDir, { recursive: true, force: true }).catch(() => {});
     });
     // waitForSocket attaches its 'error' listener in the same tick as spawn.
     await waitForSocket(socketPath, child);
@@ -146,7 +154,7 @@ class TerminalManager {
     const record = this.terminals.get(id);
     if (!record) return;
     this.terminals.delete(id);
-    record.child?.kill('SIGTERM');
+    killWorker(record.child, 'SIGTERM');
   }
 
   stopAll() {
@@ -157,9 +165,10 @@ class TerminalManager {
   // it. attach.sh names sessions `<prefix>-<overlay checksum>`; the live one
   // is whichever currently exists under the prefix.
   async sendPrompt(workspace, text) {
+    const tmuxArgs = this.terminals.get(workspace.id)?.tmuxArgs || ['-L', this.agentAuth.ompEnv().DIALOGUE_TMUX_SERVER || 'dialogue'];
     let sessions = '';
     try {
-      ({ stdout: sessions } = await execFileAsync(TMUX_BIN, ['-L', this.agentAuth.ompEnv().DIALOGUE_TMUX_SERVER || 'dialogue', 'list-sessions', '-F', '#S']));
+      ({ stdout: sessions } = await execFileAsync(TMUX_BIN, [...tmuxArgs, 'list-sessions', '-F', '#S']));
     } catch {
       // no tmux server: no sessions
     }
@@ -168,13 +177,13 @@ class TerminalManager {
     if (!session) throw new TerminalError('Open the agent terminal first, then try again.');
     // `<session>:` targets the session's current window exactly (no
     // prefix matching against other session names).
-    const server = this.agentAuth.ompEnv().DIALOGUE_TMUX_SERVER || 'dialogue';
-    await execFileAsync(TMUX_BIN, ['-L', server, 'send-keys', '-t', `${session}:`, '-l', text]);
-    await execFileAsync(TMUX_BIN, ['-L', server, 'send-keys', '-t', `${session}:`, 'Enter']);
+    await execFileAsync(TMUX_BIN, [...tmuxArgs, 'send-keys', '-t', `${session}:`, '-l', text]);
+    await execFileAsync(TMUX_BIN, [...tmuxArgs, 'send-keys', '-t', `${session}:`, 'Enter']);
   }
 
   async retire(workspace) {
     this.stop(workspace.id);
+    if (this.runtime?.isolated) return;
     const server = this.agentAuth.ompEnv().DIALOGUE_TMUX_SERVER || 'dialogue';
     const { stdout } = await execFileAsync(TMUX_BIN, ['-L', server, 'list-sessions', '-F', '#S']).catch(() => ({ stdout: '' }));
     for (const session of stdout.trim().split('\n').filter(name => name.startsWith(`${sessionPrefix(workspace)}-`))) {

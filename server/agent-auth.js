@@ -8,9 +8,8 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const readline = require('node:readline');
-const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
+const { spawnWorker, killWorker } = require('./workers.js');
 
 const OMP_BIN = process.env.DIALOGUE_OMP || 'omp';
 const PROBE_TIMEOUT_MS = 60 * 1000;
@@ -56,8 +55,8 @@ function lastLines(text, count = 6) {
 
 // One `omp --mode rpc` child: JSON lines in and out.
 class RpcChild {
-  constructor(args, { cwd, env }) {
-    this.child = spawn(OMP_BIN, ['--mode', 'rpc', ...args], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  constructor(child) {
+    this.child = child;
     this.frameHandlers = new Set();
     this.pending = new Map();
     this.nextId = 1;
@@ -80,8 +79,7 @@ class RpcChild {
       });
     });
     this.ready.catch(() => {});
-    const lines = readline.createInterface({ input: this.child.stdout });
-    lines.on('line', (line) => {
+    const receive = (line) => {
       let frame;
       try {
         frame = JSON.parse(line);
@@ -95,6 +93,24 @@ class RpcChild {
         resolve(frame);
       }
       for (const handler of this.frameHandlers) handler(frame);
+    };
+    // readline buffers an unterminated line without a limit. A worker must
+    // not be able to exhaust the trusted parent's memory through its pipe.
+    let partial = '', received = 0, oversized = false;
+    this.child.stdout.setEncoding('utf8');
+    this.child.stdout.on('data', chunk => {
+      if (oversized) return;
+      received += Buffer.byteLength(chunk);
+      partial += chunk;
+      let newline;
+      while ((newline = partial.indexOf('\n')) >= 0 && newline <= 1024 * 1024) {
+        receive(partial.slice(0, newline)); partial = partial.slice(newline + 1);
+      }
+      if (partial.length > 1024 * 1024 || received > 16 * 1024 * 1024) {
+        oversized = true; partial = '';
+        this.stderr = 'omp returned an oversized response.';
+        this.kill();
+      }
     });
     this.exited.then(() => {
       for (const { reject, timer } of this.pending.values()) {
@@ -136,12 +152,12 @@ class RpcChild {
   close() {
     if (this.child.exitCode !== null) return;
     this.child.stdin.end();
-    const timer = setTimeout(() => this.child.kill('SIGKILL'), 3000);
+    const timer = setTimeout(() => killWorker(this.child, 'SIGKILL'), 3000);
     this.exited.then(() => clearTimeout(timer));
   }
 
   kill() {
-    if (this.child.exitCode === null) this.child.kill('SIGKILL');
+    if (this.child.exitCode === null) killWorker(this.child, 'SIGKILL');
   }
 }
 
@@ -158,6 +174,7 @@ class LoginSession {
     this.rpc = null;
     this.ended = false;
     this.timer = null;
+    this.abort = new AbortController();
   }
 
   subscribe(res) {
@@ -190,6 +207,7 @@ class LoginSession {
   }
 
   end() {
+    this.abort.abort();
     this.ended = true;
     clearTimeout(this.timer);
     this.rpc?.kill();
@@ -199,10 +217,12 @@ class LoginSession {
 }
 
 class AgentAuth extends EventEmitter {
-  constructor({ dataRoot, appRoot, env = {} }) {
+  constructor({ dataRoot, appRoot, env = {}, runtime = null }) {
     super();
     this.dataRoot = dataRoot;
     this.environment = env;
+    this.runtime = runtime;
+    this.abort = new AbortController();
     this.configPath = path.join(appRoot, 'omp', 'config.yml');
     this.bootstrapPath = path.join(appRoot, 'omp', 'bootstrap-provider.js');
     this.settingsPath = path.join(dataRoot, 'agent.json');
@@ -270,18 +290,18 @@ class AgentAuth extends EventEmitter {
     }
   }
 
-  runOmp(args, { cwd, timeoutMs }) {
+  async runOmp(args, { cwd, timeoutMs }) {
+    const child = await spawnWorker(this.runtime, OMP_BIN, args, { cwd, env: this.spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'control', home: this.ompEnv().HOME, signal: this.abort.signal });
     return new Promise((resolve) => {
-      const child = spawn(OMP_BIN, args, { cwd, env: this.spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
       let timedOut = false;
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill('SIGKILL');
+        killWorker(child, 'SIGKILL');
       }, timeoutMs);
-      child.stdout.on('data', (chunk) => { stdout += chunk; });
-      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.stdout.on('data', (chunk) => { stdout = (stdout + chunk).slice(-65536); });
+      child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-65536); });
       child.on('error', (error) => {
         clearTimeout(timer);
         resolve({ code: -1, stdout, stderr: `${stderr}\n${error.message}`, timedOut });
@@ -347,7 +367,7 @@ class AgentAuth extends EventEmitter {
   // lets omp start before any real sign-in exists.
   async withRpc(fn) {
     return this.withEmptyCwd(async (cwd) => {
-      const rpc = new RpcChild([...this.headlessArgs(), '-e', this.bootstrapPath], { cwd, env: this.spawnEnv() });
+      const rpc = await this.rpcChild(cwd);
       try {
         await rpc.ready;
         return await fn(rpc);
@@ -355,6 +375,12 @@ class AgentAuth extends EventEmitter {
         rpc.close();
       }
     });
+  }
+
+  async rpcChild(cwd, signal = this.abort.signal) {
+    const child = await spawnWorker(this.runtime, OMP_BIN, ['--mode', 'rpc', ...this.headlessArgs(), '-e', this.bootstrapPath],
+      { cwd, env: this.spawnEnv(), stdio: ['pipe', 'pipe', 'pipe'] }, { kind: 'control', home: this.ompEnv().HOME, signal });
+    return new RpcChild(child);
   }
 
   async providers() {
@@ -392,7 +418,10 @@ class AgentAuth extends EventEmitter {
     this.login = session;
     session.timer = setTimeout(() => session.push('error', { message: 'The sign-in took too long. Start it again.' }), LOGIN_TIMEOUT_MS);
     const cwd = await fsp.mkdtemp(path.join(os.tmpdir(), 'dialogue-login-'));
-    const rpc = new RpcChild([...this.headlessArgs(), '-e', this.bootstrapPath], { cwd, env: this.spawnEnv() });
+    let rpc;
+    try { rpc = await this.rpcChild(cwd, AbortSignal.any([this.abort.signal, session.abort.signal])); }
+    catch (error) { await fsp.rm(cwd, { recursive: true, force: true }); session.push('error', { message: 'The model connection could not be started. Please try again.' }); throw error; }
+    if (session.ended) { rpc.kill(); await fsp.rm(cwd, { recursive: true, force: true }); return session; }
     session.rpc = rpc;
     rpc.exited.then(() => fsp.rm(cwd, { recursive: true, force: true }).catch(() => {}));
     rpc.onFrame((frame) => {
@@ -461,6 +490,7 @@ class AgentAuth extends EventEmitter {
   }
 
   shutdown() {
+    this.abort.abort();
     this.cancelLogin();
   }
 }

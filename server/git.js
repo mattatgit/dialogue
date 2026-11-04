@@ -7,6 +7,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { classifyPushError } = require('./deploy-key.js');
 const { RECIPE_PATH } = require('./recipe.js');
+const { readProjectFile } = require('./project-files.js');
 
 const execFileAsync = promisify(execFile);
 const GIT_BIN = process.env.DIALOGUE_GIT || 'git';
@@ -152,13 +153,16 @@ class ProjectRepo {
   // pipeline commits there before anything is pushed.
   async readRecipe(dir = null) {
     if (dir) {
-      const text = await fsp.readFile(path.join(dir, RECIPE_PATH), 'utf8').catch(() => null);
+      const text = await readProjectFile(dir, path.join(dir, RECIPE_PATH)).then(bytes => bytes.toString('utf8')).catch(error => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
       if (text !== null) return { text, source: 'workspace' };
     }
     const name = await this.defaultBranchName();
     const local = await this.localDefault();
     for (const ref of [local, `refs/remotes/origin/${name}`].filter(Boolean)) {
-      const text = await this.git(['show', `${ref}:${RECIPE_PATH}`]).catch(() => null);
+      const text = await this.git(['show', `${ref}:${RECIPE_PATH}`], { maxBuffer: 65536 }).catch(() => null);
       if (text !== null) return { text, source: 'default' };
     }
     return null;

@@ -28,7 +28,7 @@ test('static recipe is ready immediately and targets the resolved root', async (
   assert.equal(runner.target, null);
   await runner.start();
   assert.equal(runner.state, 'ready');
-  assert.deepEqual(runner.target, { kind: 'static', root: path.join(ws.dir, 'site') });
+  assert.deepEqual(runner.target, { kind: 'static', root: await fsp.realpath(path.join(ws.dir, 'site')), boundary: await fsp.realpath(ws.dir) });
   assert.deepEqual(states, ['ready']);
   await runner.stop();
   assert.equal(runner.state, 'stopped');

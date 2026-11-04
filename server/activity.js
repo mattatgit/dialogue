@@ -8,7 +8,15 @@ function activityPath(root, workspaceId) {
 
 async function readActivity(file) {
   try {
-    const raw = await fs.readFile(file, 'utf8');
+    const handle = await fs.open(file, 'r');
+    let raw;
+    try {
+      if ((await handle.stat()).size > 4096) return null;
+      const buffer = Buffer.alloc(4097);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      if (bytesRead > 4096) return null;
+      raw = buffer.subarray(0, bytesRead).toString('utf8');
+    } finally { await handle.close(); }
     if (raw.length > 4096) return null;
     const value = JSON.parse(raw);
     if (!value || !['working', 'complete'].includes(value.state) ||

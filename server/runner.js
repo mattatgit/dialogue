@@ -6,7 +6,8 @@ const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
-const { spawn } = require('node:child_process');
+const { spawnWorker, killWorker } = require('./workers.js');
+const { readProjectFile, openProjectFile, inside } = require('./project-files.js');
 
 // Files whose contents decide whether `install` must run again.
 const MANIFESTS = ['package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lock', 'bun.lockb', 'requirements.txt', 'Gemfile.lock'];
@@ -30,7 +31,10 @@ async function installStamp(dir, recipe) {
   const hash = crypto.createHash('sha256');
   hash.update(String(recipe.install));
   for (const name of MANIFESTS) {
-    const content = await fsp.readFile(path.join(cwd, name)).catch(() => null);
+    const content = await readProjectFile(dir, path.join(cwd, name), 8 * 1024 * 1024).catch(error => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
     if (content === null) continue;
     hash.update(`\0${name}\0`);
     hash.update(content);
@@ -50,12 +54,14 @@ function freePort() {
 }
 
 class Runner extends EventEmitter {
-  constructor({ dir, recipe, stampDir, env = {}, killDelayMs = KILL_DELAY_MS }) {
+  constructor({ dir, recipe, stampDir, env = {}, runtime = null, killDelayMs = KILL_DELAY_MS }) {
     super();
     this.dir = dir;
     this.recipe = recipe;
     this.stampDir = stampDir;
     this.env = env;
+    this.runtime = runtime;
+    this.abort = new AbortController();
     this.killDelayMs = killDelayMs;
     this.state = 'stopped';
     this.target = null;
@@ -78,7 +84,7 @@ class Runner extends EventEmitter {
   appendLog(chunk) {
     this.partial += String(chunk).replace(ANSI, '');
     const parts = this.partial.split(/\r?\n/);
-    this.partial = parts.pop();
+    this.partial = parts.pop().slice(-8192);
     for (const line of parts) {
       this.lines.push(line);
       this.emit('log', line);
@@ -93,6 +99,7 @@ class Runner extends EventEmitter {
   // Not async on purpose: callers compare the returned promise for identity.
   start() {
     if (this.starting) return this.starting;
+    if (this.abort.signal.aborted) this.abort = new AbortController();
     this.lines = [];
     this.partial = '';
     const attempt = this.run().catch((error) => {
@@ -101,6 +108,7 @@ class Runner extends EventEmitter {
       if (this.starting === attempt) {
         this.starting = null;
         this.child = null;
+        this.error = error;
         this.setState('crashed', { error });
       }
       throw error;
@@ -111,7 +119,9 @@ class Runner extends EventEmitter {
 
   async run() {
     const generation = ++this.generation;
-    const root = path.resolve(this.dir, this.recipe.root);
+    const boundary = await fsp.realpath(this.dir);
+    const root = await fsp.realpath(path.resolve(this.dir, this.recipe.root));
+    if (!inside(root, boundary)) throw this.fail('The preview root leaves its working copy.', 'recipe');
     if (this.recipe.kind === 'static') return this.runStatic(root);
     await this.install(root);
     // stop() during install bumps the generation; do not go on to launch.
@@ -122,10 +132,12 @@ class Runner extends EventEmitter {
   async runStatic(root) {
     const entry = this.recipe.entry === '/' ? 'index.html' : this.recipe.entry.replace(/^\//, '');
     const file = path.join(root, entry);
-    if (!(await fsp.stat(file).then((s) => s.isFile(), () => false))) {
+    const opened = await openProjectFile(root, file).catch(() => null);
+    if (!opened) {
       throw this.fail(`Entry file ${entry} not found under ${this.recipe.root}.`, 'ready');
     }
-    this.target = { kind: 'static', root };
+    await opened.handle.close();
+    this.target = { kind: 'static', root, boundary: await fsp.realpath(this.dir) };
     this.setState('ready');
   }
 
@@ -135,7 +147,7 @@ class Runner extends EventEmitter {
     const stampFile = path.join(this.stampDir, 'install.sha');
     if ((await fsp.readFile(stampFile, 'utf8').catch(() => null)) === stamp) return;
     this.setState('installing');
-    const child = spawn('/bin/sh', ['-c', this.recipe.install], { cwd, env: { ...process.env, ...this.env, CI: '1', FORCE_COLOR: '0' }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = await spawnWorker(this.runtime, '/bin/sh', ['-c', this.recipe.install], { cwd, env: { ...process.env, ...this.env, CI: '1', FORCE_COLOR: '0' }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'install', workspaceRoot: this.dir, signal: this.abort.signal });
     this.child = child;
     child.stdout.on('data', (d) => this.appendLog(d));
     child.stderr.on('data', (d) => this.appendLog(d));
@@ -152,7 +164,7 @@ class Runner extends EventEmitter {
     const env = { ...process.env, ...this.env, PORT: String(port), HOST: '127.0.0.1', BROWSER: 'none', FORCE_COLOR: '0', CI: '1' };
     // detached: the shell gets its own process group so stop() can take
     // down whatever it forked (node, esbuild, watchers) in one signal.
-    const child = spawn('/bin/sh', ['-c', this.recipe.start], { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = await spawnWorker(this.runtime, '/bin/sh', ['-c', this.recipe.start], { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'preview', workspaceRoot: this.dir, signal: this.abort.signal });
     this.child = child;
     child.stdout.on('data', (d) => this.appendLog(d));
     child.stderr.on('data', (d) => this.appendLog(d));
@@ -207,7 +219,7 @@ class Runner extends EventEmitter {
   async killGroup(child) {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited = new Promise((resolve) => child.once('exit', resolve));
-    const signal = (sig) => { try { process.kill(-child.pid, sig); } catch {} };
+    const signal = (sig) => killWorker(child, sig);
     signal('SIGTERM');
     let timer;
     await Promise.race([exited, new Promise((r) => { timer = setTimeout(r, this.killDelayMs); })]);
@@ -219,6 +231,7 @@ class Runner extends EventEmitter {
   }
 
   async stop() {
+    this.abort.abort();
     const child = this.child;
     this.generation += 1;
     this.child = null;

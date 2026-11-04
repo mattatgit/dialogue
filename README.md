@@ -23,6 +23,8 @@ The next milestone is the first **real designer-driven change** made through the
 
 Accounts now provide invitation-only passkey/email-code sign-in and one shared workspace. Local development has explicit quick sign-in identities and persistent sessions. See [Accounts setup](docs/ACCOUNTS.md); named app/site/prototype cards and live editing badges remain planned.
 
+Production requires Linux worker namespaces and systemd resource scopes, with a shared admission budget and no direct-process fallback. Local development keeps direct execution. [Worker isolation and host requirements](docs/WORKERS.md) records the Setup & install handoff and mandatory target acceptance check; this branch does not deploy the app.
+
 ## Run the lightweight local build
 
 Requirements:
@@ -77,6 +79,7 @@ Inter Tight is the primary UI typeface. Figma-exported SVG/PNG assets are stored
 - `docs/LOCAL_BUILD.md` — lightweight local functional build
 - `docs/API.md` — local HTTP/SSE/WebSocket contract
 - `docs/ACCOUNTS.md` — accounts, shared membership, development sign-in and deployment configuration
+- `docs/WORKERS.md` — worker isolation, resource policy, host contract and Linux acceptance checks
 - `docs/superpowers/specs/2026-09-23-git-workspaces-web-terminal-design.md` — approved design for the git-workspace/terminal build
 
 ## Branches

@@ -2,7 +2,7 @@
 // checkout; neither prompt output nor a changed file counts as completion.
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { spawnWorker, killWorker } = require('./workers.js');
 const { randomUUID, createHash } = require('node:crypto');
 const { EventEmitter } = require('node:events');
 const { parseWorkspaceId, workspaceDir } = require('./git.js');
@@ -85,9 +85,10 @@ function cleanOutput(text) {
 class WorkspaceRequests extends EventEmitter {
   constructor({ root, workspacesRoot, agent, ompBin = process.env.DIALOGUE_OMP || 'omp', configPath,
     activityExtension = path.join(__dirname, '..', 'omp', 'activity.js'), env = {}, timeoutMs = TIMEOUT_MS,
-    figmaToken, figmaReader = readFigma, figmaExporter = exportFigmaAsset, internalOrigin = 'http://127.0.0.1:4173' }) {
+    figmaToken, figmaReader = readFigma, figmaExporter = exportFigmaAsset, runtime = null, internalOrigin = 'http://127.0.0.1:4173' }) {
     super();
     Object.assign(this, { root, workspacesRoot, agent, ompBin, configPath, activityExtension, env, timeoutMs, figmaToken, figmaReader, figmaExporter, internalOrigin });
+    this.runtime = runtime;
     this.records = new Map();
     this.active = new Map();
     this.blocked = new Set();
@@ -332,13 +333,16 @@ class WorkspaceRequests extends EventEmitter {
       if (run.interrupted) throw new Error(run.interrupted);
       const args = ['-p', '--approval-mode', 'yolo', '--config', this.configPath,
         '-e', this.activityExtension, '--model', record.model, promptFor(record, run.figma)];
+      const agentEnv = this.agent.ompEnv();
+      const childEnv = { ...process.env, ...this.env, ...agentEnv, DIALOGUE_ACTIVITY_FILE: activityFile };
+      delete childEnv.FIGMA_ACCESS_TOKEN;
+      const abort = new AbortController(); run.stop = () => abort.abort();
+      const actorSignal = this.agent.current?.().abort?.signal;
+      const child = await spawnWorker(this.runtime, this.ompBin, args, {
+        cwd: workspace.dir, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'], detached: true
+      }, { kind: 'agent', home: agentEnv.HOME, activityFile, signal: actorSignal ? AbortSignal.any([abort.signal, actorSignal]) : abort.signal,
+        readOnlyFiles: run.figma ? [run.figma.snapshotPath] : [] });
       const observed = await new Promise((resolve) => {
-        const childEnv = { ...process.env, ...this.env, ...this.agent.ompEnv(), DIALOGUE_ACTIVITY_FILE: activityFile };
-        delete childEnv.FIGMA_ACCESS_TOKEN;
-        const child = spawn(this.ompBin, args, {
-          cwd: workspace.dir, env: childEnv,
-          stdio: ['ignore', 'pipe', 'pipe'], detached: true
-        });
         run.child = child;
         child.on('spawn', () => {
           record.startedAt = new Date().toISOString();
@@ -349,9 +353,9 @@ class WorkspaceRequests extends EventEmitter {
         const terminate = (reason) => {
           if (reason === 'timeout') timedOut = true;
           if (child.pid) {
-            try { process.kill(-child.pid, 'SIGTERM'); } catch { child.kill('SIGTERM'); }
+            killWorker(child, 'SIGTERM');
             const killTimer = setTimeout(() => {
-              try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+              killWorker(child, 'SIGKILL');
             }, KILL_GRACE_MS);
             child.once('close', () => clearTimeout(killTimer));
           }
