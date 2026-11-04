@@ -10,10 +10,11 @@ const { randomUUID, createHash } = require('node:crypto');
 const exec = promisify(execFile);
 const MiB = 1024 * 1024;
 const PROFILES = Object.freeze({
-  agent: { pool: 'heavy', memory: 768, tasks: 96, cpu: 100, seconds: 660 },
+  agent: { pool: 'heavy', memory: 1280, tasks: 96, cpu: 100, seconds: 660 },
+  provider: { pool: 'heavy', memory: 1280, tasks: 96, cpu: 100, seconds: 660 },
   install: { pool: 'heavy', memory: 768, tasks: 96, cpu: 100, seconds: 600 },
   preview: { pool: 'preview', memory: 256, tasks: 64, cpu: 50, seconds: 3600 },
-  terminal: { pool: 'terminal', memory: 384, tasks: 96, cpu: 75, seconds: 3600 },
+  terminal: { pool: 'terminal', memory: 1280, tasks: 96, cpu: 75, seconds: 3600 },
   control: { pool: 'control', memory: 128, tasks: 48, cpu: 50, seconds: 660 },
   browser: { pool: 'browser', memory: 256, tasks: 96, cpu: 75, seconds: 40 }
 });
@@ -33,7 +34,7 @@ function workerConfig(env = process.env, platform = process.platform) {
   if (!['direct', 'isolated'].includes(mode) || (production && mode !== 'isolated')) throw new WorkerError('Production requires isolated workers.', 500);
   if (mode === 'isolated' && platform !== 'linux') throw new WorkerError('Isolated workers require Linux namespaces and systemd.', 500);
   const config = { isolated: mode === 'isolated',
-    budget: integer(env.DIALOGUE_WORKER_BUDGET_MB, 2048, 768, 2304, 'worker memory budget'),
+    budget: integer(env.DIALOGUE_WORKER_BUDGET_MB, 2048, 1280, 2304, 'worker memory budget'),
     queue: integer(env.DIALOGUE_WORKER_QUEUE, 8, 1, 32, 'worker queue size'),
     waitMs: integer(env.DIALOGUE_WORKER_WAIT_MS, 60000, 100, 120000, 'worker wait timeout'),
     diskFloor: integer(env.DIALOGUE_WORKER_DISK_FLOOR_MB, 1024, 256, 8192, 'disk reserve') * MiB,
@@ -43,7 +44,7 @@ function workerConfig(env = process.env, platform = process.platform) {
     prlimit: env.DIALOGUE_PRLIMIT || '/usr/bin/prlimit',
     parentUnit: env.DIALOGUE_WORKER_PARENT_UNIT || 'dialogue.service',
     toolRoots: (env.DIALOGUE_WORKER_TOOL_ROOTS || '').split(path.delimiter).filter(Boolean),
-    counts: { heavy: 1, preview: 2, terminal: 2, control: 2, browser: 1 }
+    counts: { heavy: 1, preview: 2, terminal: 1, control: 2, browser: 1 }
   };
   if (!/^dialogue(?:-[a-z0-9-]+)?\.service$/.test(config.parentUnit)) throw new WorkerError('Invalid worker parent service.', 500);
   if (![config.bwrap, config.systemdRun, config.systemctl, config.prlimit].every(file => path.isAbsolute(file))) throw new WorkerError('Worker supervisor binaries must use absolute paths.', 500);
@@ -176,7 +177,7 @@ class Workers {
     // Provider credentials are only present for that member's agent/control
     // worker. Project installs, servers and Chromium never mount a member home.
     let home = '/home/worker';
-    if (policy.home && ['agent', 'terminal', 'control'].includes(kind)) {
+    if (policy.home && ['agent', 'provider', 'terminal', 'control'].includes(kind)) {
       home = this.canonical(policy.home);
       if (!within(home, path.join(this.dataRoot, 'users')) || path.basename(home) !== 'home') throw new WorkerError('Invalid member credential directory.', 500);
       argv.push('--bind', home, home);

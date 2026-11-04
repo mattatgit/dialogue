@@ -2,7 +2,7 @@
 
 Prepared 2026-11-04 for **Setup & install**. Matt has requested proceeding toward the first hosted pilot now that the conversation UI is implemented. Server changes, activation and deployment stay in that chat.
 
-**Initial candidate blocked:** `7a78ff5` passed the 148-test Linux suite, but isolated native OMP hit its agent cgroup's 768 MiB ceiling. Keep the app stopped. Stage the pinned Build follow-up for native Bun GC settings/diagnostics and rerun the extended acceptance (including real provider RPC), then recovery checks. The initial SHA below is historical release evidence, not permission to activate the failing candidate. The follow-up SHA and full-suite evidence accompany the Build handoff.
+**Initial candidates blocked:** `7a78ff5` passed 148 Linux tests and `f6714bb` passed 150, but both hit the isolated native agent's 768 MiB ceiling before a provider call. GC tuning alone was insufficient. Keep the app stopped. Stage the pinned Build follow-up with 1280 MiB native agent/provider/legacy-terminal reservations and a single heavy queue, retaining the 2048 MiB total budget and 2304 MiB host slice. Provider sign-in releases its login worker before verification starts. Rerun complete acceptance (including real provider RPC), then recovery checks. The initial SHA below is historical evidence, not permission to activate a failing candidate. The new SHA and full-suite evidence accompany the Build handoff.
 
 ## Candidate and evidence
 

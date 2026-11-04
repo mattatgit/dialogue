@@ -101,6 +101,7 @@ test('production cannot disable isolation, run on unsupported hosts, or silently
   assert.throws(() => workerConfig({ DIALOGUE_MODE: 'development', NODE_ENV: 'production', DIALOGUE_WORKER_MODE: 'direct' }, 'linux'), /requires isolated/);
   assert.throws(() => workerConfig({ DIALOGUE_MODE: 'production' }, 'darwin'), /require Linux/);
   assert.throws(() => workerConfig({ DIALOGUE_MODE: 'test', DIALOGUE_WORKER_BUDGET_MB: '-1' }), /budget/);
+  assert.throws(() => workerConfig({ DIALOGUE_WORKER_BUDGET_MB: '768' }), /budget/);
   assert.throws(() => workerConfig({ DIALOGUE_WORKER_PARENT_UNIT: 'unrelated.service' }), /parent/);
   assert.equal(workerConfig({ DIALOGUE_MODE: 'development' }).isolated, false);
 });
@@ -117,7 +118,7 @@ test('bounded FIFO reservations serialize expensive work, cancel queued jobs and
   const cancelled = assert.rejects(budget.acquire('install', { signal: abort.signal }), /cancelled/); abort.abort(); await cancelled;
   await assert.rejects(budget.acquire('agent'), /still busy/); a();
   const leases = [];
-  for (const kind of ['agent', 'terminal', 'terminal', 'preview', 'preview']) leases.push(await budget.acquire(kind));
+  for (const kind of ['agent', 'preview', 'preview', 'browser']) leases.push(await budget.acquire(kind));
   assert.equal([...budget.active.values()].reduce((n, k) => n + PROFILES[k].memory, 0), 2048);
   await assert.rejects(budget.acquire('control', { wait: false }), /busy/);
   leases.forEach(done => done()); budget.close(); await assert.rejects(budget.acquire('control'), /cancelled/);
@@ -132,7 +133,7 @@ test('queue capacity is bounded and shutdown releases pending callers', async ()
 
 test('native Bun GC settings are fixed per worker ceiling and cannot inherit project overrides', async t => {
   const f = await fixture(t);
-  for (const kind of ['agent', 'control', 'terminal', 'preview', 'install']) {
+  for (const kind of ['agent', 'provider', 'control', 'terminal', 'preview', 'install']) {
     const plan = f.runtime.plan('/usr/bin/omp', [], { cwd: f.dir, env: { BUN_OPTIONS: '--eval=private', BUN_JSC_forceRAMSize: '99999999999' } }, { kind, home: f.home }, 'dialogue-test.scope');
     const values = new Map();
     for (let i = 0; i < plan.args.length; i++) if (plan.args[i] === '--setenv') values.set(plan.args[i + 1], plan.args[i + 2]);
@@ -154,6 +155,24 @@ test('worker failures distinguish signals, timeouts and exit codes without losin
   assert.equal(runtime.budget.active.size, 0);
 });
 
+test('provider probes and RPC reserve the native profile and retain the selected member home', async t => {
+  const f = await fixture(t), calls = [];
+  const runtime = { spawn: async (_bin, args, options, policy) => {
+    calls.push(policy);
+    const source = args.includes('rpc') ? 'console.log(JSON.stringify({type:"ready"}));process.stdin.resume()' : 'console.log("OK")';
+    return spawn(process.execPath, ['-e', source], { ...options, detached: true });
+  } };
+  const auth = new AgentAuth({ dataRoot: f.data, appRoot: path.resolve(__dirname, '..'), env: { HOME: f.home }, runtime });
+  t.after(() => auth.shutdown());
+  assert.equal((await auth.runOmp(['-p', 'probe'], { cwd: f.dir, timeoutMs: 5000 })).code, 0);
+  const rpc = await auth.rpcChild(f.dir); await rpc.ready; rpc.close(); await rpc.exited;
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(policy => policy.kind === 'provider' && policy.home === f.home));
+  assert.equal(PROFILES.provider.pool, PROFILES.agent.pool);
+  const plan = f.runtime.plan('/usr/bin/omp', [], { cwd: f.dir, env: {} }, { kind: 'provider', home: f.home }, 'dialogue-test.scope');
+  assert.ok(mounts(plan).some(m => m.source === f.home && m.mode === '--bind'));
+});
+
 test('agent policy exposes only its selected checkout, own home and read-only Git metadata', async t => {
   const f = await fixture(t);
   const snapshot = path.join(f.data, 'requests', '.figma-snapshots', 'one.json'); await fs.mkdir(path.dirname(snapshot), { recursive: true }); await fs.writeFile(snapshot, '{}');
@@ -172,7 +191,7 @@ test('agent policy exposes only its selected checkout, own home and read-only Gi
   assert.ok(plan.args.includes('--unshare-pid')); assert.ok(plan.args.includes('--disable-userns')); assert.ok(plan.args.includes('--clearenv'));
   assert.ok(plan.args.includes('--expand-environment=no'));
   assert.ok(plan.args.includes('--property=BindsTo=dialogue.service'));
-  assert.ok(plan.args.includes('--property=MemoryMax=768M'));
+  assert.ok(plan.args.includes('--property=MemoryMax=1280M'));
   assert.ok(plan.args.includes('--property=TasksMax=96'));
   assert.ok(plan.args.includes('a literal $HOME and $(echo nope)'));
 });

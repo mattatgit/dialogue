@@ -102,9 +102,9 @@ async function main() {
     const auth = new AgentAuth({ dataRoot: path.dirname(home), appRoot: path.resolve(__dirname, '..'), env: { HOME: home }, runtime });
     let models;
     try { models = await auth.models(); }
-    catch (error) { throw new Error(`Native provider RPC failed under its ${PROFILES.control.memory} MiB limit: ${error.message}`); }
+    catch (error) { throw new Error(`Native provider RPC failed under its ${PROFILES.provider.memory} MiB limit: ${error.message}`); }
     assert.ok(models.some(model => model.id === 'dialogue-check/fake'));
-    console.log('PASS: real isolated provider RPC initializes and lists a model under the control memory limit');
+    console.log('PASS: real isolated provider RPC initializes and lists a model under the provider memory limit');
     provider.close(); provider = null;
     const survivor = await runtime.spawn(process.execPath, ['-e', `require('child_process').spawn('/bin/sleep',['60'],{detached:true,stdio:'ignore'}).unref();console.log('spawned');setInterval(()=>{},1000);`], { cwd: dir, env: {}, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'agent', home });
     await workerReady(survivor); const closed = once(survivor, 'close'); await killWorker(survivor, 'SIGKILL'); await closed;
