@@ -1,31 +1,11 @@
 import { stageGeometry, rootClipPath, rectFromPoints, validRect, safeSelection, clamp } from './review-model.mjs';
 import { readGrid, writeGrid } from './review-preferences.mjs';
+import { replyMarkdown } from './reply-markdown.mjs';
 
 // Branch activity combines the live Draft, private edit snapshots, published Versions, and execution records.
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-// Request summaries come from agent text: render only supported inline Markdown,
-// escaping all other markup instead of treating it as trusted HTML.
-function inlineMarkdown(value) {
-  const text = String(value ?? '');
-  const token = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|`([^`\n]+)`|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
-  let html = '', position = 0;
-  for (const match of text.matchAll(token)) {
-    html += esc(text.slice(position, match.index));
-    if (match[1]) {
-      try {
-        const url = new URL(match[2]);
-        html += `<a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(match[1])}</a>`;
-      } catch { html += esc(match[0]); }
-    } else if (match[3] || match[4]) html += `<strong>${esc(match[3] || match[4])}</strong>`;
-    else if (match[5]) html += `<code>${esc(match[5])}</code>`;
-    else if (match[6]) html += `<del>${esc(match[6])}</del>`;
-    else html += `<em>${esc(match[7] || match[8])}</em>`;
-    position = match.index + match[0].length;
-  }
-  return html + esc(text.slice(position));
-}
 const canvas = $('.review-canvas'), plane = $('.review-plane'), scroll = $('.review-scroll');
 const frame = $('[data-review-frame]'), host = $('.review-frame-host'), hit = $('.review-hit-layer');
 const rail = $('.review-history'), cards = $('[data-history-items]'), composer = $('[data-comment-form]');
@@ -341,11 +321,6 @@ function renderHistory() {
   save.title = saveError || (viewedSnapshot ? 'Return to the current build to save a version' : canSave ? 'Publish the current draft as a version' : 'No new changes to save');
   updateComposerState();
   if (focusPreview) cards.querySelector(`[data-preview-id="${focusPreview}"]`)?.focus({ preventScroll: true });
-}
-function replyMarkdown(text) {
-  return String(text).split(/(```[\s\S]*?```)/g).map(part => part.startsWith('```')
-    ? `<pre><code>${esc(part.replace(/^```[^\n]*\n?/, '').replace(/```$/, ''))}</code></pre>`
-    : part.split(/\n\s*\n/).map(p => `<p>${inlineMarkdown(p.replace(/^#{1,6}\s+/gm, ''))}</p>`).join('')).join('');
 }
 async function saveVersion(retry = false) {
   if (savingVersion || saveConfirmed || !active?.terminal || !activity?.draft?.canSave || !historyWorkspaceId
