@@ -42,6 +42,7 @@
 .conversation-message.is-working .message-body{color:#9ea39e}
 .workspace-review .conversation-composer{position:relative;flex:none;min-height:80px;padding:7px 8px;border:.5px solid #ebebeb;border-radius:16px;background:#fff;font:12px/16px Inter,Arial,sans-serif;box-shadow:none}
 .conversation-composer textarea{display:block;box-sizing:border-box;min-height:40px;max-height:min(240px,35dvh);width:100%;border:0;background:transparent;resize:none;outline:none;color:#171717;font:400 12px/18px Inter,Arial,sans-serif;padding:3px 8px 5px;overflow:auto;box-shadow:none!important}
+.workspace-review .conversation-composer textarea:focus,.workspace-review .conversation-composer textarea:focus-visible{outline:none;outline-offset:0;box-shadow:none}
 .conversation-composer textarea::placeholder{color:#9ea39e}.conversation-composer textarea:disabled{opacity:1}
 .conversation-composer .composer-heading{height:auto;min-height:24px;padding:0 8px 4px;align-items:center}
 .conversation-composer .anchor-tag{font:500 10px/16px 'Inter Tight',Arial,sans-serif;padding:0 6px;background:#eef8fe;border-radius:4px;color:#171717}
