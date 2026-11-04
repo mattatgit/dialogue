@@ -1,0 +1,25 @@
+# First BinaryLane pilot: Build handoff
+
+Prepared 2026-11-04 for **Setup & install**. Matt has requested proceeding toward the first hosted pilot now that the conversation UI is implemented. Server changes, activation and deployment stay in that chat.
+
+## Candidate and evidence
+
+- Repository: `mattatgit/dialogue`; branch `codex/conversation-sidebar`, [PR #10](https://github.com/mattatgit/dialogue/pull/10).
+- Tested application commit: **`7a78ff52b476e1be418b1bc3c0df1a05e83b668d`**. Subsequent documentation-only commits do not change the application candidate. Pin this SHA rather than deploying a moving branch.
+- This commit already contains accounts (PR #8) and isolation (PR #9), followed by the approved conversation UI and refinements. The PRs remain stacked drafts, not merged releases. Staging the exact candidate does not require merging the stack first; do not deploy the older accounts/isolation heads by mistake.
+- Local full suite: **148 passed, zero failed/cancelled/skipped**. Includes real pinned OMP with a disposable provider, member credential handoff, native conversation continuity, attachment/image reopening, branch separation and safe list rendering.
+- Browser fixtures cover annotations, independent drafts, historical/saved builds, model settings, original SVG icons/working animation, reduced motion, lists, cancellation and responsive layouts. The Nix package builds successfully; the macOS package is not a Linux deployment artifact.
+- No server deployment, production data population, real provider coding requests or unsolicited sign-in emails were performed by this Build work.
+
+## Setup sequence
+
+1. Preserve the prepared Ubuntu user service, worker slice, AppArmor policy, bounded storage, GitHub SSH-over-443 route, DNS/TLS, SMTP and backup protection. Stage the pinned source and lockfile dependencies as a root-owned Linux release using the prepared native tools. Keep `.env` and runtime data out of the release. Keep the production app stopped while changing `current`.
+2. Run the complete staged application's test suite with disposable test data and a test environment, not the production environment file. Run the **updated** `scripts/check-workers.js` in the prepared acceptance service, with the real production user/tools/slice/namespace policy. It must report `ALL LINUX WORKER CHECKS PASSED`. Previous acceptance of `ee3649f` does not cover the new session/reply/attachment mounts or real isolated OMP continuation.
+3. Extend encrypted recovery fixtures to include `requests/.sessions` and `requests/.attachments` together with request records and member homes. Verify restoration at the same canonical absolute paths, native continuation after restore and retained source attachments. These directories are durable, not caches. See [worker contract](WORKERS.md).
+4. Confirm a fresh encrypted backup and a practical rollback to the setup page/previous release. Record the old release pointer and relevant configuration; stop workers before switching releases. Once accounts/projects exist, rollback must preserve their data and use a consistent snapshot rather than mixing releases and state.
+5. The current hourly backup pauses the app and ends live workers. Resolve or explicitly agree this operating policy with Matt before regular use; do not silently disable backups or change their schedule. Conversation files persist, but an interrupted active request can fail and leave partial working-copy changes.
+6. After these checks pass, activate the private pilot at **https://build.idealogue.studio**, with working previews under **`<token>.preview.idealogue.studio`**. Preserve invitation-only access. Owner: `matt@idealogue.io`; editor: `saori@idealogue.io`. Do not copy local account databases/passkeys or model credentials to bootstrap production; each member signs in and connects their own provider normally.
+7. With user participation, verify email-code/passkey sign-in, separate model connections, shared project visibility, concurrent edits in different working copies, same-copy reservation, actual prototype preview/HMR, prompt/annotation continuity after service restart and a reviewed Save a version to a disposable pilot repository. Check hosted conversation attachment persistence and historical previews. Never use Snowpack or another real project as an unreviewed publication test.
+8. Measure memory/queue/disk behavior on the 4 GB host and check backup recovery with hosted pilot state. Preserve failure alerts and document any pending external monitoring/replacement-server drill. Report the exact deployed SHA, hosted URL, acceptance results and remaining limitations back to Matt. A failed acceptance or restore check stops launch; return application failures to Dialogue Build instead of bypassing isolation.
+
+The original checkout contains Setup-owned uncommitted infrastructure/documentation. Preserve it. Read this handoff from the feature branch with `git show codex/conversation-sidebar:docs/PILOT_RELEASE.md`; no checkout/reset of that dirty working tree is required.
