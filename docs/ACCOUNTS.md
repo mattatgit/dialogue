@@ -22,6 +22,14 @@ Production session cookies use `__Host-`, Secure, HttpOnly, SameSite=Lax and no 
 
 Preview origins do not receive the account cookie. Browser preview URLs are separate, random capabilities bound to the requesting session and membership. They expire with that session and are revoked on logout/member removal; possession allows viewing while the session is valid, so they are not public share links. Internal screenshot origins and request-scoped Figma capabilities retain their existing narrowly scoped roles.
 
+## AI-provider connection
+
+ChatGPT now defaults to the pinned OMP runtime’s device-code flow. Click Sign in, then **Copy code and open ChatGPT**, enter the short code on the provider page and approve. Dialogue waits and verifies the connection automatically; the device path has no localhost callback or pasted redirect URL. OpenAI requires device code login to be enabled in the personal ChatGPT security settings or by the workspace admin ([official guidance](https://learn.chatgpt.com/docs/auth)). If unavailable, **Use browser sign-in instead** retains the existing callback/code flow. Other providers keep their supported login methods; the paste field appears only when the provider requests input.
+
+Credentials continue to live in each member’s existing isolated OMP home under canonical `openai-codex`, so current connections and model choices carry over. The device alias is not a separate account or provider row. Canceling/restarting or closing the sign-in modal stops its pending worker; a canceled retry does not delete working credentials. The UI shows only the short user code and public provider URL, opens tabs on explicit clicks and clears code/link/input on completion or cancellation. Production account, Origin, SSE and worker policies are unchanged.
+
+No new OAuth callback route, localhost tunnel, API key, DNS/HTTPS setting, SMTP change or OMP upgrade is required. For a hosted rollout, Setup & install must run the full Linux suite (including the built-in native device-flow test against local disposable endpoints) and existing worker acceptance using its normal isolated test environment. Do not test by reconnecting a member’s working provider account without their participation. The automated test intercepts provider authentication endpoints locally and blocks external fetches; it cannot establish a particular real account’s device-login eligibility.
+
 ## Local development
 
 1. Run `npm ci` after checking out this branch (or use the packaged Nix build).

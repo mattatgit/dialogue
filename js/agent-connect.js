@@ -1,8 +1,7 @@
 // "Connect an AI model": the sign-in flow shared by the Settings page (inline,
 // with the model picker) and any page that must stop until the agent is
 // ready (a banner that opens the flow in a modal). No terminal involved:
-// the provider's page opens in a new tab and whatever the designer lands
-// on is pasted back here.
+// ChatGPT uses device approval; other services can request a callback code.
 //
 // window.DialogueAgent = { status, flow, show, close, banner, settings }
 (() => {
@@ -61,10 +60,19 @@
     const openText = el('span', 'setup-step-text', 'A new tab opens on the service\u2019s website. Sign in there with your own account.');
     const openLink = el('a', 'pill setup-open-link', 'Open the sign-in page');
     openLink.target = '_blank';
-    openLink.rel = 'noopener';
+    openLink.rel = 'noopener noreferrer';
     openLink.href = '#';
     stepOpen.append(openText, openLink);
+    const deviceCode = el('output', 'agent-device-code');
+    deviceCode.setAttribute('aria-label', 'One-time sign-in code');
+    deviceCode.hidden = true;
+    const copyOpen = el('button', 'pill', 'Copy code and open ChatGPT');
+    copyOpen.type = 'button';
+    copyOpen.hidden = true;
+    stepOpen.append(deviceCode, copyOpen);
+    stepOpen.hidden = true;
     const stepPaste = el('li');
+    stepPaste.hidden = true;
     stepPaste.append(el('span', 'setup-step-title', 'Paste the address you land on'));
     stepPaste.append(el('span', 'setup-step-text', 'When the website is done it sends you to a page that may not open (its address starts with "localhost"). Copy the whole address from the browser\u2019s address bar and paste it here. A code shown on the page works too.'));
     const pasteRow = el('div', 'agent-paste-row');
@@ -79,12 +87,17 @@
     steps.append(stepOpen, stepPaste);
     const progress = el('p', 'agent-progress');
     progress.hidden = true;
+    progress.setAttribute('role', 'status');
     const error = el('p', 'setup-error');
     error.hidden = true;
+    error.setAttribute('role', 'alert');
     const actions = el('div', 'agent-actions');
     const cancel = el('button', 'pill outline', 'Cancel');
     cancel.type = 'button';
-    actions.append(cancel);
+    const fallback = el('button', 'pill outline', 'Use browser sign-in instead');
+    fallback.type = 'button';
+    fallback.hidden = true;
+    actions.append(fallback, cancel);
     signin.append(signinTitle, steps, progress, error, actions);
 
     host.replaceChildren(statusLine, statusDetail, intro, providerList, more, signin);
@@ -95,6 +108,9 @@
     let pendingInput = false;
     let queued = null;
     let pollTimer = null;
+    let attempt = 0;
+    let disposed = false;
+    let activeProvider = null;
 
     const showStatus = (state) => {
       current = state;
@@ -109,6 +125,7 @@
 
     const refreshStatus = async () => {
       const payload = await status();
+      if (disposed) return payload;
       showStatus(payload.status);
       clearTimeout(pollTimer);
       if (!payload.status) pollTimer = setTimeout(refreshStatus, 2000);
@@ -131,10 +148,25 @@
       queued = null;
     };
 
+    const clearSignIn = () => {
+      deviceCode.textContent = '';
+      deviceCode.hidden = true;
+      copyOpen.hidden = true;
+      openLink.removeAttribute('href');
+      pasteField.value = '';
+    };
     const finish = () => {
+      attempt++;
       stopStream();
+      clearSignIn();
       session = null;
       signin.hidden = true;
+    };
+
+    const cancelLogin = () => {
+      const id = session;
+      finish();
+      if (id) return api('DELETE', `/api/agent/login/${id}`).catch(() => {});
     };
 
     const submitPaste = async () => {
@@ -145,13 +177,16 @@
         setProgress('Hold on, the service is not ready for the code yet…');
         return;
       }
+      const generation = attempt;
       pendingInput = false;
       pasteButton.disabled = true;
       try {
         await api('POST', `/api/agent/login/${session}/input`, { value });
+        if (generation !== attempt) return;
         pasteField.value = '';
         setProgress('Checking the code…');
       } catch (failure) {
+        if (generation !== attempt) return;
         pendingInput = true;
         setError(failure.message);
       } finally {
@@ -159,17 +194,39 @@
       }
     };
 
-    const listen = (id) => {
+    const listen = (id, generation) => {
       stream = new EventSource(`/api/agent/login/${id}/events`);
-      stream.addEventListener('open_url', (event) => {
-        const data = JSON.parse(event.data);
-        openLink.href = data.url;
-        openText.textContent = data.instructions || 'A new tab opens on the service\u2019s website. Sign in there with your own account.';
-        window.open(data.url, '_blank', 'noopener');
+      const on = (name, handler) => stream.addEventListener(name, (event) => {
+        if (disposed || generation !== attempt) return;
+        handler(event);
       });
-      stream.addEventListener('progress', (event) => setProgress(JSON.parse(event.data).message));
-      stream.addEventListener('input', (event) => {
+      on('method', (event) => {
+        fallback.hidden = activeProvider?.id !== 'openai-codex' || JSON.parse(event.data).method === 'browser';
+      });
+      on('open_url', (event) => {
         const data = JSON.parse(event.data);
+        stepOpen.hidden = false;
+        openLink.href = data.url;
+        openLink.hidden = false;
+        const isDevice = data.method === 'device';
+        openText.textContent = isDevice
+          ? 'Copy this one-time code, open ChatGPT and approve sign-in. Return here — Dialogue will connect automatically.'
+          : data.instructions || 'Open the service’s website and sign in with your own account.';
+        deviceCode.textContent = data.userCode || '';
+        deviceCode.hidden = !isDevice || !data.userCode;
+        copyOpen.hidden = deviceCode.hidden;
+        openLink.hidden = !copyOpen.hidden;
+        setProgress(isDevice ? 'Waiting for you to approve sign-in…' : 'Waiting for sign-in…');
+      });
+      on('progress', (event) => {
+        const message = JSON.parse(event.data).message;
+        // The native device progress repeats the code; keep it in the selectable code box.
+        setProgress(deviceCode.textContent && /Waiting for browser authorization/.test(message)
+          ? 'Waiting for you to approve sign-in…' : message);
+      });
+      on('input', (event) => {
+        const data = JSON.parse(event.data);
+        stepPaste.hidden = false;
         if (data.placeholder) pasteField.placeholder = data.placeholder;
         pendingInput = true;
         if (queued) {
@@ -178,41 +235,69 @@
           submitPaste();
         }
       });
-      stream.addEventListener('done', async (event) => {
+      on('done', async (event) => {
         const data = JSON.parse(event.data);
         finish();
         showStatus(data.status);
         await loadProviders().catch(() => {});
-        if (data.status?.ready) options.onReady?.(data.status);
-        else setError(describe(data.status).text);
+        if (!disposed && generation + 1 === attempt && data.status?.ready) options.onReady?.(data.status);
       });
-      stream.addEventListener('error', (event) => {
+      on('error', (event) => {
         if (!event.data) return; // connection hiccup; EventSource retries
         const data = JSON.parse(event.data);
         stopStream();
+        session = null;
+        clearSignIn();
+        stepOpen.hidden = true;
+        stepPaste.hidden = true;
         setProgress('');
         setError(data.message);
       });
     };
 
-    const startLogin = async (provider) => {
-      finish();
+    const startLogin = async (provider, method = 'auto') => {
+      const cancelled = cancelLogin();
+      const generation = ++attempt;
+      await cancelled;
+      if (disposed || generation !== attempt) return;
+      activeProvider = provider;
       setError('');
       setProgress('Starting the sign-in…');
       signinTitle.textContent = `Sign in to ${provider.name}`;
-      openLink.href = '#';
-      pasteField.value = '';
+      stepOpen.hidden = true;
+      stepPaste.hidden = true;
+      pasteButton.disabled = false;
+      fallback.hidden = provider.id !== 'openai-codex' || method === 'browser';
       signin.hidden = false;
       signin.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       try {
-        const created = await api('POST', '/api/agent/login', { providerId: provider.id });
+        const created = await api('POST', '/api/agent/login', { providerId: provider.id, method });
+        if (disposed || generation !== attempt) {
+          await api('DELETE', `/api/agent/login/${created.id}`).catch(() => {});
+          return;
+        }
         session = created.id;
-        listen(session);
+        listen(session, generation);
       } catch (failure) {
+        if (disposed || generation !== attempt) return;
         setProgress('');
         setError(failure.message);
       }
     };
+
+    copyOpen.addEventListener('click', () => {
+      const generation = attempt;
+      const copyFailed = () => {
+        if (generation === attempt) setProgress('Copy the code above and enter it on ChatGPT’s sign-in page.');
+      };
+      // Start both during the click, without awaiting the clipboard or opening
+      // a tab from an asynchronous SSE callback (which browsers can block).
+      try { Promise.resolve(navigator.clipboard.writeText(deviceCode.textContent)).catch(copyFailed); }
+      catch { copyFailed(); }
+      window.open(openLink.href, '_blank', 'noopener,noreferrer');
+      openLink.hidden = false; // accessible retry if the browser blocks the new tab
+    });
+    fallback.addEventListener('click', () => startLogin(activeProvider, 'browser'));
 
     const providerRow = (provider) => {
       const row = el('div', 'agent-provider');
@@ -227,6 +312,7 @@
 
     const loadProviders = async () => {
       const { providers } = await api('GET', '/api/agent/providers');
+      if (disposed) return;
       const byId = new Map(providers.map((provider) => [provider.id, provider]));
       const popular = POPULAR.map((id) => byId.get(id)).filter(Boolean);
       const rest = providers.filter((provider) => !POPULAR.includes(provider.id));
@@ -242,12 +328,7 @@
         submitPaste();
       }
     });
-    cancel.addEventListener('click', async () => {
-      const id = session;
-      finish();
-      setProgress('');
-      if (id) await api('DELETE', `/api/agent/login/${id}`).catch(() => {});
-    });
+    cancel.addEventListener('click', () => { cancelLogin(); setProgress(''); });
 
     providerList.textContent = 'Loading services…';
     refreshStatus().catch((failure) => showStatus({ ready: false, reason: 'unknown', detail: failure.message }));
@@ -266,7 +347,8 @@
       },
       current: () => current,
       destroy: () => {
-        finish();
+        disposed = true;
+        cancelLogin();
         clearTimeout(pollTimer);
       }
     };
@@ -278,6 +360,8 @@
 
   const close = () => {
     if (!layer || layer.hidden) return;
+    modalFlow?.destroy();
+    modalFlow = null;
     layer.classList.remove('is-open');
     window.setTimeout(() => { layer.hidden = true; }, 160);
   };

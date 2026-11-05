@@ -254,3 +254,71 @@ test('a designer signs in to a model provider from the web UI and the agent beco
   assert.equal(rejected.body.status.ready, false);
   assert.equal(rejected.body.status.reason, 'rejected', rejected.body.status.detail);
 });
+
+// No replacement OAuth implementation: drive OMP 18.2.10's actual built-in
+// device alias, polling, token exchange and canonical credential storage.
+test('ChatGPT device approval completes automatically, survives cancellation and never needs a localhost paste', { skip: ompAvailable ? false : `${OMP_BIN} is not on PATH` }, async (t) => {
+  const { deviceProvider, deviceExtension, DEVICE_CODE, ACCESS } = require('./helpers/device-provider.js');
+  const provider = await deviceProvider();
+  const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'dialogue-device-e2e-'));
+  const home = path.join(tmp, 'home'), dataRoot = path.join(tmp, 'data');
+  await fsp.mkdir(path.join(home, '.omp', 'agent', 'extensions'), { recursive: true });
+  await fsp.writeFile(path.join(home, '.omp', 'agent', 'extensions', 'device-test.js'), deviceExtension(provider.base));
+  const port = await freePort();
+  const account = seedAccounts(dataRoot, port);
+  // Select only the disposable model: the built-in catalog remains installed.
+  await fsp.writeFile(path.join(dataRoot, 'agent.json'), JSON.stringify({ model: 'openai-codex/device-test' }));
+  authHeaders = account.headers;
+  const base = `http://127.0.0.1:${port}`;
+  authByOrigin.set(base, authHeaders);
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.endsWith('_API_KEY') && !key.startsWith('PI_') && !key.startsWith('OMP_')));
+  const server = spawn(process.execPath, [path.join(ROOT, 'server.js')], { cwd: tmp,
+    env: { ...env, ...account.env, HOME: home, DIALOGUE_DATA: dataRoot, PORT: String(port), HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let log = ''; server.stdout.on('data', x => log += x); server.stderr.on('data', x => log += x);
+  t.after(async () => {
+    server.kill('SIGTERM'); provider.server.close();
+    if (server.exitCode === null) await new Promise(resolve => server.once('exit', resolve));
+    await fsp.rm(tmp, { recursive: true, force: true });
+  });
+  await waitForServer(base, server);
+  const providers = (await api(base, 'GET', '/api/agent/providers')).body.providers;
+  const chatgpt = providers.filter(p => p.id.startsWith('openai-codex'));
+  assert.deepEqual(chatgpt, [{ id: 'openai-codex', name: 'ChatGPT', authenticated: false, loginMethods: ['device', 'browser'] }], log);
+  const started = await api(base, 'POST', '/api/agent/login', { providerId: 'openai-codex' });
+  assert.equal(started.status, 201, JSON.stringify(started.body));
+  const stream = subscribe(`${base}/api/agent/login/${started.body.id}/events`);
+  t.after(() => stream.close());
+  assert.equal((await stream.next('method')).method, 'device');
+  const opened = await stream.next('open_url');
+  assert.equal(opened.url, 'https://auth.openai.com/codex/device');
+  assert.equal(opened.userCode, DEVICE_CODE);
+  assert.equal(opened.method, 'device');
+  assert.equal(stream.events.some(e => e.event === 'input'), false);
+  await fetch(`${provider.base}/approve`, { method: 'POST' });
+  const done = await stream.next('done', 90000);
+  assert.equal(done.status.ready, true, JSON.stringify(done));
+  assert.equal(done.status.model, 'openai-codex/device-test');
+  assert.ok(provider.state.probes.every(p => p === `Bearer ${ACCESS}`));
+  assert.ok(provider.state.probes.length > 0);
+  assert.equal(stream.events.some(e => e.event === 'input'), false);
+  const publicEvents = JSON.stringify(stream.events);
+  for (const secret of [ACCESS, 'private-device-id', 'private-authorization-code', 'private-verifier', 'private-refresh-token']) assert.equal(publicEvents.includes(secret), false);
+  const signedIn = (await api(base, 'GET', '/api/agent/providers')).body.providers;
+  assert.equal(signedIn.find(p => p.id === 'openai-codex').authenticated, true);
+  assert.equal(signedIn.some(p => p.id === 'openai-codex-device'), false);
+
+  // Canceling a retry leaves the working credentials and selected model intact.
+  provider.state.approved = false;
+  const retry = await api(base, 'POST', '/api/agent/login', { providerId: 'openai-codex', method: 'device' });
+  const retryStream = subscribe(`${base}/api/agent/login/${retry.body.id}/events`);
+  t.after(() => retryStream.close());
+  await retryStream.next('open_url');
+  assert.equal((await api(base, 'DELETE', `/api/agent/login/${retry.body.id}`)).status, 200);
+  assert.equal((await api(base, 'POST', '/api/agent/check')).body.status.ready, true);
+
+  provider.state.deny = true;
+  const denied = await api(base, 'POST', '/api/agent/login', { providerId: 'openai-codex' });
+  const deniedStream = subscribe(`${base}/api/agent/login/${denied.body.id}/events`);
+  t.after(() => deniedStream.close());
+  assert.match((await deniedStream.next('error')).message, /device code login.*security.*Browser sign-in/s);
+});
