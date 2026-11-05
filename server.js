@@ -560,7 +560,7 @@ async function handleAgentApi(req, res, pathname) {
   }
   if (req.method === 'POST' && pathname === '/api/agent/login') {
     const body = await readJsonBody(req);
-    const session = await agentAuth.startLogin(body.providerId);
+    const session = await agentAuth.startLogin(body.providerId, body.method);
     sendJson(res, 201, { id: session.id });
     return true;
   }

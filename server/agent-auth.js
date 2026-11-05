@@ -18,6 +18,27 @@ const RPC_START_TIMEOUT_MS = 30 * 1000;
 const RPC_CALL_TIMEOUT_MS = 30 * 1000;
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
 const PROBE_PROMPT = 'Reply with exactly: OK';
+const CODEX_DEVICE = 'openai-codex-device';
+function publicLoginProviders(providers) {
+  const available = providers.filter(p => p.available !== false);
+  const device = available.some(p => p.id === CODEX_DEVICE);
+  const unique = new Map();
+  for (const provider of available) {
+    const previous = unique.get(provider.id);
+    unique.set(provider.id, { ...provider, authenticated: Boolean(provider.authenticated || previous?.authenticated) });
+  }
+  return [...unique.values()].filter(p => p.id !== CODEX_DEVICE).map(({ id, name, authenticated }) => ({
+    id, name: id === 'openai-codex' ? 'ChatGPT' : name, authenticated: Boolean(authenticated),
+    ...(id === 'openai-codex' ? { loginMethods: device ? ['device', 'browser'] : ['browser'] } : {})
+  }));
+}
+function loginURL(value) {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || !(url.protocol === 'https:' || url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) return null;
+    return url.href;
+  } catch { return null; }
+}
 // Chat models worth picking first when a fresh sign-in cannot serve the
 // current selection.
 const MODEL_PREFERENCE = [/opus/i, /sonnet/i, /gpt-5/i, /gemini.*pro/i, /claude/i, /gpt/i];
@@ -165,9 +186,12 @@ class RpcChild {
 // the SSE clients following along. Events are buffered so a client that
 // connects after `open_url` was emitted still sees it.
 class LoginSession {
-  constructor(providerId) {
+  constructor(providerId, requestedMethod = 'auto') {
     this.id = randomUUID();
     this.providerId = providerId;
+    this.requestedMethod = requestedMethod;
+    this.method = 'browser';
+    this.loginProviderId = providerId;
     this.events = [];
     this.clients = new Set();
     this.pendingInput = null;
@@ -385,9 +409,7 @@ class AgentAuth extends EventEmitter {
 
   async providers() {
     const data = await this.withRpc((rpc) => rpc.request({ type: 'get_login_providers' }));
-    return data.providers
-      .filter((provider) => provider.available !== false)
-      .map(({ id, name, authenticated }) => ({ id, name, authenticated: Boolean(authenticated) }));
+    return publicLoginProviders(data.providers);
   }
 
   static publicModels(models) {
@@ -411,10 +433,14 @@ class AgentAuth extends EventEmitter {
   }
 
   // Start a web sign-in for one provider. Only one runs at a time.
-  async startLogin(providerId) {
+  async startLogin(providerId, method = 'auto') {
     if (typeof providerId !== 'string' || !providerId.trim()) throw new AgentAuthError(400, 'Choose a provider to sign in to.');
+    if (!['auto', 'device', 'browser'].includes(method)) throw new AgentAuthError(400, 'Choose a valid sign-in method.');
+    providerId = providerId.trim();
+    if (providerId === CODEX_DEVICE) { providerId = 'openai-codex'; method = 'device'; }
+    if (method === 'device' && providerId !== 'openai-codex') throw new AgentAuthError(400, 'Device sign-in is not supported for this service.');
     this.cancelLogin();
-    const session = new LoginSession(providerId.trim());
+    const session = new LoginSession(providerId, method);
     this.login = session;
     session.timer = setTimeout(() => session.push('error', { message: 'The sign-in took too long. Start it again.' }), LOGIN_TIMEOUT_MS);
     const cwd = await fsp.mkdtemp(path.join(os.tmpdir(), 'dialogue-login-'));
@@ -428,7 +454,10 @@ class AgentAuth extends EventEmitter {
       if (frame.type !== 'extension_ui_request') return;
       switch (frame.method) {
         case 'open_url':
-          session.push('open_url', { url: frame.url, ...(frame.launchUrl ? { launchUrl: frame.launchUrl } : {}), ...(frame.instructions ? { instructions: frame.instructions } : {}) });
+          if (!loginURL(frame.url)) { session.push('error', { message: 'The service returned an invalid sign-in address.' }); break; }
+          session.push('open_url', { url: loginURL(frame.url), method: session.method,
+            ...(frame.instructions ? { instructions: frame.instructions } : {}),
+            ...(session.method === 'device' ? { userCode: /^Enter code:\s*([A-Z0-9-]{4,40})\s*$/i.exec(frame.instructions || '')?.[1] || null } : {}) });
           break;
         case 'notify':
           if (frame.message) session.push('progress', { message: frame.message });
@@ -447,14 +476,25 @@ class AgentAuth extends EventEmitter {
           break;
       }
     });
-    this.driveLogin(session, rpc).catch((error) => session.push('error', { message: error.message }));
+    this.driveLogin(session, rpc).catch((error) => session.push('error', { message:
+      session.method === 'device' && /(?:device authorization initiation failed|device token polling failed):\s*(?:401|403|404)/i.test(error.message)
+        ? 'ChatGPT did not allow device sign-in. Check that device code login is enabled in your ChatGPT security or workspace settings, then try again. Browser sign-in is also available.'
+        : error.message }));
     return session;
   }
 
   async driveLogin(session, rpc) {
     await rpc.ready;
     if (session.ended) return;
-    await rpc.request({ type: 'login', providerId: session.providerId }, LOGIN_TIMEOUT_MS);
+    if (session.providerId === 'openai-codex' && session.requestedMethod !== 'browser') {
+      const { providers } = await rpc.request({ type: 'get_login_providers' });
+      if (session.ended) return;
+      if (providers.some(p => p.id === CODEX_DEVICE && p.available !== false)) {
+        session.loginProviderId = CODEX_DEVICE; session.method = 'device';
+      } else if (session.requestedMethod === 'device') throw new Error('Device sign-in is not available in this model runtime. Use browser sign-in instead.');
+    }
+    session.push('method', { method: session.method });
+    await rpc.request({ type: 'login', providerId: session.loginProviderId }, LOGIN_TIMEOUT_MS);
     if (session.ended) return;
     session.push('progress', { message: 'Signed in. Checking the connection...' });
     // A provider that cannot serve the current model gets a model of its own.
@@ -495,4 +535,4 @@ class AgentAuth extends EventEmitter {
   }
 }
 
-module.exports = { AgentAuth, AgentAuthError, classifyFailure, configDefaultModel };
+module.exports = { AgentAuth, AgentAuthError, classifyFailure, configDefaultModel, publicLoginProviders, loginURL };

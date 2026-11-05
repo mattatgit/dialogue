@@ -82,7 +82,10 @@
 .agent-paste-row .form-field{flex:1;min-width:0;height:36px;box-sizing:border-box}
 .agent-progress{margin:16px 0 0;color:#555}
 .agent-progress[hidden]{display:none}
-.agent-actions{margin-top:20px;display:flex;justify-content:flex-end}
+.agent-actions{margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.agent-signin [hidden]{display:none}
+.agent-device-code{display:block;user-select:all;font-size:28px;font-weight:600;letter-spacing:3px;margin:16px 0;color:var(--black,#171717)}
+.agent-signin .setup-open-link{margin-top:12px}
 .agent-tools{margin-top:28px;padding-top:20px;border-top:1px solid #e8e8e8;display:grid;gap:10px}
 .agent-model-label{font-weight:600;font-size:14px}
 .agent-model{height:36px;width:100%;box-sizing:border-box}
