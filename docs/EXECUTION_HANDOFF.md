@@ -51,6 +51,8 @@ Accepted run04:05:04.474–04:08:30.991 UTC (206.5s), report `/srv/dialogue/chec
 
 These include descendants/cache charged by the kernel, not sums of process RSS.100ms sampling can miss short aggregate peaks; retained long-lived slice peak is not substituted for concurrent demand. The two MemAvailable minima come from separate sampling series. No accepted worker had an OOM kill or task denial. One running agent cancellation, one queued cancellation without dispatch,12 preview stops and a terminated unmeasured readiness probe were deliberate cleanup, not OOM/timeout. Some individual trees reached their caps; installation reclaim/file cache and transient page accounting matter. Do not describe them as having ample individual margin. The coordinator measurement is not a full production-traffic benchmark. The measured workload fits the4 GB host without demonstrating a need for an upgrade; it does not establish capacity for parallel agents or larger projects.
 
+Memory provenance: the retained report's `workers[18].minHostAvailableBytes` is2141511680 bytes (2042.3046875 MiB). `minHostAvailableBytes` accumulates the minimum over the worker's samples; `hostAvailableBytes` retains only its latest sample and must not be used to reconstruct that minimum. The independently sampled external workflow series records2045.0 MiB. Both figures describe the accepted run.
+
 "Cold" here means after a fresh managed dependency install; the harness repeats `npm ci` in setup and the main copy. Kernel file cache was not flushed. Restarts without reinstall had a lower observed preview peak (446.8 MiB); this does not justify lowering its ceiling for the next install. The first thumbnail completed in25.137s, which explains why the earlier20s deadline was insufficient. Interactive browser phases peaked222.6–233.0 MiB; the setup thumbnail peaked247.5 MiB.
 
 | Across all scopes of class | Agent | Install | Preview | Browser |
@@ -76,6 +78,8 @@ Root-only sealed evidence, with every manifest hash verified:
 
 - Native suite/worker gates: `/root/dialogue-acceptance/2026-11-09-040258Z-e801b0d.tar.gz`, SHA256 `07c592e9f6c08ba23349814bec1223a177f7f9a21a1a62864f16fd1b40594fed` (98 artifacts).
 - Real Deui/capacity: `/root/dialogue-acceptance/2026-11-09-040503Z-e801b0d-capacity.tar.gz`, SHA256 `3efdfa1bbcc9dde1cccae33a629f596cee36d4b04196286247a4b63ddd3dbb1c` (109 artifacts), including `capacity-analysis.json`, `review-receipt.json`, report/worker records, timeline, CPU/PSI/pids and screenshots. The reviewed screenshot is the intended Charts shell with expected uninitialized BLE debug state; no machine telemetry was claimed.
+
+The capacity directory's `review-receipt.json` SHA256 is `107fbc2de834504207b6fb8357fd9cbd38a898531fb8170ff8bf1cf488524546`; it is included in the sealed capacity package above.
 
 Build independently rechecked public health/home200 and unauthenticated project API401. This acceptance does not claim a full real-user hosted HTTP/auth/proxy workflow, real-provider answer quality, hardware interaction or a sustained load benchmark.
 
