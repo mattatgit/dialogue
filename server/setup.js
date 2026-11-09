@@ -12,6 +12,8 @@ const { EventEmitter } = require('node:events');
 
 const { RECIPE_PATH, guessStaticRecipe, parseRecipe } = require('./recipe.js');
 const { Runner } = require('./runner.js');
+const { message: workerMessage } = require('./worker-observation.js');
+const { randomUUID } = require('node:crypto');
 const { spawnWorker, killWorker } = require('./workers.js');
 const { readProjectFile } = require('./project-files.js');
 const readRecipe = dir => readProjectFile(dir, path.join(dir, RECIPE_PATH)).then(bytes => bytes.toString('utf8')).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
@@ -67,7 +69,7 @@ class PreviewSetup extends EventEmitter {
     super();
     Object.assign(this, { projects, repoFor, agent, agentFor, reserveWorkspace, previews, screenshot, setupRoot, ompBin, configPath, promptPath, env, maxAttempts, createRunner });
     this.runtime = runtime;
-    this.logBytes = new Map();
+    this.logBytes = new Map(); this.logWrites = new Map();
     this.queue = Promise.resolve();
     this.pending = new Set(); // "<kind>:<slug>" queued or running
     this.waiting = new Set(); // slugs parked until the agent is ready
@@ -123,14 +125,18 @@ class PreviewSetup extends EventEmitter {
     if (remaining <= 0) return;
     const bytes = Buffer.from(text.endsWith('\n') ? text : `${text}\n`).subarray(0, remaining);
     this.logBytes.set(slug, current + bytes.length);
-    await fsp.appendFile(this.logFile(slug), bytes);
+    const write = (this.logWrites.get(slug) || Promise.resolve()).then(() => fsp.appendFile(this.logFile(slug), bytes));
+    this.logWrites.set(slug, write); await write;
   }
 
   async runSetup(slug) {
     const project = await this.projects.find(slug); // gone meanwhile → throws, job ends
     const agent = this.agentFor(project);
     await fsp.mkdir(this.dir(slug), { recursive: true });
-    await fsp.writeFile(this.logFile(slug), '');
+    await this.logWrites.get(slug);
+    const archive = path.join(this.dir(slug),'attempts'); await fsp.mkdir(archive,{recursive:true,mode:0o700});
+    await fsp.rename(this.logFile(slug), path.join(archive, new Date().toISOString().replaceAll(':','-') + '-' + randomUUID() + '.log')).catch(error => { if(error.code !== 'ENOENT') throw error; });
+    await fsp.writeFile(this.logFile(slug), '', {mode:0o600});
     this.logBytes.set(slug, 0);
     const repo = await this.repoFor(slug);
     let place;
@@ -171,7 +177,7 @@ class PreviewSetup extends EventEmitter {
           await this.projects.setPreviewSetup(slug, { attempt: attempt - 1 });
           return this.park(slug, recheck);
         }
-        failure = { step: 'agent', exitCode: agentRun.exitCode, message: 'The agent stopped with an error.', log: tail(agentRun.output) };
+        failure = { step: 'agent', exitCode: agentRun.exitCode, message: agentRun.error || 'The agent stopped with an error.', log: tail(agentRun.output) };
         continue;
       }
       recipeText = await readRecipe(place.dir);
@@ -228,9 +234,9 @@ class PreviewSetup extends EventEmitter {
           cwd: dir,
           env: { ...process.env, ...this.env, ...agent.ompEnv() },
           stdio: ['ignore', 'pipe', 'pipe'],
-        }, { kind: 'agent', home: agent.ompEnv().HOME, signal: agent.abort?.signal });
+        }, { kind: 'agent', attribution:{project:slug,phase:'setup-agent'}, home: agent.ompEnv().HOME, signal: agent.abort?.signal });
       return await new Promise((resolve) => {
-        const timer = setTimeout(() => killWorker(child, 'SIGKILL'), AGENT_TIMEOUT_MS);
+        const timer = setTimeout(() => { child.workerReason = 'timeout'; killWorker(child, 'SIGKILL'); }, AGENT_TIMEOUT_MS);
         let output = '';
         const collect = (chunk) => {
           output = (output + chunk).slice(-65536);
@@ -239,7 +245,7 @@ class PreviewSetup extends EventEmitter {
         child.stdout.on('data', collect);
         child.stderr.on('data', collect);
         child.on('error', (error) => { clearTimeout(timer); resolve({ exitCode: -1, output: `${output}\n${error.message}` }); });
-        child.on('close', (code) => { clearTimeout(timer); resolve({ exitCode: code ?? -1, output }); });
+        child.on('close', async (code,signal) => { clearTimeout(timer); await child.workerFinished; const error = code !== 0 ? (child.workerRecord ? workerMessage(child.workerRecord) : `Agent stopped (${signal || code}).`) : null; if(error) await this.log(slug,error); resolve({ exitCode: code ?? -1, output, error }); });
       });
     } finally {
       if (moved) await fsp.rename(hidden, envFile).catch(() => {});
@@ -257,12 +263,17 @@ class PreviewSetup extends EventEmitter {
     // Previews run in every branch checkout, so they must not leave changes
     // there (a generated lockfile would show up as uncommitted work).
     const before = await checkoutChanges(dir);
-    const runner = this.createRunner({ dir, runtime: this.runtime, recipe: parsed.recipe, stampDir: path.join(this.dir(slug), 'stamps', path.basename(dir)) });
-    runner.on('log', (line) => this.log(slug, line).catch(() => {}));
+    const owner = this.runtime?.previewOwners?.get(dir);
+    const reuse = owner && JSON.stringify(owner.recipe) === JSON.stringify(parsed.recipe);
+    if (owner && !reuse) await owner.stop();
+    const runner = reuse ? owner : this.createRunner({ dir, attribution:{project:slug,phase:'setup-validation'}, runtime: this.runtime, recipe: parsed.recipe, stampDir: path.join(this.dir(slug), 'stamps', path.basename(dir)) });
+    const log = line => this.log(slug,line).catch(() => {});
+    runner.on('log',log);
     try {
       await runner.start();
     } catch (error) {
-      await runner.stop().catch(() => {});
+      runner.off('log',log);
+      if (!reuse) await runner.stop().catch(() => {});
       return { step: error.step || 'start', exitCode: error.exitCode ?? null, message: error.message, log: error.logTail || runner.logTail() };
     }
     try {
@@ -277,12 +288,22 @@ class PreviewSetup extends EventEmitter {
         };
       }
       await fsp.rm(shotFile, { force: true });
-      await this.screenshot(runner.target, [shotFile], parsed.recipe.entry);
+      const alive = () => runner.state === 'ready' && runner.target && (!runner.child || runner.child.exitCode === null && runner.child.signalCode === null);
+      try { await this.screenshot(runner.target, [shotFile], parsed.recipe.entry); }
+      catch (error) {
+        await fsp.rm(shotFile,{force:true});
+        const answers = alive() && (runner.target.kind === 'static' || await runner.probe(runner.target.host,runner.target.port));
+        if (!answers) return {step:'start',exitCode:runner.child?.exitCode ?? null,message:runner.error?.message || 'The preview stopped during thumbnail capture.',log:runner.logTail()};
+        await this.log(slug,`HTTP preview configured; thumbnail failed: ${error.message}. UI remains unverified.`);
+        return null;
+      }
+      if (!alive()) return {step:'start',exitCode:null,message:runner.error?.message || 'The preview stopped during thumbnail capture.',log:runner.logTail()};
       return null;
     } catch (error) {
       return { step: 'screenshot', exitCode: null, message: error.message, log: runner.logTail() };
     } finally {
-      await runner.stop().catch(() => {});
+      runner.off('log',log);
+      if (!reuse) await runner.stop().catch(() => {});
     }
   }
 
@@ -300,14 +321,15 @@ class PreviewSetup extends EventEmitter {
     // card shows and the local commit share the image. No image (no
     // Chromium): the preview still works, cards show their placeholder.
     const shot = this.shotFile(slug);
-    if (await fsp.access(shot).then(() => true, () => false)) {
+    const captured = await fsp.access(shot).then(() => true, () => false);
+    if (captured) {
       const targets = [...new Set([head, origin].filter(Boolean))].map((s) => this.previews.file(slug, s));
       for (const file of [...targets, this.previews.mainFile(slug)]) {
         await fsp.mkdir(path.dirname(file), { recursive: true });
         await fsp.copyFile(shot, file);
       }
     }
-    await this.projects.setPreviewSetup(slug, { status: 'ready', attempt, error: null, finishedAt: new Date().toISOString() });
+    await this.projects.setPreviewSetup(slug, { status: 'ready', verification:captured ? 'http-and-screenshot' : 'http-only', uiVerified:false, attempt, error: null, finishedAt: new Date().toISOString() });
     this.emit('ready', slug);
   }
 

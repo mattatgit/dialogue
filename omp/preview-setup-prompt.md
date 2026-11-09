@@ -34,7 +34,9 @@ Format (JSON, all paths relative to the repository root):
   --no-package-lock`; with one, `npm ci` (or the matching pnpm/yarn
   frozen-lockfile install).
 
-You may inspect files and run commands to check your answer (for example
-install dependencies and start the server briefly on a free port), but stop
-anything you start. Do not change any other file and do not commit.
-Reply with one sentence saying what you chose.
+Inspect files and write only the recipe. Do not install dependencies or start a
+server inside the agent worker: Dialogue's managed runner performs those steps
+after you finish. Listener syscalls are denied in production agent workers.
+Short-lived commands that do not start servers are allowed. Do not commit.
+Reply with one sentence saying what you chose. A response from HTTP or an
+imported repository alone does not verify that the intended UI works.

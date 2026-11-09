@@ -305,3 +305,12 @@ test('preview setup refuses to modify an open working copy reserved by another m
     assert.equal((await ctx.calls()).length, 0);
   } finally { await ctx.cleanup(); }
 });
+
+test('thumbnail failure retains a live HTTP configuration without claiming verified UI', async () => {
+  const ctx=await setup({steps:[{recipe:STATIC}]});ctx.pipeline.screenshot=async()=>{throw Error('Thumbnail timed out after its deadline')};
+  try {ctx.pipeline.enqueue('o-app');await ctx.pipeline.idle();const state=await ctx.status();assert.equal(state.status,'ready');assert.equal(state.uiVerified,false);assert.equal(state.verification,'http-only');assert.match(await fsp.readFile(ctx.pipeline.logFile('o-app'),'utf8'),/UI remains unverified/);await assert.rejects(fsp.access(ctx.previews.mainFile('o-app')));}finally{await ctx.cleanup()}
+});
+test('a preview lost during thumbnail capture cannot be marked configured', async () => {
+  const ctx=await setup({steps:[{recipe:STATIC}]});let runner;ctx.pipeline.maxAttempts=1;ctx.pipeline.createRunner=options=>(runner=new(require('../server/runner.js').Runner)(options));ctx.pipeline.screenshot=async()=>{await runner.stop();throw Error('Thumbnail timed out')};
+  try{ctx.pipeline.enqueue('o-app');await ctx.pipeline.idle();assert.equal((await ctx.status()).status,'failed');assert.match((await ctx.status()).error,/preview stopped/);}finally{await ctx.cleanup()}
+});

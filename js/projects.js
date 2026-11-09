@@ -98,11 +98,11 @@
 
   const setupLabel = (setup) => {
     switch (setup?.status) {
-      case 'ready': return 'Ready';
+      case 'ready': return setup.uiVerified ? 'UI verified' : 'Preview configured · UI not verified';
       case 'running': return setup.attempt > 1 ? `Setting up… (try ${setup.attempt} of 3)` : 'Setting up…';
       case 'waiting-for-agent': return 'Waiting for an AI model';
       case 'failed': return 'Setup failed';
-      default: return 'Waiting to set up';
+      default: return 'Source imported · waiting for preview';
     }
   };
 

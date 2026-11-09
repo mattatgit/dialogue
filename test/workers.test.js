@@ -232,7 +232,7 @@ test('development runtime queues real processes and cancellation/shutdown remove
   const child = await runtime.spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { cwd: f.dir, stdio: 'ignore' }, { kind: 'agent' });
   const abort = new AbortController(); const waiting = assert.rejects(runtime.spawn(process.execPath, ['-e', 'process.exit(99)'], { cwd: f.dir }, { kind: 'install', signal: abort.signal }), /cancelled/);
   abort.abort(); await waiting;
-  const closed = once(child, 'close'); killWorker(child, 'SIGKILL'); await closed;
+  const closed = once(child, 'close'); killWorker(child, 'SIGKILL'); await closed; await child.workerFinished;
   assert.equal(runtime.budget.active.size, 0);
   await runtime.shutdown(); await assert.rejects(runtime.spawn('/bin/sh', [], { cwd: f.dir }), /not ready/);
 });
@@ -243,16 +243,17 @@ test('scope capacity stays reserved until cleanup succeeds; failed cleanup stops
   f.runtime.ready = true; f.runtime.diskReady = async () => {}; f.runtime.prepare = async () => {};
   f.runtime.plan = () => ({ bin: 'mock-launcher', args: [] }); f.runtime.spawnProcess = () => child;
   let finishCleanup;
-  f.runtime.execute = () => new Promise(resolve => { finishCleanup = resolve; });
+  f.runtime.execute = async (_bin,args) => args.includes('stop') ? new Promise(resolve => { finishCleanup = resolve; }) : {stdout:''};
   await f.runtime.spawn('mock-worker', [], { cwd: f.dir }, { kind: 'agent' });
   child.emit('close', 0);
   assert.equal(f.runtime.budget.active.size, 1);
-  finishCleanup({}); await new Promise(resolve => setImmediate(resolve));
+  while (!finishCleanup) await new Promise(resolve => setTimeout(resolve,1));
+  finishCleanup({}); await child.workerFinished;
   assert.equal(f.runtime.budget.active.size, 0);
   const messages = []; t.mock.method(console, 'error', text => messages.push(text));
   f.runtime.execute = async () => { throw new Error('service manager unavailable'); };
   await f.runtime.spawn('mock-worker', [], { cwd: f.dir }, { kind: 'agent' });
-  child.emit('close', 0); await new Promise(resolve => setImmediate(resolve));
+  child.emit('close', 0); await assert.rejects(child.workerFinished, /cleanup/);
   assert.equal(f.runtime.budget.active.size, 1);
   assert.equal(f.runtime.ready, false);
   assert.equal(f.runtime.budget.closed, true);
@@ -269,7 +270,7 @@ test('cancellation before scope registration also terminates the pending launche
   const abort = new AbortController();
   await f.runtime.spawn('mock-worker', [], { cwd: f.dir }, { kind: 'agent', signal: abort.signal });
   abort.abort(); assert.deepEqual(signals, ['SIGKILL']);
-  child.exitCode = 1; child.emit('close', 1); await new Promise(resolve => setImmediate(resolve));
+  child.exitCode = 1; child.emit('close', 1); await child.workerFinished;
   assert.equal(f.runtime.budget.active.size, 0);
   await assert.rejects(Workers.prototype.prepare.call(f.runtime, { activityFile: path.join(f.root, 'outside', 'file') }, { cwd: f.dir }), /activity file/);
   await assert.rejects(fs.stat(path.join(f.root, 'outside')), { code: 'ENOENT' });
@@ -342,11 +343,11 @@ test('conversation workers get only their selected native session, reply and att
 test('a replacement preview waits for a closing scope without exceeding the two-preview limit', async t => {
   const f=await fixture(t);f.runtime.ready=true;f.runtime.diskReady=async()=>{};f.runtime.prepare=async()=>{};f.runtime.plan=()=>({bin:'mock-launcher',args:[]});
   const children=[];f.runtime.spawnProcess=()=>{const child=new EventEmitter();child.exitCode=null;children.push(child);return child;};
-  let cleaned;f.runtime.execute=()=>new Promise(resolve=>{cleaned=resolve});
+  let cleaned;f.runtime.execute=async(_bin,args)=>args.includes('stop')?new Promise(resolve=>{cleaned=resolve}):{stdout:''};
   const a=await f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});await f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});
   a.exitCode=0;a.emit('close',0);
   const replacement=f.runtime.spawn('preview',[],{cwd:f.dir},{kind:'preview'});
   await new Promise(r=>setImmediate(r));assert.equal(children.length,2);assert.equal(f.runtime.budget.pending.length,1);assert.equal(f.runtime.budget.active.size,2);
-  cleaned({});await replacement;assert.equal(children.length,3);assert.equal(f.runtime.budget.active.size,2);
+  while(!cleaned)await new Promise(r=>setTimeout(r,1));cleaned({});await replacement;assert.equal(children.length,3);assert.equal(f.runtime.budget.active.size,2);
   f.runtime.execute=async()=>({});for(const child of children.slice(1)){child.exitCode=0;child.emit('close',0);await child.workerFinished;}
 });

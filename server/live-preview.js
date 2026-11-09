@@ -12,6 +12,7 @@ const FIRST_SHOT_DELAY_MS = 5000;
 const SHOT_DEBOUNCE_MS = 30000;
 
 const MESSAGES = {
+  queued: 'Waiting for preview capacity. Your work is preserved.',
   installing: 'Installing the project’s dependencies…',
   starting: 'Starting the preview…',
   stopped: 'The preview is stopped.',
@@ -22,7 +23,7 @@ class LivePreviews {
   constructor({ proxy, previews, stampsRoot, internalPort, idleMs, runtime = null, createRunner = (options) => new Runner(options) }) {
     Object.assign(this, { proxy, previews, stampsRoot, internalPort, createRunner, runtime });
     this.pool = new RunnerPool({ idleMs });
-    this.entries = new Map(); // workspace id -> entry
+    this.held = new Set(); this.entries = new Map(); // workspace id -> entry
   }
 
   // A viewer opened the workspace. `context`: { slug, ref, dir, repo, isDefault }.
@@ -76,7 +77,16 @@ class LivePreviews {
   }
 
   // Load (or reload) the recipe and (re)start the runner.
-  async load(entry, { restarted = false } = {}) {
+  load(entry, options = {}) {
+    const loading = (entry.loading || Promise.resolve()).catch(() => {}).then(() => this.loadNow(entry,options));
+    entry.loading = loading; return loading;
+  }
+
+  async loadNow(entry, { restarted = false } = {}) {
+    if (this.held.has(entry.id) || [...(this.runtime?.children || [])].some(c => c.workerKind === 'agent' && !c.workerClosing && c.workerRecord?.workspace === entry.dir)) {
+      entry.deferred = true; entry.problem = {state:'queued',message:'Preview changes will run after Dialogue finishes editing.'}; this.broadcast(entry); return;
+    }
+    entry.deferred = false;
     const found = await entry.repo.readRecipe(entry.dir).catch(() => null);
     entry.recipeText = found?.text ?? null;
     entry.problem = null;
@@ -100,7 +110,7 @@ class LivePreviews {
     }
     entry.recipe = parsed.recipe;
     const runner = this.createRunner({
-      dir: entry.dir,
+      dir: entry.dir, attribution:{ project:entry.slug, workspace:entry.id, phase:'live-preview' },
       runtime: this.runtime,
       recipe: parsed.recipe,
       stampDir: path.join(this.stampsRoot, entry.slug, encodeURIComponent(entry.ref))
@@ -131,7 +141,7 @@ class LivePreviews {
     const state = runner?.state || 'starting';
     const payload = { state, reload, message: MESSAGES[state] || '' };
     if (state === 'crashed') {
-      payload.message = runner.error?.status === 503 ? runner.error.message : 'The preview server stopped. Ask Dialogue to fix it, or reload the preview.';
+      payload.message = runner.error?.message || 'The preview server stopped. Ask Dialogue to fix it, or reload the preview.';
       payload.log = runner.logTail(40);
     }
     if (state === 'ready' && entry.restarted) payload.restarted = true;
@@ -157,11 +167,28 @@ class LivePreviews {
     if (!entry) return;
     if (!entry.listeners.size && (this.runtime?.isolated || entry.readOnly)) return;
     const found = await entry.repo.readRecipe(entry.dir).catch(() => null);
-    if ((found?.text ?? null) !== entry.recipeText) {
+    if (entry.deferred || (found?.text ?? null) !== entry.recipeText) {
       await this.load(entry, { restarted: true });
       return;
     }
     if (entry.runner?.state === 'ready') this.scheduleShot(entry, SHOT_DEBOUNCE_MS);
+  }
+
+  async pause(id) {
+    this.held.add(id); const entry = this.entries.get(id);
+    if (entry) { entry.deferred = true; entry.problem = {state:'queued',message:'Preview paused while Dialogue edits this working copy.'}; clearTimeout(entry.shotTimer); this.broadcast(entry); await this.pool.stop(id); }
+  }
+
+  async operation(workspace, operation) {
+    const entry = this.entries.get(workspace.id);
+    if (!entry) return {state:'stopped',message:'Open the working copy to view its managed preview.'};
+    if (operation === 'stop') { await this.pool.stop(workspace.id); return this.state(workspace.id); }
+    if (['start','restart','install'].includes(operation)) {
+      if (operation === 'install') await require('node:fs/promises').rm(path.join(this.stampsRoot,entry.slug,encodeURIComponent(entry.ref),'install.sha'),{force:true});
+      await this.load(entry,{restarted:true});
+      try { await entry.runner?.starting; } catch {}
+    } else await this.filesChanged(workspace.id);
+    return this.state(workspace.id);
   }
 
   async restart(id) {

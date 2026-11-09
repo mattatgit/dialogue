@@ -2,6 +2,7 @@
 // checkout; neither prompt output nor a changed file counts as completion.
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const { message: workerMessage } = require('./worker-observation.js');
 const { spawnWorker, killWorker } = require('./workers.js');
 const { randomUUID, createHash } = require('node:crypto');
 const { EventEmitter } = require('node:events');
@@ -278,15 +279,24 @@ class WorkspaceRequests extends EventEmitter {
     const uploads = fields.uploads; delete fields.uploads;
     if (this.blocked.has(workspace.id) || this.blockedProjects.has(workspace.id.split('/')[0]) || this.saving.has(workspace.id)) throw new RequestError(409, 'Workspace is busy or being removed.');
     if (this.active.has(workspace.id)) throw new RequestError(409, 'A request is already running for this workspace.');
-    const readiness = await this.agent.check();
-    if (!readiness.ready) throw new RequestError(409, `AI model is not ready: ${readiness.detail || readiness.reason || 'connect a model in Settings.'}`);
-    const current = await repo.findWorkspace(workspace.ref);
-    if (!current || current.kind !== 'branch' || current.dir !== workspace.dir) throw new RequestError(404, 'Workspace no longer exists.');
-    if (this.blocked.has(workspace.id) || this.blockedProjects.has(workspace.id.split('/')[0]) || this.saving.has(workspace.id)) throw new RequestError(409, 'Workspace is busy or being removed.');
-    if (this.active.has(workspace.id)) throw new RequestError(409, 'A request is already running for this workspace.');
     const run = { child: null, interrupted: null, done: null, stop: null, figma: null };
     run.ready = new Promise((resolve) => { run.signalReady = resolve; });
     this.active.set(workspace.id, run);
+    try {
+      // Readiness can itself reserve a native provider worker. Release this
+      // copy's preview first, rather than waiting behind our own reservation.
+      await this.previewPause?.(workspace);
+      const readiness = await this.agent.check();
+      if (!readiness.ready) throw new RequestError(409, `AI model is not ready: ${readiness.detail || readiness.reason || 'connect a model in Settings.'}`);
+      const current = await repo.findWorkspace(workspace.ref);
+      if (!current || current.kind !== 'branch' || current.dir !== workspace.dir) throw new RequestError(404, 'Workspace no longer exists.');
+      if (this.blocked.has(workspace.id) || this.blockedProjects.has(workspace.id.split('/')[0]) || this.saving.has(workspace.id)) throw new RequestError(409, 'Workspace is busy or being removed.');
+      if (run.interrupted) throw new RequestError(409,run.interrupted);
+    } catch (error) {
+      this.active.delete(workspace.id); run.signalReady();
+      await this.previewReleased?.(workspace).catch(() => {});
+      throw error;
+    }
     const requestId = randomUUID();
     let beforeTree;
     try {
@@ -306,6 +316,7 @@ class WorkspaceRequests extends EventEmitter {
       await fsp.rm(path.join(attachmentDir(this.root, workspace.id), requestId), { recursive: true, force: true });
       run.signalReady();
       this.active.delete(workspace.id);
+      await this.previewReleased?.(workspace).catch(() => {});
       throw error;
     }
     const record = {
@@ -313,7 +324,7 @@ class WorkspaceRequests extends EventEmitter {
       ...(actor ? { actor: { id: actor.id, name: actor.name } } : {}),
       model: this.agent.model, createdAt: new Date().toISOString(), startedAt: null,
       finishedAt: null, error: null, output: '', outputTruncated: false, result: null,
-      summary: null, events: []
+      summary: null, workingDetail:'Waiting for execution capacity…', events: []
     };
     record.events.push({ type: 'created', at: record.createdAt });
     // The active reservation also protects the baseline tree capture above.
@@ -327,6 +338,7 @@ class WorkspaceRequests extends EventEmitter {
       if (!records.length) this.records.delete(workspace.id);
       run.signalReady();
       this.active.delete(workspace.id);
+      await this.previewReleased?.(workspace).catch(() => {});
       if (run.figma) await fsp.rm(run.figma.snapshotPath, { force: true });
       await fsp.rm(path.join(attachmentDir(this.root, workspace.id), requestId), { recursive: true, force: true });
       throw error;
@@ -348,6 +360,7 @@ class WorkspaceRequests extends EventEmitter {
     const sessionDir = conversationDir(this.root, workspace.id);
     const filesDir = attachmentDir(this.root, workspace.id);
     let outputTimer;
+    const runnerFile = path.join(this.root, '.runner', record.id + '.json');
     let outputWrite = Promise.resolve();
     const flush = () => {
       clearTimeout(outputTimer);
@@ -374,21 +387,26 @@ class WorkspaceRequests extends EventEmitter {
       const legacy = !conversation.includes('--continue') ? (this.records.get(workspace.id) || []).filter(r => r.id !== record.id).slice(-16).map(r => ({ user: r.feedback, assistant: r.reply || r.summary || r.error, status: r.status })).filter(r => r.assistant) : [];
       while (legacy.length && Buffer.byteLength(JSON.stringify(legacy)) > 32000) legacy.shift();
       const context = legacy.length ? '\nEarlier Dialogue conversation (bounded legacy import; older replies may be summaries):\n' + JSON.stringify(legacy) : '';
+      await fsp.mkdir(path.dirname(runnerFile), {recursive:true,mode:0o700});
+      const previewState = this.previewStatus?.(workspace.id) || {state:'unavailable'};
+      await fsp.writeFile(runnerFile, JSON.stringify({ status:{state:previewState.state,message:String(previewState.message || '').slice(0,1000)} }), {mode:0o600});
       const args = ['-p', '--approval-mode', 'yolo', '--config', this.configPath,
-        '-e', this.activityExtension, '-e', this.replyExtension, ...conversation,
+        '-e', this.activityExtension, '-e', this.replyExtension, '-e', path.join(__dirname, '../omp/managed-preview.js'), ...conversation,
         ...(record.intent === 'discuss' ? ['--tools', 'read,grep,glob', '--no-lsp', '--no-extensions'] : []),
-        '--model', record.model, ...(record.attachments || []).map(a => '@' + a.file), promptFor(record, run.figma, filesDir) + context];
+        '--model', record.model, ...(record.attachments || []).map(a => '@' + a.file), promptFor(record, run.figma, filesDir) + context + '\n\nDialogue owns installs and development servers. Use dialogue_preview to inspect or queue runner operations, then finish your reply; queued runner work happens after your worker exits. Do not launch servers in bash. Do not claim a working UI from source import, HTTP readiness or a saved setup status.'];
       const agentEnv = this.agent.ompEnv();
-      const childEnv = { ...process.env, ...this.env, ...agentEnv, DIALOGUE_ACTIVITY_FILE: activityFile, DIALOGUE_REPLY_FILE: replyFile };
+      const childEnv = { ...process.env, ...this.env, ...agentEnv, DIALOGUE_ACTIVITY_FILE: activityFile, DIALOGUE_REPLY_FILE: replyFile, DIALOGUE_RUNNER_FILE: runnerFile };
       delete childEnv.FIGMA_ACCESS_TOKEN;
       const abort = new AbortController(); run.stop = () => abort.abort();
       const actorSignal = this.agent.current?.().abort?.signal;
+      await this.previewPause?.(workspace);
       const child = await spawnWorker(this.runtime, this.ompBin, args, {
         cwd: workspace.dir, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'], detached: true
-      }, { kind: 'agent', home: agentEnv.HOME, activityFile, replyFile, sessionDir, attachmentDir: filesDir, readOnlyWorkspace: record.intent === 'discuss', signal: actorSignal ? AbortSignal.any([abort.signal, actorSignal]) : abort.signal,
+      }, { kind: 'agent', attribution:{ project:workspace.slug || workspace.id.split('/')[0], workspace:workspace.id, request:record.id, phase:'conversation' }, runnerFile, home: agentEnv.HOME, activityFile, replyFile, sessionDir, attachmentDir: filesDir, readOnlyWorkspace: record.intent === 'discuss', signal: actorSignal ? AbortSignal.any([abort.signal, actorSignal]) : abort.signal,
         readOnlyFiles: run.figma ? [run.figma.snapshotPath] : [] });
       const observed = await new Promise((resolve) => {
         run.child = child;
+        record.workingDetail = 'Starting Dialogue…'; flush();
         child.on('spawn', () => {
           record.startedAt = new Date().toISOString();
           record.events.push({ type: 'started', at: record.startedAt });
@@ -397,6 +415,7 @@ class WorkspaceRequests extends EventEmitter {
         let timedOut = false;
         const terminate = (reason) => {
           if (reason === 'timeout') timedOut = true;
+          child.workerReason = reason === 'timeout' ? 'timeout' : 'cancelled';
           if (child.pid) {
             killWorker(child, 'SIGTERM');
             const killTimer = setTimeout(() => {
@@ -437,10 +456,12 @@ class WorkspaceRequests extends EventEmitter {
         });
       });
       await child.workerFinished;
+      record.worker = child.workerRecord || null;
+      this.previewUnhold?.(workspace);
       if (run.interrupted) throw new Error(run.interrupted);
       if (observed.timedOut) throw new Error('Agent run exceeded its time limit.');
       if (observed.spawnError) throw observed.spawnError;
-      if (observed.code !== 0) throw new Error(`Agent exited ${observed.signal ? `on ${observed.signal}` : `with code ${observed.code}`}.`);
+      if (observed.code !== 0) throw new Error(child.workerRecord ? workerMessage(child.workerRecord) : `Agent exited ${observed.signal ? `on ${observed.signal}` : `with code ${observed.code}`}.`);
       const activity = await readActivity(activityFile);
       // Only a settled assistant final answer can become a durable summary.
       // stdout and stderr contain tool output and must never be mined for it.
@@ -463,6 +484,12 @@ class WorkspaceRequests extends EventEmitter {
       record.sessionStored = (await fsp.readdir(sessionDir)).some(name => name.endsWith('.jsonl'));
       record.summary = summary;
       record.status = 'completed';
+      if (record.intent !== 'discuss' && this.previewOperation) {
+        const bytes = await readProjectFile(path.dirname(runnerFile), runnerFile, 4096);
+        const { operation = 'status' } = JSON.parse(bytes.toString());
+        if (!['status','install','start','restart','stop'].includes(operation)) throw new Error('Invalid managed preview operation.');
+        record.preview = await this.previewOperation(workspace,operation);
+      }
     } catch (error) {
       record.status = 'failed';
       record.error = error.message;
@@ -477,6 +504,8 @@ class WorkspaceRequests extends EventEmitter {
         record.error = `Could not restore the workspace .env: ${error.message}`;
       }
       if (record.status !== 'completed') record.summary = null;
+      await fsp.rm(runnerFile, { force: true });
+      await this.previewReleased?.(workspace).catch(() => {});
       await fsp.rm(replyFile, { force: true });
       await fsp.rm(activityFile, { force: true });
       if (run.figma) {

@@ -209,3 +209,26 @@ test('tracked environment files retain their published content, never current se
     await ctx.cleanup();
   }
 });
+
+
+test('Save version includes a local preview recipe commit but refuses an unseen remote update', async () => {
+  const ctx = await fixture();
+  try {
+    await fsp.mkdir(path.join(ctx.workspace.dir,'.dialogue'),{recursive:true});
+    await fsp.writeFile(path.join(ctx.workspace.dir,'.dialogue/preview.json'),JSON.stringify({version:1,kind:'static',root:'.',entry:'/'}));
+    await ctx.repo.commitRecipe(ctx.workspace.dir,'Add Dialogue preview recipe');
+    await comment(ctx,'Edit after setup');
+    const saved = await ctx.requests.saveVersion(ctx.workspace,ctx.repo);
+    assert.equal(saved.label,'V1');
+    assert.match(sh(ctx.origin,'show',`${saved.sha}:.dialogue/preview.json`),/static/);
+    const {commit}=require('./helpers/git-fixture.js');
+    // Remote work after the tracked base must never be overwritten, even
+    // when this working copy still has its own local commits and edits.
+    sh(ctx.origin,'reset','--hard',saved.sha);
+    const remote = await commit(ctx.origin,{'remote-only.txt':'preserve me'},'Another member');
+    ctx.options.env.FAKE_CONTENT='second'; await comment(ctx,'More local work');
+    await assert.rejects(ctx.requests.saveVersion(ctx.workspace,ctx.repo),/remote branch moved/);
+    assert.equal(sh(ctx.origin,'rev-parse','HEAD'),remote);
+    assert.equal(sh(ctx.origin,'tag','--list','dialogue/main/V2'),'');
+  } finally { await ctx.requests.shutdown(); await ctx.cleanup(); }
+});
