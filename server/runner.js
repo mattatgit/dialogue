@@ -5,6 +5,8 @@ const fsp = require('node:fs/promises');
 const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+const { message: workerMessage } = require('./worker-observation.js');
 const { EventEmitter } = require('node:events');
 const { spawnWorker, killWorker } = require('./workers.js');
 const { readProjectFile, openProjectFile, inside } = require('./project-files.js');
@@ -54,13 +56,13 @@ function freePort() {
 }
 
 class Runner extends EventEmitter {
-  constructor({ dir, recipe, stampDir, env = {}, runtime = null, killDelayMs = KILL_DELAY_MS }) {
+  constructor({ dir, recipe, stampDir, env = {}, runtime = null, killDelayMs = KILL_DELAY_MS, attribution = {} }) {
     super();
     this.dir = dir;
     this.recipe = recipe;
     this.stampDir = stampDir;
     this.env = env;
-    this.runtime = runtime;
+    this.runtime = runtime; this.attribution = attribution; this.logWrite = Promise.resolve();
     this.abort = new AbortController();
     this.killDelayMs = killDelayMs;
     this.state = 'stopped';
@@ -88,6 +90,7 @@ class Runner extends EventEmitter {
     for (const line of parts) {
       this.lines.push(line);
       this.emit('log', line);
+      if (this.logFile && (this.loggedBytes || 0) < 4*1024*1024) { this.loggedBytes = (this.loggedBytes || 0) + Buffer.byteLength(line); const file = this.logFile; this.logWrite = this.logWrite.then(() => fsp.appendFile(file, line + '\n', { mode:0o600 })).catch(error => console.error('Preview evidence write failed:',error.message)); }
     }
     if (this.lines.length > LOG_LINES) this.lines.splice(0, this.lines.length - LOG_LINES);
   }
@@ -98,11 +101,14 @@ class Runner extends EventEmitter {
 
   // Not async on purpose: callers compare the returned promise for identity.
   start() {
+    if (this.stopping) return this.stopping.then(() => this.start());
     if (this.starting) return this.starting;
     if (this.abort.signal.aborted) this.abort = new AbortController();
     this.lines = [];
     this.partial = '';
-    const attempt = this.run().catch((error) => {
+    const attempt = this.run().catch(async (error) => {
+      const child = this.child; if (child) { await this.killGroup(child); await child.workerFinished; }
+      this.releaseOwnership();
       // stop() during startup already owns the state; otherwise leave the
       // failure visible but let a later start() try again.
       if (this.starting === attempt) {
@@ -119,6 +125,15 @@ class Runner extends EventEmitter {
 
   async run() {
     const generation = ++this.generation;
+    await this.previousStopped;
+    const logs = path.join(this.stampDir, 'attempts'); await fsp.mkdir(logs, { recursive:true, mode:0o700 });
+    this.logFile = path.join(logs, randomUUID() + '.log'); this.loggedBytes = 0;
+    await fsp.writeFile(this.logFile, '', { mode:0o600 });
+    if (this.runtime?.previewOwners) {
+      const owner = this.runtime.previewOwners.get(this.dir);
+      if (owner && owner !== this) throw this.fail('This working copy already has a managed preview. Stop it before starting another.', 'ownership');
+      this.runtime.previewOwners.set(this.dir, this);
+    }
     const boundary = await fsp.realpath(this.dir);
     const root = await fsp.realpath(path.resolve(this.dir, this.recipe.root));
     if (!inside(root, boundary)) throw this.fail('The preview root leaves its working copy.', 'recipe');
@@ -147,46 +162,51 @@ class Runner extends EventEmitter {
     const stamp = await installStamp(this.dir, this.recipe);
     const stampFile = path.join(this.stampDir, 'install.sha');
     if ((await fsp.readFile(stampFile, 'utf8').catch(() => null)) === stamp) return;
-    this.setState('installing');
-    const child = await spawnWorker(this.runtime, '/bin/sh', ['-c', this.recipe.install], { cwd, env: { ...process.env, ...this.env, CI: '1', FORCE_COLOR: '0' }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'install', workspaceRoot: this.dir, signal: this.abort.signal });
+    this.setState('queued');
+    const child = await spawnWorker(this.runtime, '/bin/sh', ['-c', this.recipe.install], { cwd, env: { ...process.env, ...this.env, CI: '1', FORCE_COLOR: '0' }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'install', attribution: this.attribution, workspaceRoot: this.dir, signal: this.abort.signal });
     this.child = child;
+    this.setState('installing');
     child.stdout.on('data', (d) => this.appendLog(d));
     child.stderr.on('data', (d) => this.appendLog(d));
     const code = await new Promise((resolve) => child.on('close', resolve));
+    await child.workerFinished;
     if (this.child === child) this.child = null;
-    if (code !== 0) throw this.fail(`Install command exited with ${code}.`, 'install', code);
+    if (code !== 0) throw this.fail(child.workerRecord ? workerMessage(child.workerRecord) : `Install command exited with ${code}.`, 'install', code);
     await fsp.mkdir(this.stampDir, { recursive: true });
     await fsp.writeFile(stampFile, stamp);
   }
 
   async launch(cwd) {
     const port = await freePort();
-    this.setState('starting');
+    this.setState('queued');
     const env = { ...process.env, ...this.env, PORT: String(port), HOST: '127.0.0.1', BROWSER: 'none', FORCE_COLOR: '0', CI: '1' };
     // detached: the shell gets its own process group so stop() can take
     // down whatever it forked (node, esbuild, watchers) in one signal.
-    const child = await spawnWorker(this.runtime, '/bin/sh', ['-c', this.recipe.start], { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'preview', workspaceRoot: this.dir, signal: this.abort.signal });
+    const child = await spawnWorker(this.runtime, '/bin/sh', ['-c', this.recipe.start], { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'preview', attribution: this.attribution, workspaceRoot: this.dir, signal: this.abort.signal });
     this.child = child;
+    this.setState('starting');
     child.stdout.on('data', (d) => this.appendLog(d));
     child.stderr.on('data', (d) => this.appendLog(d));
     const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
     const deadline = Date.now() + this.recipe.readyTimeoutSeconds * 1000;
     const host = await Promise.race([
       this.waitReady(child, port, deadline),
-      exited.then(({ code }) => { throw this.fail(`Dev server exited with ${code} before becoming ready.`, 'start', code); })
+      exited.then(async ({ code, signal }) => { await child.workerFinished; throw this.fail(child.workerRecord ? workerMessage(child.workerRecord) : `Dev server exited on ${signal || code} before becoming ready.`, 'start', code); })
     ]);
     if (host === null) {
-      await this.killGroup(child);
+      child.workerReason = 'timeout'; await this.killGroup(child); await child.workerFinished;
       throw this.fail(`Dev server did not answer on port ${port} within ${this.recipe.readyTimeoutSeconds}s.`, 'ready');
     }
     this.target = { kind: 'server', host, port };
     this.setState('ready');
-    exited.then(({ code, signal }) => {
+    exited.then(async ({ code, signal }) => {
+      await child.workerFinished; this.releaseOwnership();
       if (this.child !== child) return; // stop() already took over
       this.child = null;
       this.target = null;
       this.starting = null;
-      this.setState('crashed', { error: this.fail(`Dev server exited unexpectedly (${signal || code}).`, 'start', code) });
+      this.error = this.fail(child.workerRecord ? workerMessage(child.workerRecord) : `Dev server exited unexpectedly (${signal || code}).`, 'start', code);
+      this.setState('crashed', { error:this.error });
     });
   }
 
@@ -231,7 +251,17 @@ class Runner extends EventEmitter {
     }
   }
 
-  async stop() {
+  releaseOwnership() { if (this.runtime?.previewOwners?.get(this.dir) === this) this.runtime.previewOwners.delete(this.dir); }
+
+  stop() {
+    if (this.stopping) return this.stopping;
+    const stopping = this.doStop().finally(() => { if (this.stopping === stopping) this.stopping = null; });
+    this.stopping = stopping; return stopping;
+  }
+
+  async doStop() {
+    const pending = this.starting;
+    if (this.child) this.child.workerReason ||= 'cancelled';
     this.abort.abort();
     const child = this.child;
     this.generation += 1;
@@ -240,6 +270,8 @@ class Runner extends EventEmitter {
     this.target = null;
     if (child) await this.killGroup(child);
     if (child) await child.workerFinished;
+    await pending?.catch(() => {});
+    await this.logWrite; this.releaseOwnership();
     this.setState('stopped');
   }
 }
@@ -261,12 +293,12 @@ class RunnerPool {
     const previous = this.entries.get(key);
     if (previous) {
       clearTimeout(previous.timer);
-      previous.runner.stop().catch(() => {});
+      runner.previousStopped = previous.runner.stop();
     }
     const viewers = previous?.viewers || 0;
     const entry = { runner, viewers, timer: null };
     this.entries.set(key, entry);
-    if (previous && !viewers) entry.timer = setTimeout(() => this.stop(key).catch(() => {}), this.idleMs);
+    if (!viewers) entry.timer = setTimeout(() => this.stop(key).catch(() => {}), this.idleMs);
   }
 
   acquire(key) {

@@ -97,7 +97,7 @@ test('failed install rejects with step install, exit code and log tail', async (
   ws.runner.on('state', (s) => states.push(s));
   await assert.rejects(ws.runner.start(), (e) => e instanceof RunnerError && e.step === 'install' && e.exitCode === 7 && /boom/.test(e.logTail));
   assert.equal(ws.runner.state, 'crashed');
-  assert.deepEqual(states, ['installing', 'crashed']);
+  assert.deepEqual(states, ['queued','installing', 'crashed']);
   assert.equal(ws.runner.logTail(), 'installing\nboom');
   assert.equal(await fsp.readFile(path.join(ws.stampDir, 'install.sha'), 'utf8').catch(() => null), null);
   await ws.cleanup();
@@ -140,7 +140,7 @@ test('ready server receives PORT/HOST/BROWSER and the extra env, and start is id
   const first = ws.runner.start();
   assert.equal(ws.runner.start(), first);
   await first;
-  assert.deepEqual(states, ['starting', 'ready']);
+  assert.deepEqual(states, ['queued','starting', 'ready']);
   const { host, port } = ws.runner.target;
   assert.equal(host, '127.0.0.1');
   const body = await fetch(`http://${host}:${port}/`).then((r) => r.json());

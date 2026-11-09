@@ -111,6 +111,11 @@ const proxy = new PreviewProxy();
 const previewSessions = new Map();
 const accountConnections = new Set();
 const live = new LivePreviews({ proxy, previews, runtime: workers, stampsRoot: STAMPS_ROOT, internalPort: PORT });
+requests.previewPause = workspace => live.pause(workspace.id);
+requests.previewUnhold = workspace => live.held.delete(workspace.id);
+requests.previewStatus = id => live.state(id);
+requests.previewOperation = (workspace, operation) => live.operation(workspace, operation);
+requests.previewReleased = workspace => { live.held.delete(workspace.id); return live.filesChanged(workspace.id); };
 const repos = new Map();
 const fixFailures = new Map(); // slug -> setup error handed to "Fix with agent"
 
