@@ -267,10 +267,12 @@ class PreviewSetup extends EventEmitter {
     const reuse = owner && JSON.stringify(owner.recipe) === JSON.stringify(parsed.recipe);
     if (owner && !reuse) await owner.stop();
     const runner = reuse ? owner : this.createRunner({ dir, attribution:{project:slug,phase:'setup-validation'}, runtime: this.runtime, recipe: parsed.recipe, stampDir: path.join(this.dir(slug), 'stamps', path.basename(dir)) });
-    runner.on('log', (line) => this.log(slug, line).catch(() => {}));
+    const log = line => this.log(slug,line).catch(() => {});
+    runner.on('log',log);
     try {
       await runner.start();
     } catch (error) {
+      runner.off('log',log);
       if (!reuse) await runner.stop().catch(() => {});
       return { step: error.step || 'start', exitCode: error.exitCode ?? null, message: error.message, log: error.logTail || runner.logTail() };
     }
@@ -291,6 +293,7 @@ class PreviewSetup extends EventEmitter {
     } catch (error) {
       return { step: 'screenshot', exitCode: null, message: error.message, log: runner.logTail() };
     } finally {
+      runner.off('log',log);
       if (!reuse) await runner.stop().catch(() => {});
     }
   }
@@ -309,14 +312,15 @@ class PreviewSetup extends EventEmitter {
     // card shows and the local commit share the image. No image (no
     // Chromium): the preview still works, cards show their placeholder.
     const shot = this.shotFile(slug);
-    if (await fsp.access(shot).then(() => true, () => false)) {
+    const captured = await fsp.access(shot).then(() => true, () => false);
+    if (captured) {
       const targets = [...new Set([head, origin].filter(Boolean))].map((s) => this.previews.file(slug, s));
       for (const file of [...targets, this.previews.mainFile(slug)]) {
         await fsp.mkdir(path.dirname(file), { recursive: true });
         await fsp.copyFile(shot, file);
       }
     }
-    await this.projects.setPreviewSetup(slug, { status: 'ready', verification:'http-and-screenshot', uiVerified:false, attempt, error: null, finishedAt: new Date().toISOString() });
+    await this.projects.setPreviewSetup(slug, { status: 'ready', verification:captured ? 'http-and-screenshot' : 'http-only', uiVerified:false, attempt, error: null, finishedAt: new Date().toISOString() });
     this.emit('ready', slug);
   }
 

@@ -455,8 +455,8 @@ class Workers {
           if (code !== 0 || timedOut) {
             const kind = policy?.kind || 'agent';
             const detail = timedOut ? `timed out after ${timeout} ms` : signal ? `terminated on ${signal}` : `exited with code ${code}`;
-            const error = new WorkerError(child.workerRecord?.outcome === 'memory-limit' ? workerMessage(child.workerRecord) : `Worker ${detail} (${kind}, ${PROFILES[kind].memory} MiB limit)${stderr.trim() ? ': ' + stderr.trim().slice(-1000) : '.'}`);
-            Object.assign(error, { code, signal, timedOut, kind, memoryMiB: PROFILES[kind].memory });
+            const error = new WorkerError(child.workerRecord?.outcome === 'memory-limit' ? workerMessage(child.workerRecord) : `Worker ${detail} (${kind}, ${this.config.profiles[kind].memory} MiB limit)${stderr.trim() ? ': ' + stderr.trim().slice(-1000) : '.'}`);
+            Object.assign(error, { code, signal, timedOut, kind, memoryMiB: this.config.profiles[kind].memory });
             reject(error);
           }
           else resolve({ stdout, stderr });

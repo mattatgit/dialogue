@@ -316,6 +316,7 @@ class WorkspaceRequests extends EventEmitter {
       await fsp.rm(path.join(attachmentDir(this.root, workspace.id), requestId), { recursive: true, force: true });
       run.signalReady();
       this.active.delete(workspace.id);
+      await this.previewReleased?.(workspace).catch(() => {});
       throw error;
     }
     const record = {
@@ -323,7 +324,7 @@ class WorkspaceRequests extends EventEmitter {
       ...(actor ? { actor: { id: actor.id, name: actor.name } } : {}),
       model: this.agent.model, createdAt: new Date().toISOString(), startedAt: null,
       finishedAt: null, error: null, output: '', outputTruncated: false, result: null,
-      summary: null, events: []
+      summary: null, workingDetail:'Waiting for execution capacity…', events: []
     };
     record.events.push({ type: 'created', at: record.createdAt });
     // The active reservation also protects the baseline tree capture above.
@@ -405,6 +406,7 @@ class WorkspaceRequests extends EventEmitter {
         readOnlyFiles: run.figma ? [run.figma.snapshotPath] : [] });
       const observed = await new Promise((resolve) => {
         run.child = child;
+        record.workingDetail = 'Starting Dialogue…'; flush();
         child.on('spawn', () => {
           record.startedAt = new Date().toISOString();
           record.events.push({ type: 'started', at: record.startedAt });

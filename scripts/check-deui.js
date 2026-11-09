@@ -71,6 +71,7 @@ async function main(){
  }catch(error){report.error=error.message;console.error('DEUI ACCEPTANCE FAILED:',error.message);process.exitCode=1;}finally{
   if(browser)await browser.close().catch(()=>{});if(manager)await manager.shutdown().catch(()=>{});if(secondManager)await secondManager.shutdown().catch(()=>{});if(secondRunner)await secondRunner.stop().catch(()=>{});if(runner)await runner.stop().catch(()=>{});provider?.close();await runtime.shutdown();
   const files=await fs.readdir(path.join(root,'workers','records')).catch(()=>[]);report.workers=await Promise.all(files.map(name=>fs.readFile(path.join(root,'workers','records',name),'utf8').then(JSON.parse)));if(config.isolated && !report.error && !['agent','install','preview','browser'].every(kind=>report.workers.some(r=>r.kind===kind && r.measured && r.peakBytes>0))) { report.error='Missing measured worker-tree peaks for a required class.';report.capacityAccepted=false;process.exitCode=1; }
+  if(config.isolated) { try { const group=(await fs.readFile('/proc/self/cgroup','utf8')).split('\n').find(line=>line.startsWith('0::')).slice(3); report.appScope=await require('../server/worker-observation.js').sampleCgroup('/sys/fs/cgroup'+group); } catch(error) {report.appMeasurementError=error.message;} }
   report.finishedAt=new Date().toISOString();await fs.writeFile(path.join(root,'report.json'),JSON.stringify(report,null,2));console.log('RETAINED_REPORT',path.join(root,'report.json'));if(!config.isolated)console.log('LOCAL ONLY: no cgroup/host capacity claim.');
  }
 }
