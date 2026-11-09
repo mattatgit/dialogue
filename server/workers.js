@@ -37,7 +37,7 @@ function workerConfig(env = process.env, platform = process.platform) {
   const config = { isolated: mode === 'isolated',
     budget: integer(env.DIALOGUE_WORKER_BUDGET_MB, 2048, 1280, 16384, 'worker memory budget'),
     sliceMiB: integer(env.DIALOGUE_WORKER_SLICE_MB, 2304, 1536, 16640, 'worker slice ceiling'),
-    profiles: Object.fromEntries(Object.entries(PROFILES).map(([kind, profile]) => [kind, { ...profile, memory: integer(env[`DIALOGUE_WORKER_${kind.toUpperCase()}_MB`], profile.memory, 128, 8192, `${kind} memory limit`) }])),
+    profiles: Object.fromEntries(Object.entries(PROFILES).map(([kind, profile]) => [kind, { ...profile, ...(kind === 'browser' ? { seconds: integer(env.DIALOGUE_WORKER_BROWSER_SECONDS, profile.seconds, 30, 180, 'browser lifetime') } : {}), memory: integer(env[`DIALOGUE_WORKER_${kind.toUpperCase()}_MB`], profile.memory, 128, 8192, `${kind} memory limit`) }])),
     queue: integer(env.DIALOGUE_WORKER_QUEUE, 8, 1, 32, 'worker queue size'),
     waitMs: integer(env.DIALOGUE_WORKER_WAIT_MS, 60000, 100, 120000, 'worker wait timeout'),
     diskFloor: integer(env.DIALOGUE_WORKER_DISK_FLOOR_MB, 1024, 256, 8192, 'disk reserve') * MiB,

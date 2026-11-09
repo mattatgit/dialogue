@@ -288,7 +288,16 @@ class PreviewSetup extends EventEmitter {
         };
       }
       await fsp.rm(shotFile, { force: true });
-      await this.screenshot(runner.target, [shotFile], parsed.recipe.entry);
+      const alive = () => runner.state === 'ready' && runner.target && (!runner.child || runner.child.exitCode === null && runner.child.signalCode === null);
+      try { await this.screenshot(runner.target, [shotFile], parsed.recipe.entry); }
+      catch (error) {
+        await fsp.rm(shotFile,{force:true});
+        const answers = alive() && (runner.target.kind === 'static' || await runner.probe(runner.target.host,runner.target.port));
+        if (!answers) return {step:'start',exitCode:runner.child?.exitCode ?? null,message:runner.error?.message || 'The preview stopped during thumbnail capture.',log:runner.logTail()};
+        await this.log(slug,`HTTP preview configured; thumbnail failed: ${error.message}. UI remains unverified.`);
+        return null;
+      }
+      if (!alive()) return {step:'start',exitCode:null,message:runner.error?.message || 'The preview stopped during thumbnail capture.',log:runner.logTail()};
       return null;
     } catch (error) {
       return { step: 'screenshot', exitCode: null, message: error.message, log: runner.logTail() };

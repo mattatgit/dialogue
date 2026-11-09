@@ -64,3 +64,9 @@ test('prune drops unreferenced commit images but keeps the main image', async ()
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
+
+test('screenshot deadlines are bounded and cannot outlive the browser scope',()=>{
+  assert.throws(()=>new PreviewRenderer('/unused',{timeoutMs:120001}),/timeout/);
+  assert.throws(()=>new PreviewRenderer('/unused',{timeoutMs:60000,runtime:{config:{profiles:{browser:{seconds:40}}}}}),/worker lifetime/);
+  assert.equal(new PreviewRenderer('/unused',{timeoutMs:60000,runtime:{config:{profiles:{browser:{seconds:120}}}}}).timeoutMs,60000);
+});

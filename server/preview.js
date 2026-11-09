@@ -45,7 +45,10 @@ function findChromium() {
 }
 
 class PreviewRenderer {
-  constructor(root, { runtime = null } = {}) {
+  constructor(root, { runtime = null, timeoutMs = Number(process.env.DIALOGUE_SCREENSHOT_TIMEOUT_MS || RENDER_TIMEOUT_MS) } = {}) {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 5000 || timeoutMs > 120000) throw new PreviewError('Screenshot timeout must be between 5000 and 120000 ms.');
+    if (runtime?.config?.profiles?.browser && timeoutMs + 5000 > runtime.config.profiles.browser.seconds * 1000) throw new PreviewError('Screenshot timeout must fit within the browser worker lifetime with cleanup headroom.');
+    this.timeoutMs = timeoutMs;
     this.root = root;
     this.runtime = runtime;
     this.chromium = findChromium();
@@ -93,8 +96,8 @@ class PreviewRenderer {
         `--user-data-dir=${path.join(tmp, 'profile')}`, `--window-size=${WIDTH},${HEIGHT}`, `--screenshot=${out}`,
         '--virtual-time-budget=5000', url
       ];
-      if (this.runtime) await this.runtime.run(this.chromium, args, { cwd: tmp, timeout: RENDER_TIMEOUT_MS, env: { ...process.env, HOME: tmp } }, { kind: 'browser' });
-      else await execFileAsync(this.chromium, args, { timeout: RENDER_TIMEOUT_MS, env: { ...process.env, HOME: tmp } });
+      if (this.runtime) await this.runtime.run(this.chromium, args, { cwd: tmp, timeout: this.timeoutMs, env: { ...process.env, HOME: tmp } }, { kind: 'browser' });
+      else await execFileAsync(this.chromium, args, { timeout: this.timeoutMs, env: { ...process.env, HOME: tmp } });
       const image = await readProjectFile(tmp, out, 16 * 1024 * 1024);
       if (!image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new PreviewError('The screenshot is not a PNG image.');
       for (const file of files) {
