@@ -5,9 +5,9 @@ const {Workers,workerConfig,WorkerBudget,killWorker}=require('../server/workers.
 const {Runner}=require('../server/runner.js');
 // Evaluate the emitted cBPF branches, including foreign/compat architecture rejection.
 function apply(bytes,arch,nr){let a=0;for(let pc=0;pc<bytes.length/8;pc++){const i=pc*8,code=bytes.readUInt16LE(i),k=bytes.readUInt32LE(i+4);if(code===0x20)a=k===4?arch:nr;else if(code===0x15)pc+=a===k?bytes[i+2]:bytes[i+3];else if(code===0x35)pc+=a>=k?bytes[i+2]:bytes[i+3];else if(code===6)return k;else assert.fail('unsupported instruction');}}
-test('inherited agent filter denies bind/listen and io_uring for both native architectures while allowing outbound sockets',()=>{
+test('inherited agent filter denies listeners and io_uring while preserving native Unix datagram locks and outbound sockets',()=>{
  for(const [arch,a,bind,listen,connect] of [['x64',0xc000003e,49,50,42],['arm64',0xc00000b7,200,201,203]]){
- const b=noListenFilter(arch);for(const nr of [bind,listen,425])assert.equal(apply(b,a,nr),0x5000d);assert.equal(apply(b,a,connect),0x7fff0000);assert.equal(apply(b,0x40000003,connect),0x80000000);assert.equal(apply(b,a,bind|0x40000000),0x80000000);
+ const b=noListenFilter(arch);for(const nr of [listen,425])assert.equal(apply(b,a,nr),0x5000d);assert.equal(apply(b,a,connect),0x7fff0000);assert.equal(apply(b,a,bind),0x7fff0000);assert.equal(apply(b,0x40000003,connect),0x80000000);assert.equal(apply(b,a,bind|0x40000000),0x80000000);
  }
 });
 test('SIGKILL alone is not reported as OOM; explicit timeout/cancel and kernel OOM evidence stay distinct',()=>{
@@ -46,4 +46,11 @@ test('cold provider readiness pauses the requesting preview before reserving nat
  manager.previewPause=async()=>{paused=true};manager.previewReleased=async()=>{restored=true};
  await assert.rejects(manager.start({kind:'branch',id:'o-app/main',dir:'/unused',ref:'main'},{},{feedback:'Discuss only: a question'}),/not ready/);
  assert.equal(restored,true);assert.equal(manager.active.size,0);
+});
+
+test('a successful worker parent exit cleans descendants that retain inherited output pipes',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'dialogue-parent-exit-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const runtime=new Workers({dataRoot:root,appRoot:root,config:workerConfig({DIALOGUE_MODE:'test'})});t.after(()=>runtime.shutdown());
+ const child=await runtime.spawn(process.execPath,['-e',`require('child_process').spawn('/bin/sleep',['60'],{stdio:'inherit'}).unref();console.log('ready');process.exit(0);`],{cwd:root,stdio:['ignore','pipe','pipe']},{kind:'agent'});
+ const closed=once(child,'close');await Promise.race([closed,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(Error('descendant retained pipes after parent completion')),3000);timer.unref()})]);await child.workerFinished;assert.equal(runtime.children.size,0);assert.equal(runtime.budget.active.size,0);
 });

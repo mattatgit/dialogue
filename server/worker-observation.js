@@ -18,7 +18,7 @@ function noListenFilter(arch = process.arch) {
   const numbers = arch === 'x64' ? [0xc000003e, 49, 50] : arch === 'arm64' ? [0xc00000b7, 200, 201] : null;
   if (!numbers) throw new Error('Agent listener policy requires x64 or arm64 Linux.');
   const instructions = [[0x20,0,0,4], [0x15,1,0,numbers[0]], [6,0,0,0x80000000], [0x20,0,0,0], [0x35,0,1,0x40000000], [6,0,0,0x80000000]];
-  for (const syscall of [...numbers.slice(1),425]) instructions.push([0x15,0,1,syscall], [6,0,0,0x50000 | 13]);
+  for (const syscall of [numbers[2],425]) instructions.push([0x15,0,1,syscall], [6,0,0,0x50000 | 13]);
   instructions.push([6,0,0,0x7fff0000]);
   const bytes = Buffer.alloc(instructions.length * 8);
   instructions.forEach(([code,jt,jf,k],i) => { bytes.writeUInt16LE(code,i*8); bytes[i*8+2]=jt; bytes[i*8+3]=jf; bytes.writeUInt32LE(k,i*8+4); });

@@ -355,9 +355,10 @@ class Workers {
           }
         }
         if (this.isolated) await this.execute(this.config.systemctl, ['--user','reset-failed',unit], {env:this.supervisorEnv(),timeout:1000}).catch(() => {});
+        if (!this.isolated && Number.isInteger(child.pid)) { try { process.kill(-child.pid,'SIGKILL'); } catch {} }
         release(); this.children.delete(child); finishCleanup();
       };
-      child.once('close', cleanup); child.once('error', cleanup);
+      child.once('exit', cleanup); child.once('close', cleanup); child.once('error', cleanup);
       if (this.isolated) {
         const stop = signal => {
           child.workerClosing = true;
