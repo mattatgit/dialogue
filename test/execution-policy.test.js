@@ -40,3 +40,10 @@ test('managed preview tool only writes a bounded deferred operation and never sp
  const source=await fs.readFile(path.resolve(__dirname,'../omp/managed-preview.js'),'utf8');const {default:register}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));let tool;register({registerTool(t){tool=t}});
  assert.match((await tool.execute('one',{operation:'status'})).content[0].text,/ready/);assert.match((await tool.execute('two',{operation:'restart'})).content[0].text,/Finish your reply/);assert.equal(JSON.parse(await fs.readFile(file)).operation,'restart');
 });
+test('cold provider readiness pauses the requesting preview before reserving native work and restores it on failure',async()=>{
+ const {WorkspaceRequests}=require('../server/requests.js');let paused=false,restored=false;
+ const manager=new WorkspaceRequests({root:'/unused',workspacesRoot:'/unused',agent:{check:async()=>{assert.equal(paused,true);return {ready:false,reason:'not-connected'}}}});
+ manager.previewPause=async()=>{paused=true};manager.previewReleased=async()=>{restored=true};
+ await assert.rejects(manager.start({kind:'branch',id:'o-app/main',dir:'/unused',ref:'main'},{},{feedback:'Discuss only: a question'}),/not ready/);
+ assert.equal(restored,true);assert.equal(manager.active.size,0);
+});

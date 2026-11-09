@@ -320,7 +320,9 @@ class Workers {
           record.slicePeakBytes = Math.max(record.slicePeakBytes || 0, slice.peakBytes);
           record.sliceCurrentBytes = slice.currentBytes;
           const meminfo = await fsp.readFile('/proc/meminfo','utf8');
+          record.maxSliceCurrentBytes = Math.max(record.maxSliceCurrentBytes || 0, slice.currentBytes);
           record.hostAvailableBytes = Number(/^MemAvailable:\s+(\d+)/m.exec(meminfo)?.[1] || 0) * 1024;
+          record.minHostAvailableBytes = Math.min(record.minHostAvailableBytes ?? Infinity,record.hostAvailableBytes);
           const pids = (await fsp.readFile(path.join(groupRoot,'cgroup.procs'),'utf8')).trim().split(/\s+/).filter(Boolean).slice(0,384);
           record.processes = await Promise.all(pids.map(async pid => ({pid:Number(pid),name:await fsp.readFile(`/proc/${pid}/comm`,'utf8').then(s=>s.trim(),()=>'?')})));
           await save();

@@ -36,7 +36,7 @@ async function main() {
   const dir = path.join(root, 'workspaces', 'check', 'main');
   const home = path.join(root, 'users', 'matt', 'home'); const otherHome = path.join(root, 'users', 'saori', 'home');
   const privateFile = path.join(root, 'accounts.sqlite');
-  let server, provider;
+  let server, provider, passed = false;
   try {
     await fs.mkdir(path.dirname(dir), { recursive: true }); await fs.mkdir(home, { recursive: true }); await fs.mkdir(otherHome, { recursive: true });
     await fs.writeFile(privateFile, 'app-private-canary'); await fs.writeFile(path.join(otherHome, 'credential'), 'other-private-canary'); await fs.writeFile(path.join(home, 'credential'), 'own-profile-canary');
@@ -127,9 +127,11 @@ async function main() {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const shot = path.join(shotDir, 'check.png'); await renderer.capture(`http://127.0.0.1:${server.address().port}/`, [shot]);
     assert.ok((await fs.stat(shot)).size > 100); console.log('PASS: Chromium screenshot through loopback with no app/credential mounts');
-    console.log('ALL LINUX WORKER CHECKS PASSED');
+    console.log('ALL LINUX WORKER CHECKS PASSED'); passed = true;
   } finally {
-    provider?.close(); server?.close(); await runtime.shutdown(); await fs.rm(root, { recursive: true, force: true });
+    provider?.close(); server?.close(); await runtime.shutdown();
+    if (passed && process.env.DIALOGUE_RETAIN_WORKER_CHECKS !== '1') await fs.rm(root, {recursive:true,force:true});
+    else console.log('RETAINED_NATIVE_WORKER_ROOT',root);
   }
 }
 main().catch(error => { console.error('WORKER CHECK FAILED:', error.message); process.exitCode = 1; });

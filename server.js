@@ -179,6 +179,7 @@ const setup = new PreviewSetup({
   },
   reserveWorkspace: async (workspace, slug) => {
     const project = await projects.find(slug);
+    if (requests.active.has(workspace.id) || requests.saving.has(workspace.id)) throw new AccountError(409,'Wait for this working copy’s request or version save before setup.');
     const user = accounts.user(project.previewSetup?.requestedBy || accounts.ownerId);
     if (!accounts.member(user.id)) throw new AccountError(403, 'The member who requested setup no longer has access. Retry setup from your own account.');
     accounts.claimEditor(workspace.id, { user });
@@ -720,6 +721,7 @@ async function handleApi(req, res, url) {
     const project = await findProject(decodeURIComponent(match[1]));
     if (req.method === 'POST' && match[2] === 'retry') {
       if (project.previewSetup?.status === 'running') throw new HttpError(409, 'Preview setup is already running.');
+      if ([...requests.active.keys(),...requests.saving.keys()].some(id=>id.startsWith(project.slug+'/'))) throw new HttpError(409,'Wait for active project requests or saves before retrying setup.');
       await projects.setPreviewSetup(project.slug, { status: 'queued', attempt: 0, error: null, finishedAt: null, requestedBy: identityContext.getStore().user.id });
       setup.enqueue(project.slug);
       sendJson(res, 202, { previewSetup: (await findProject(project.slug)).previewSetup });
@@ -847,7 +849,8 @@ async function handleApi(req, res, url) {
     return true;
   }
   if (match && req.method === 'POST') {
-    const { repo, workspace } = await resolveWorkspace(requestId);
+    const { project, repo, workspace } = await resolveWorkspace(requestId);
+    if (['queued','running'].includes(project.previewSetup?.status) && workspace.ref === await repo.defaultBranchName()) throw new HttpError(409,'Wait for setup to finish using this working copy.');
     const body = await readJsonBody(req, 6 * 1024 * 1024);
     try {
       sendJson(res, 201, { request: await requests.start(workspace, repo, body, identityContext.getStore().user) });
@@ -887,6 +890,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && match) {
     const { project, repo, workspace } = await resolveWorkspace(match[1]);
     if (workspace.kind !== 'branch') throw new HttpError(409, 'Only branches have an agent.');
+    if (['queued','running'].includes(project.previewSetup?.status)) throw new HttpError(409,'Wait for the current setup before starting a repair.');
     const failure = fixFailures.get(project.slug) || project.previewSetup?.error || 'The preview did not start.';
     fixFailures.delete(project.slug);
     const prompt = (await fsp.readFile(FIX_PROMPT_PATH, 'utf8'))

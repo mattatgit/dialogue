@@ -279,15 +279,24 @@ class WorkspaceRequests extends EventEmitter {
     const uploads = fields.uploads; delete fields.uploads;
     if (this.blocked.has(workspace.id) || this.blockedProjects.has(workspace.id.split('/')[0]) || this.saving.has(workspace.id)) throw new RequestError(409, 'Workspace is busy or being removed.');
     if (this.active.has(workspace.id)) throw new RequestError(409, 'A request is already running for this workspace.');
-    const readiness = await this.agent.check();
-    if (!readiness.ready) throw new RequestError(409, `AI model is not ready: ${readiness.detail || readiness.reason || 'connect a model in Settings.'}`);
-    const current = await repo.findWorkspace(workspace.ref);
-    if (!current || current.kind !== 'branch' || current.dir !== workspace.dir) throw new RequestError(404, 'Workspace no longer exists.');
-    if (this.blocked.has(workspace.id) || this.blockedProjects.has(workspace.id.split('/')[0]) || this.saving.has(workspace.id)) throw new RequestError(409, 'Workspace is busy or being removed.');
-    if (this.active.has(workspace.id)) throw new RequestError(409, 'A request is already running for this workspace.');
     const run = { child: null, interrupted: null, done: null, stop: null, figma: null };
     run.ready = new Promise((resolve) => { run.signalReady = resolve; });
     this.active.set(workspace.id, run);
+    try {
+      // Readiness can itself reserve a native provider worker. Release this
+      // copy's preview first, rather than waiting behind our own reservation.
+      await this.previewPause?.(workspace);
+      const readiness = await this.agent.check();
+      if (!readiness.ready) throw new RequestError(409, `AI model is not ready: ${readiness.detail || readiness.reason || 'connect a model in Settings.'}`);
+      const current = await repo.findWorkspace(workspace.ref);
+      if (!current || current.kind !== 'branch' || current.dir !== workspace.dir) throw new RequestError(404, 'Workspace no longer exists.');
+      if (this.blocked.has(workspace.id) || this.blockedProjects.has(workspace.id.split('/')[0]) || this.saving.has(workspace.id)) throw new RequestError(409, 'Workspace is busy or being removed.');
+      if (run.interrupted) throw new RequestError(409,run.interrupted);
+    } catch (error) {
+      this.active.delete(workspace.id); run.signalReady();
+      await this.previewReleased?.(workspace).catch(() => {});
+      throw error;
+    }
     const requestId = randomUUID();
     let beforeTree;
     try {
@@ -328,6 +337,7 @@ class WorkspaceRequests extends EventEmitter {
       if (!records.length) this.records.delete(workspace.id);
       run.signalReady();
       this.active.delete(workspace.id);
+      await this.previewReleased?.(workspace).catch(() => {});
       if (run.figma) await fsp.rm(run.figma.snapshotPath, { force: true });
       await fsp.rm(path.join(attachmentDir(this.root, workspace.id), requestId), { recursive: true, force: true });
       throw error;

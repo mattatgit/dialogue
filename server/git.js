@@ -503,6 +503,9 @@ class ProjectRepo {
     const remote = new Map(remoteRefs.trim().split('\n').filter(Boolean).map((line) => line.split(/\s+/).reverse()));
     const remoteHead = remote.get(`refs/heads/${branch}`);
     const remoteTag = remote.get(tagRef);
+    const expectedRemote = (await this.git(['rev-parse','--verify','--quiet',`refs/remotes/origin/${branch}^{commit}`]).catch(() => '')).trim();
+    const localAhead = remoteHead && remoteHead === expectedRemote && await this.git(['merge-base','--is-ancestor',remoteHead,head]).then(() => true,() => false);
+    const safeBase = !remoteHead || remoteHead === head || localAhead;
     if (remoteTag && (remoteTag !== sha || remoteHead !== sha)) throw new GitError(`Remote ${label} conflicts with the pending Draft.`);
     // A failed push can be retried after more local edits. If the remote did
     // not receive the tag, replace the pending commit with today's Draft.
@@ -511,7 +514,7 @@ class ProjectRepo {
       const tree = await this.draftTree(workspace);
       const pendingTree = (await this.git(['rev-parse', `${sha}^{tree}`])).trim();
       if (tree !== pendingTree) {
-        if (remoteHead && remoteHead !== head) throw new GitError('The remote branch moved; the Draft was not overwritten.');
+        if (!safeBase) throw new GitError('The remote branch moved; the Draft was not overwritten.');
         sha = tree === (await this.git(['rev-parse', `${head}^{tree}`])).trim()
           ? head
           : (await this.git(['commit-tree', tree, '-p', head, '-m', `Dialogue ${label}`])).trim();
@@ -519,7 +522,7 @@ class ProjectRepo {
       }
     }
     if (remoteHead !== sha || remoteTag !== sha) {
-      if (remoteHead && remoteHead !== head) throw new GitError('The remote branch moved; the Draft was not overwritten.');
+      if (!safeBase) throw new GitError('The remote branch moved; the Draft was not overwritten.');
       await this.git(['push', '--atomic', `--force-with-lease=refs/heads/${branch}:${remoteHead || ''}`, destination,
         `${sha}:refs/heads/${branch}`, `${sha}:${tagRef}`], { timeout: 120000 });
     }

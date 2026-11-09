@@ -4,13 +4,28 @@ Application owner: Dialogue Build. Host/settings, evidence retention, staged tes
 
 ## Preserved incident evidence
 
-Setup is preserving the Deui setup/application/kernel/process evidence before any retry. The 6 November GitHub public-key error is separate from 7 November memory kills. One Deui preview reached 256 MiB; the 1280 MiB agent scope contained OMP and project Node/Vite/esbuild processes. Individual scope/request attribution must use cgroup/PID/workspace/timestamp evidence; temporal proximity alone is insufficient. The retained raw material is root-only. Archive: `/root/dialogue-evidence/2026-11-09-deui-030008Z/`. Complete long journal records correlate all four retained 1280 MiB agent scopes to Deui working directories: 7 November Melbourne 14:04:03/14:05:00 setup tree (`5e2aa439`/`9d6f5d91`), 15:53:57/16:32:12 main (`4737edd6`/`af950abf`). Particular request IDs still require retained request-sidecar/PID correlation; do not infer them from workspace alone. Installed physical memory3915 MiB; observed idle MemAvailable3352 MiB, no swap. Neither idle value establishes workload capacity.
+Setup is preserving the Deui setup/application/kernel/process evidence before any retry. The 6 November GitHub public-key error is separate from 7 November memory kills. One Deui preview reached 256 MiB; the 1280 MiB agent scope contained OMP and project Node/Vite/esbuild processes. Individual scope/request attribution must use cgroup/PID/workspace/timestamp evidence; temporal proximity alone is insufficient. The retained raw material is root-only. Archive: `/root/dialogue-evidence/2026-11-09-deui-030008Z/`. Complete long journal records correlate all four retained 1280 MiB agent scopes to Deui working directories: 7 November Melbourne 14:04:03/14:05:00 setup tree (`5e2aa439`/`9d6f5d91`), 15:53:57/16:32:12 main (`4737edd6`/`af950abf`). Main scopes additionally match request-sidecar intervals/PIDs: `4737edd6`→request `8895fbf6-647c-4353-a41f-91db96cbe069`/PID85635, `af950abf`→`b114603a-6386-4243-8749-d916897c51c6`/PID86944. Setup scopes have no request record. The sealed archive (41 verified evidence hashes) is `/root/dialogue-evidence/2026-11-09-deui-030008Z.tar.gz`, SHA256 `b5019e3c6b84b852695cfd668d636f8051da49b32197b3ed5b77b4f56f8a036b`. Historical complete-tree peaks/PPID edges are unavailable; kernel usage-at-kill/task tables are retained and shared RSS must not be summed. Installed physical memory3915 MiB; observed idle MemAvailable3352 MiB, no swap. Neither idle value establishes workload capacity.
 
 ## Installed contract and experiment
 
 The 4 GB /2 vCPU pilot currently has an app ceiling of 512 MiB and worker MemoryHigh/Max 2048/2304 MiB, swap max256, tasks384, CPU150%. The candidate verifies the declared slice, app and ancestor limits before starting. Retain at least 1536 MiB physical space outside the worker slice for app + OS/infrastructure. Do not change namespaces, mounts, credential boundaries, aggregate limits or disk reserve to make a check pass.
 
 The **defaults are not a recommended Deui capacity policy**. Measure cold dependency install, cold first browser interaction, warm interaction/HMR, native OMP editing, discussion, screenshots and each supported overlap. Start an isolated disposable check service with the same installed slice/CPU/tasks and no production environment/credentials. Sweep only explicit preview profile values (256 baseline, then 512/768 if baseline fails) while retaining admission2048/slice2304 and a single heavy job. Select values only from complete-tree kernel peaks, outcome events and end-to-end checks. A 768 preview +1280 agent consumes the entire 2048 reservation; screenshot work must wait until the agent exits. Two 768 previews cannot coexist with that agent. A member's own preview is paused during their edit; measure another member’s preview concurrently. Raise install/browser limits only if their own measured evidence requires it, and recompute admission combinations. Busy states are a supported limit, not a failed request disguised as success.
+
+## Harness invocation
+
+The local full suite passes164 tests. `scripts/check-deui.js` passed its full disposable workflow on macOS using actual native OMP, a scripted local model and real Chrome interactions, including two-member scheduling/cancellation. This is functional evidence, **not Linux capacity acceptance**. Earlier fixture errors (shell quoting and missing declarative discussion-model catalog) are fixed. The real Save Version failure after a local recipe commit is fixed in application code, with unseen-remote-update regression coverage.
+
+Provide a source-only Deui archive and a fresh root, for example:
+
+```sh
+DIALOGUE_DEUI_SOURCE=/srv/dialogue/checks/sources/deui-c3396e14 \
+DIALOGUE_ACCEPTANCE_ROOT=/srv/dialogue/checks/capacity/ \
+DIALOGUE_WORKER_PARENT_UNIT=dialogue-deui-check.service \
+DIALOGUE_WORKER_PREVIEW_MB=512 node scripts/check-deui.js
+```
+
+The check service/environment supplies isolated mode and the existing pinned binaries. Do not source production credentials. The script retains `report.json`, worker records and UI PNGs; it never pushes to Deui and it does not remove evidence on failure. Check `native`, `capacityAccepted`, every actual check and per-class kernel measurements, not merely exit code. A successful run characterizes only the workload/source/profile values in that report. Run256 baseline first;512 above is an experiment example, not a selected capacity policy.
 
 ## Native acceptance gates
 
