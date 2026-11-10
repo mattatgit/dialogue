@@ -118,3 +118,9 @@ test('cancelling a connecting import aborts I/O and retains a resumable single a
   const f=await store(t);let started;const entered=new Promise(r=>started=r);const guided=new GuidedImports({catalog:f.catalog,dataRoot:f.root,requests:{stop:async()=>{}},repoFor:async(_p,{signal})=>{started();await new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true}));}});
   const a=await guided.connect({url:'https://github.com/acceptance/app'},{id:'one'});await entered;await guided.cancel(a.id);assert.equal((await guided.get(a.id)).state,'cancelled');assert.equal((await f.catalog.snapshot()).builds.length,0);assert.equal((await f.catalog.snapshot()).imports.length,1);
 });
+
+test('cancellation between checkout and request creation cannot start a late agent', async t => {
+  const f=await guidedFixture(t),original=f.catalog.patchImport.bind(f.catalog);let entered,unblock;const paused=new Promise(r=>entered=r),released=new Promise(r=>unblock=r);
+  f.catalog.patchImport=async(id,patch)=>{const result=await original(id,patch);if(patch.state==='inspecting'){entered();await released;}return result;};
+  const a=await f.guided.connect({url:'https://github.com/acceptance/app'},{id:'one'});await paused;const cancel=f.guided.cancel(a.id);unblock();await cancel;assert.equal(f.calls.length,0);assert.equal((await f.guided.get(a.id)).state,'cancelled');
+});

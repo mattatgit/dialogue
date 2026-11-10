@@ -88,6 +88,7 @@ class GuidedImports {
       a.plan ? `Current editable plan: ${JSON.stringify(a.plan)}` : '',
       message ? `User follow-up: ${message}` : ''
     ].filter(Boolean).join('\n\n');
+    this.check(run);
     const accepted = await this.requests.start(workspace, view, { feedback: prompt.slice(0, 16000), intent: 'discuss', kind: 'comment', attachments, ...(figmaUrl ? { figmaUrl } : {}) }, run.actor);
     a = await this.catalog.patchImport(id, { assessmentRequest: accepted.id, attempts: a.attempts.map((t,i) => i === a.attempts.length - 1 ? { ...t, requestId: accepted.id, workspaceId: workspace.id, sourceSha: source.sha } : t) });
     await this.requests.active.get(workspace.id)?.done; this.check(run);
@@ -193,6 +194,7 @@ class GuidedImports {
     if (attempt) await this.inheritAttachments(attempt, workspace);
     const context = attempt ? `Prepare ONLY the confirmed build plan ${JSON.stringify({ name: build.name, target: build.target, root: build.root, approach: build.approach, limitations: build.limitations })} at source ${sha}. Do not publish. Reuse existing UI; implement only agreed adapters/simulations.` : `Create the requested ${build.target} build: ${build.prompt}. No remote publication is configured.`;
     const prompt = `Write this build's preview recipe ONLY at ${build.recipePath}. Its root should be ${JSON.stringify(build.root)} relative to the repository. Recipe schema: version1, kind static or server, root, install/start (optional for static), entry '/', reload dialogue or self. Server must listen on $PORT. Dialogue owns dependency installs and long-running servers; do not run them inside your worker. Use dialogue_preview if needed, then finish. Preserve any earlier partial work. Explain actual changes and outstanding limitations.\n${context}`;
+      this.check(run);
       const accepted = await this.requests.start(workspace, repo, { feedback: prompt.slice(0, 16000), kind: 'create', ...(creation.attachments ? { attachments: creation.attachments } : {}), ...(creation.figmaUrl ? { figmaUrl: creation.figmaUrl } : {}) }, run.actor, { displayFeedback: attempt ? `Prepare ${build.name} using the confirmed import plan.\n\n${build.approach}` : build.prompt });
       await this.catalog.patchBuild(build.id, { preparationRequest: accepted.id });
       await this.requests.active.get(workspace.id)?.done; this.check(run);
