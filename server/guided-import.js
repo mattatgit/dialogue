@@ -65,7 +65,7 @@ class GuidedImports {
     const inputFile = path.join(inputDir, require('node:crypto').randomUUID() + '.json');
     await fs.writeFile(inputFile, JSON.stringify({ message, ref, attachments, figmaUrl }), { flag: 'wx', mode: 0o600 });
     a = await this.catalog.patchImport(id, { pendingInputFile: inputFile, attempts: [...a.attempts, { at: stamp(), message: message || 'Inspect source', inputFile }] });
-    await this.catalog.patchImport(id, { state: 'connecting', error: null, access: null });
+    await this.catalog.patchImport(id, { state: 'connecting', error: null, access: null, failureKind: null });
     const repo = await this.inspection(a, run); this.check(run);
     await repo.fetch({ signal: run.abort.signal }); this.check(run);
     const sourceRef = ref || a.sourceRef || await repo.defaultBranchName();
@@ -98,8 +98,7 @@ class GuidedImports {
     try { plan = parseProposal(record.reply); }
     catch (error) { await this.catalog.patchImport(id, { state: 'needs-input', assessmentReply: record.reply, error: error.message, failureKind: 'proposal' }); return; }
     plan.builds.forEach((b, index) => { b.ref = sourceRef; b.destinationRef = a.plan?.builds[index]?.destinationRef || `dialogue/${id.slice(-8)}-${index + 1}`; });
-    await this.catalog.patchImport(id, { state: 'awaiting-confirmation', assessmentReply: record.reply, error: null });
-    await this.catalog.setPlan(id, plan);
+    await this.catalog.setPlan(id, plan, { assessmentReply: record.reply });
   }
   async discuss(id, input, actor) {
     validateRequest({ feedback: input.message || 'Inspect source', intent: 'discuss', attachments: input.attachments || [], ...(input.figmaUrl ? { figmaUrl: input.figmaUrl } : {}) });
@@ -107,8 +106,12 @@ class GuidedImports {
     this.launch(id, actor, run => this.assess(id, run, input));
   }
   async confirm(id, revision, actor) {
-    if (this.active.has(id)) throw new CatalogError(409, 'Wait for the current import step.');
-    const a = await this.get(id);
+    let a = await this.get(id);
+    const finishing = this.active.get(id);
+    if (finishing) {
+      if (a.state !== 'awaiting-confirmation') throw new CatalogError(409, 'Wait for the current import step.');
+      await finishing.done; a = await this.get(id);
+    }
     if (!a.plan || a.revision !== revision || a.state !== 'awaiting-confirmation') throw new CatalogError(409, 'Review and confirm the current plan before preparation.');
     const repo = await this.inspection(a);
     await repo.fetch(); const source = await repo.resolveRef(a.sourceRef);

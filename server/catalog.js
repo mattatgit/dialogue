@@ -102,14 +102,14 @@ class Catalog {
     });
   }
   async patchImport(key, patch) { return this.mutate(data => { const a = this.attempt(data, key); Object.assign(a, patch, { updatedAt: now() }); a.events.push({ state: a.state, at: a.updatedAt, error: a.error || null }); a.events = a.events.slice(-100); return a; }); }
-  async setPlan(key, input) {
+  async setPlan(key, input, { assessmentReply } = {}) {
     const plan = proposal(input);
-    return this.mutate(data => { const a = this.attempt(data, key); if (['connecting', 'inspecting', 'preparing', 'validating'].includes(a.state)) throw new CatalogError(409, 'Wait for the current step or cancel it before changing the plan.');
+    return this.mutate(data => { const a = this.attempt(data, key); if (['connecting', 'inspecting', 'preparing', 'validating'].includes(a.state) && !(a.state === 'inspecting' && typeof assessmentReply === 'string')) throw new CatalogError(409, 'Wait for the current step or cancel it before changing the plan.');
       if (a.prepared.length) {
         if (plan.builds.length !== a.plan.builds.length || plan.builds.some((b,i) => b.selected !== a.plan.builds[i].selected)) throw new CatalogError(409, 'Use another import to add/remove selected builds after preparation starts. Existing builds and work were retained.');
         for (const item of a.prepared) { const build = this.build(data,item.buildId), next = plan.builds[item.index]; if (build.workspaceId && (next.ref !== build.ref || next.destinationRef !== build.destinationRef)) throw new CatalogError(409, 'This working copy already exists. Keep its source/destination branches, or open a separate branch/import; no local work was overwritten.'); }
       }
-      a.plan = plan; a.revision = digest({ sourceSha: a.sourceSha, plan }); a.approval = null; a.state = 'awaiting-confirmation'; a.error = null; return a; });
+      a.plan = plan; a.revision = digest({ sourceSha: a.sourceSha, plan }); a.approval = null; a.state = 'awaiting-confirmation'; a.error = null; a.failureKind = null; if (typeof assessmentReply === 'string') a.assessmentReply = assessmentReply; return a; });
   }
   async approve(key, revision) {
     return this.mutate(data => { const a = this.attempt(data, key);

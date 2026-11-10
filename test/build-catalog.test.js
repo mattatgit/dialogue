@@ -124,3 +124,9 @@ test('cancellation between checkout and request creation cannot start a late age
   f.catalog.patchImport=async(id,patch)=>{const result=await original(id,patch);if(patch.state==='inspecting'){entered();await released;}return result;};
   const a=await f.guided.connect({url:'https://github.com/acceptance/app'},{id:'one'});await paused;const cancel=f.guided.cancel(a.id);unblock();await cancel;assert.equal(f.calls.length,0);assert.equal((await f.guided.get(a.id)).state,'cancelled');
 });
+
+test('an assessment publishes its plan, source-bound revision and review state atomically', async t => {
+  const f=await store(t),s=await f.catalog.connect(null,'https://github.com/acceptance/app');let a=await f.catalog.startImport({sourceId:s.id,actorId:'one'});await f.catalog.patchImport(a.id,{state:'inspecting',sourceSha:'a'.repeat(40),failureKind:'repository-access'});
+  await assert.rejects(f.catalog.setPlan(a.id,plan()),e=>e.status===409);
+  a=await f.catalog.setPlan(a.id,plan(),{assessmentReply:'Retained real assessment'});assert.equal(a.state,'awaiting-confirmation');assert.ok(a.revision);assert.ok(a.plan);assert.equal(a.assessmentReply,'Retained real assessment');assert.equal(a.failureKind,null);
+});
