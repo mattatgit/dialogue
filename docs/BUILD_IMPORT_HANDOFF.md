@@ -2,6 +2,36 @@
 
 This is a reviewable application slice on `codex/build-guided-import`, stacked on `codex/managed-execution`/PR12. **No deployment is authorized by this handoff.** Setup owns guarded native validation, infrastructure backup changes and any later approved activation. Production is the previously accepted `e801b0daa593eef8b559048948487dc91553d155`, deployed9 November16:28 Melbourne. Preserve production data, profiles, private environment and current release pointer.
 
+## Native acceptance outcome
+
+Accepted **application `bfec90a978cde227e2ac973d8c6d8e8f792d9479`**, [PR13](https://github.com/mattatgit/dialogue/pull/13):187 local and187 actual Linux tests passed, zero failures/cancelled/skipped; updated direct-Node native worker checks passed; all10 guided-import checks and all13 Deui regression/concurrency checks passed. Source/dependencies were root-owned and hash-verified. Nix package passed locally. Documentation-only followups do not change this tested application pin. Existing production e801b0d was restored, with unchanged private environment and empty worker scopes; no activation occurred. Build independently checked hosted health200/private projects401 and local review200.
+
+The successful guided run includes the previously failing verifier → editor handoff, real UI edits, continuing conversation/member-home handoff, local-only Version, grouping and cancellation. Both suites use a scripted local provider and actual native OMP/Git/browser against disposable Deui source, not a personal account or real remote publication. The final concurrency check characterizes the bounded two-person/one-heavy-job policy; it is not arbitrary-project or simultaneous-agent capacity. Existing settings remain unchanged. Setup still owns the new local-origin Git validator/recovery fixture before any later activation.
+
+### Measured capacity and evidence receipt
+
+| Observed complete-tree/current metric | Guided import10 | Deui regression13 |
+| --- | ---: | ---: |
+| Duration (scripted provider) |80.263s |203.177s |
+| Agent peak |1280.0MiB |1280.0MiB |
+| Install peak |768.1MiB |768.3MiB |
+| Preview peak |768.0MiB |767.5MiB |
+| Browser peak |227.0MiB |256.0MiB |
+| App peak |73.5MiB |65.4MiB |
+| Maximum actual slice current (external100ms samples) |1788.9MiB |1868.4MiB |
+| Minimum host MemAvailable (same sampler) |2445.8MiB |2035.7MiB |
+| External samples |776 |1964 |
+
+These are separate peak/minimum observations, not simultaneous values to add together. The guided control peak was10.1MiB; the Deui readiness control probe was intentionally signalled and unmeasured (null, not zero demand). Worker-record running minima2446.2/2035.8MiB differ slightly from external samples; retain both provenance. No workload OOM kill occurred. Intentional cancellation/lifecycle stops are separate from the worker gate's intentional OOM containment test. Individual agent/install/preview/browser ceilings were touched: this supports the bounded existing4GB/one-heavy-job pilot, not comfortable uncapped demand, simultaneous-agent or arbitrary-project capacity. No upgrade or limit increase is proposed from these results. Real-provider quality/latency, physical integrations and full hosted member/auth/proxy/HMR review remain outside these scripted checks.
+
+Exact source archive SHA256 `f29e8bf97d6df390a8c119f0a7064b59bc68f14ea227bdb46263857af3c0b911`: all222 tracked files and1458 unchanged Linux dependency files verified. All4 actual units exited0 with PID/executable/CWD proof. Evidence root `/root/dialogue-acceptance/2026-11-10-050254Z-bfec90a-guided/`; verified sealed archive `.tar.gz`, SHA256 `439f3f243d0baf011a73664434052d69dbcc7971cdcba62c9a2c848cefbbda23`,45,749,196bytes/8746 file-link artifacts. It includes raw logs,100ms cgroup/host/CPU/PSI/task samples, executed guard, phase timestamps, source/Git/catalog/plans/sessions/attachments/profile evidence; declared regenerable caches/dependencies/runtime endpoints are omitted with native cache hashes retained. No production private environment is in that archive.
+
+- Guided report `/srv/dialogue/checks/2026-11-10-050254Z-import/build-import-HeZBCL/report.json`, SHA256 `814b9dca7c9acdabf009ccca9feb298d47579cdf3bfc9a70cc1497da77f1885e`: native/workflowAccepted/accepted=true, all10 checks,14 actual read-only rejection results and unchanged canaries.
+- Concurrency report `/srv/dialogue/checks/2026-11-10-050254Z-deui/deui-RQHINK/report.json`, SHA256 `55fe61a271ddafa6ee007b35c5ec736c913856f04bd16419edb4577108110202`: native/workflowAccepted/capacityAccepted=true, all13 checks.
+- Final host/acceptance receipt `/root/dialogue-acceptance/2026-11-10-bfec90a-final-handoff.json`, SHA256 `199c2d43e7ef11025fa9e01e3153daf378f79ffa39c43ac6fe4052617a6bcdfb`.
+
+Fresh consistent encrypted snapshot `2605cac2bea457b9358bc79a9546b7b2eace0338905d6d6f7ec54198c399d154` passed full isolated restore; reuse required it to remain newest, under1h old, with matching recovery tools/config/policy/private-environment hashes. This restores existing production, not the still-required new catalog/local-origin fixture. After evidence sealing, Setup removed only16 declared regenerable cache directories from completed disposable checks, retaining source/refs/profiles/sessions/reports; data free recovered from2819.9 to7620.6MiB. Production data remained untouched, e801b0d enabled/healthy, private environment byte-identical and worker slice empty. External home/health200, projects401, unknown preview404. No feature activation occurred.
+
 ## Product behavior and limits
 
 Projects can be empty named containers. Their gallery has one card per stable build, labelled Web/macOS/iOS/NixOS. A build contains its branches, working copies, conversation and versions. Repository connections are independent of names/identities; several sources may feed one project and several builds may share a source/root. Both import entry points use the same persisted workflow. Create build supports a prompt, uploaded files and an existing Figma reference. Nothing automatically creates a remote repository or pushes scaffolding.
