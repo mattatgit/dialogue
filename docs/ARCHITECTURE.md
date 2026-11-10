@@ -4,6 +4,183 @@ This document records the current architecture direction. It distinguishes the *
 
 The private pilot targets BinaryLane Ubuntu 24.04 (2 vCPUs / 4 GB). Setup & install owns deployment; the application-side execution policy and host contract are in `docs/WORKERS.md`. The development architecture below remains useful for local work.
 
+## Project/build structure and guided import — Dialogue Build handoff (2026-11-10)
+
+### Objective and first deliverable
+
+Matt approved the product direction below and asked Dialogue Build to start with
+a rough UI, which Matt will polish after trying the flow. Prepare a working,
+reviewable first slice using Dialogue's existing visual components and agent,
+conversation and managed-runner machinery. Prioritize understandable navigation,
+decisions, progress and recovery over finished visual design. Clearly label any
+temporary fixture or unsupported action. This handoff is application work, not a
+production deployment instruction. Continue from Build's current application
+checkout; this architecture checkout contains older application code and shared,
+uncommitted documentation/infra work that must be preserved.
+
+### Product model
+
+- **Project:** a named organisational container. It can start empty and contain
+  several builds; creating one does not require a GitHub repository.
+- **Build:** the stable named thing a person creates, imports, reviews and edits.
+  Use this term instead of treating app/site/prototype as separate entity types.
+  A build has a target, such as Web, macOS, iOS or NixOS. Web covers a UI shell,
+  website or full web application; these do not require separate target types.
+- Show one card per build. Branches, working copies, saved versions and history
+  belong inside that build. A new branch or saved version does not create another
+  build card. Keep the continuing conversation scoped to its build/branch.
+- Example: Landline contains three builds: Web prototype, macOS and NixOS.
+  Alternative branches of the Web prototype remain within that one build.
+- Repository connections are distinct from project/build identity. A project can
+  contain builds from different repositories; several builds may share a
+  repository or use different application roots within it. Do not enforce the
+  current one-project-per-repository URL/slug uniqueness rule at the wrong level.
+
+Git branches still cover whole repositories. Build-level navigation does not
+change Git's semantics or isolate shared files. Build must define the mapping
+between a build, its source/root, branch and working copy, including shared paths,
+write ownership and publication scope. Two builds sharing source must not
+silently edit the same checkout or publish each other's pending work. Extend the
+existing reservations, worktrees and safe publication checks; avoid project-wide
+exclusive editing. Keep full merge-UI design separate from this first slice.
+
+### Entry points
+
+On the Projects page, provide **Create project** and **Import project**:
+
+1. **Create project:** name an empty project, open its build gallery, and offer
+   Create build / Import build.
+2. **Import project:** connect a whole GitHub repository. The agent inspects the
+   repository and proposes the project name and one or more builds, their source
+   roots and targets. The user can revise the proposal and choose which builds
+   to prepare. Preserve the repository as the connected source; a multi-app repo
+   must not be flattened into one arbitrary preview or automatically turned into
+   a build for every folder, branch or available platform.
+
+Within an existing project, provide **Create build** and **Import build**:
+
+1. **Create build:** name and target, then a prompt or prompt plus design using
+   the existing attachment capabilities. Establish local Git working storage as
+   needed and make any remote publication destination explicit. Do not silently
+   create a remote repository or push scaffolding.
+2. **Import build:** connect another GitHub repository or select an app/root from
+   a repository already connected to the project. Inspect and propose the
+   approach for that build, then prepare it after agreement.
+
+These are two import entry points into one shared workflow, not two independent
+import implementations. Initial import support can stay GitHub-based; ZIP,
+arbitrary local-folder import and additional providers are separate work.
+
+### Shared agent-guided import workflow
+
+1. **Connect and inspect.** Read the resolved source commit and identify the
+   frameworks, application roots, existing targets and scripts, dependencies,
+   native/backend/hardware requirements and existing preview configuration.
+   Analysis is read-only: fetching/checking out source is allowed, but do not
+   install dependencies, run project scripts or modify project files before an
+   approach has been agreed. Use the existing read-only agent/tool restrictions,
+   rather than relying on prompt wording alone.
+2. **Propose and discuss.** Show a plain-language report: what was found, whether
+   existing code can run on the chosen target, what adaptation is needed, what
+   will be simulated, limitations and any missing input. Let the user change the
+   target/root/scope and ask follow-up questions. An unsupported target should
+   produce an honest recommendation, not repeated speculative installs.
+3. **Confirm and prepare.** Record the agreed plan and source revision before
+   creating/changing the build's working copy. If the source or plan materially
+   changes, surface that change before executing it. Reuse OMP and Dialogue's
+   managed install/preview operations; long-running servers must remain owned
+   and measured by the application, outside the agent worker.
+4. **Verify and continue.** Distinguish source connected, preview configured and
+   intended UI verified. HTTP readiness or a captured thumbnail alone does not
+   establish that the intended UI works. Verify a representative interaction
+   where possible; otherwise show the outstanding validation honestly. Continue
+   into the same build/branch conversation with the assessment, approved plan,
+   limitations, attachments and execution results available to the agent.
+
+Persist import attempts and their decisions before a build exists. When one
+project import produces several builds, each must retain the relevant assessment
+and plan as context. Do not leave the setup reasoning in an inaccessible
+one-shot background process or require the user to retype it after an error.
+
+### Deui as the first real example
+
+The inspected `euanlake/deui-app` source at
+`c3396e14ed2e7193b71b2a92df710a615c18e8be` already contains React/TypeScript/Vite
+UI and Capacitor iOS packaging, including `build:web` and iOS scripts. Recommend
+reusing the shared UI for a Web review build. Assess browser behaviour for
+Bluetooth, machine/scale data and iCloud; propose explicit simulations/adapters
+where required. Do not assume that rendering the UI proves native integrations.
+See the [source architecture](https://github.com/euanlake/deui-app/blob/c3396e14ed2e7193b71b2a92df710a615c18e8be/README.md#architecture)
+and [build scripts](https://github.com/euanlake/deui-app/blob/c3396e14ed2e7193b71b2a92df710a615c18e8be/package.json).
+
+Keep source/provenance and the destination branch visible enough to understand
+how approved Web changes can contribute to the iOS app. For shared UI, these can
+be ordinary approved source changes on a branch of the existing repository;
+there is no need to duplicate the interface or translate it into another
+language. Explicit Save/version/push behaviour remains distinct from approving
+an import plan. Do not implement an automatic cross-platform synchronization
+engine in this first slice. iOS packaging, hardware and device validation remain
+separate requirements; the hosted Linux preview does not establish those.
+
+### Rough UI and recovery states
+
+Provide the Projects actions, an empty-project state, a build gallery with one
+card per build and target label, Create build inputs, and a shared import surface
+containing source, assessment/discussion, proposed build(s), confirmation, progress
+and results. Keep branch selection and saved-version navigation within the build.
+Make Web work first; other targets can be represented honestly with their
+execution availability explained. This does not promise native platform workers.
+
+Represent connecting/queued/inspecting, needs input or AI/repository access,
+awaiting plan confirmation, preparing, validating, ready, failed and cancelled as
+appropriate. Distinguish an empty project from an imported-but-unready build.
+Explain failures and what survived; offer relevant retry/resume, change-plan,
+cancel and diagnostic-detail actions. Preserve prior attempts and bound/sanitize
+logs. OOM, timeout, cancellation, access failure and unsupported platform should
+not collapse into an unexplained SIGKILL message. A retry must resume or create a
+recorded attempt without duplicating projects/builds or overwriting local work.
+
+### Model changes, migration and acceptance
+
+Use stable project/build identities independent of names, repository slugs and
+Git refs. Model source connections, build target/root/ref/preview configuration,
+and import attempts/approved plans explicitly. Exact schema is Build's choice.
+Make recipes addressable per build; two builds in one repository must not
+overwrite a single global recipe. Scope requests, conversations, attachments,
+history/version operations, worker attribution, preview capabilities and editor
+reservations to the correct build/working copy, retaining authorization checks.
+
+Migrate existing project/repository records conservatively to a project and a
+compatible build representing the existing workflow. Preserve all branch refs,
+versions/tags, deploy keys, conversations, attachments, preview recipes and
+unpublished work; do not infer additional builds from branches. Keep legacy URLs
+resolvable where practical. Test repeat migration/restart and interrupted import.
+Do not rename/move existing Git worktrees without repairing and validating their
+linked metadata. Document backup-scope/recovery changes for Setup & install.
+
+First review should demonstrate both entry points, empty-project creation,
+prompt/design build creation, multiple builds sharing one repository, builds
+using different repositories, read-only assessment and editable plan confirmation,
+actual Deui Web UI/interaction, continued conversation, and recovery from access,
+agent, preparation and cancellation failures without losing local work. Verify
+that another branch/version does not add gallery cards and publishing one build
+does not unintentionally include another build's edits. Use disposable sources
+and refs; never overwrite or publish real Deui work for acceptance. Run the
+repository-required full suite and relevant migration/authorization/native
+checks, reporting what was actually validated. Return a rough working UI for
+Matt's polish pass, implementation/validation notes and remaining limitations;
+leave production rollout to Setup & install.
+
+## Project/build implementation (2026-11-10)
+
+The first slice is implemented on `codex/build-guided-import`, accepted application `bfec90a978cde227e2ac973d8c6d8e8f792d9479`, using existing Dialogue UI, account, conversation and managed-runner components. Its temporary functional layout is for Matt's flow review, not a replacement visual baseline. It passed187 local/Linux tests, updated native workers, guided10 and Deui13 under existing pilot limits; it has not been deployed. The full storage, native acceptance and rollback contract is in [BUILD_IMPORT_HANDOFF.md](BUILD_IMPORT_HANDOFF.md).
+
+`catalog.json` schema1 adds named projects, source connections, builds and persisted import attempts. Legacy `db.json` remains schema4. Each old repository record maps deterministically to one project and one compatible Web build, retaining its exact storage slug, paths, refs, recipe and private data. No builds are inferred from branches. New builds use separate mirrors and worktrees even when sharing a source connection; they can edit repository-wide shared paths, but never share mutable files with another build. Publication remains a whole branch, with existing atomic Git/lease/conflict checks. New local builds publish Versions only to their private `local-origins/<build-id>.git`; creating or confirming never creates a GitHub repository or pushes source remotely.
+
+Both import entry points use one persisted connect → read-only assessment/discussion → revision/source-bound plan confirmation → preparation → UI-check workflow. Assessment starts OMP outside the source tree, with source mounted read-only, public read/search tools clamped by an explicit extension, and ambient project configuration discovery disabled. Pinned OMP's `--tools` alone can re-add write, so both execution hooks and native adversarial checks are required. Preparation uses normal branch requests and Dialogue-managed install/preview operations. It releases the agent reservation before runner/browser work. A real representative click and expected rendered text can establish UI verification for a recorded draft; HTTP readiness alone yields “configured”. Later edited/failed editing requests invalidate the verified status.
+
+Plans, source SHA, attempts, failures, original inputs, attachments, durable design snapshots and request results survive retries/restart. Branch conversations inherit the import assessment/approved approach and original references. A revised preparation plan reuses allocated IDs and existing files; it cannot silently replace an existing working copy's source/destination branch. Unsupported native targets are representable but do not execute on hosted Linux. Initial import is GitHub-only; merge UI, remote creation for local builds, platform workers and hardware validation are separate work.
+
 ## Hosted execution handoff (2026-11-09)
 
 Matt chose to keep Dialogue hosted. The next application task is to make real project import, editing and previews reliable through better execution ownership, measured resource policy and scheduling. A local companion, desktop wrapper and new worker-host platform are outside this handoff.
@@ -18,7 +195,7 @@ Setup reports the web service at about 45 MB at its observation point, a Deui pr
 
 Dialogue Build owns application implementation, tests, reviewed commits/PR and the updated worker/deployment contract. Setup & install owns host service/resource changes, any approved capacity experiment, backups/recovery and deployment of an exact tested candidate. Prepare its handoff with required values, acceptance steps and rollback implications. If safe execution cannot fit 4 GB, report the measured demand and supported workload/concurrency; purchasing capacity and changing the server are separate user decisions. Update `docs/CURRENT.md`, the worker contract and hosting notes as findings change.
 
-**Outcome (9 November):** exact `e801b0daa593eef8b559048948487dc91553d155` implements this handoff and passed168 local/Linux tests, complete native worker acceptance and13 actual disposable Deui workflow checks. The measured two-member policy uses768 MiB previews with one1280 MiB heavy worker, its own preview paused and another viewed preview retained; the second agent queues. Admission2048/slice2304/app512 and existing isolation remain. Max measured slice current2007.1 MiB/min host available2042.3 MiB support this bounded4 GB pilot; they do not establish parallel-agent or arbitrary-project capacity. Actual UI interaction, edit/render, continuing history, disposable Version save and cancellation/reclamation passed with actual OMP and a scripted local provider. The [execution handoff](EXECUTION_HANDOFF.md) pins settings/evidence/limitations and rollback. Production remains `a516d7a`; Setup owns activation. A substantial import wizard remains separate design work.
+**Outcome (9 November):** exact `e801b0daa593eef8b559048948487dc91553d155` implements this handoff and passed168 local/Linux tests, complete native worker acceptance and13 actual disposable Deui workflow checks. The measured two-member policy uses768 MiB previews with one1280 MiB heavy worker, its own preview paused and another viewed preview retained; the second agent queues. Admission2048/slice2304/app512 and existing isolation remain. Max measured slice current2007.1 MiB/min host available2042.3 MiB support this bounded4 GB pilot; they do not establish parallel-agent or arbitrary-project capacity. Actual UI interaction, edit/render, continuing history, disposable Version save and cancellation/reclamation passed with actual OMP and a scripted local provider. The [execution handoff](EXECUTION_HANDOFF.md) pins settings/evidence/limitations and rollback. Setup deployed `e801b0d` on 9 November after native/backup gates. The 10 November guided-import slice above is separate, not deployed by this Build work.
 
 ## Continuing branch conversations (2026-11-04)
 
@@ -50,9 +227,7 @@ Regardless of hosting/provider choices:
 
 ### Intended project and unit model
 
-The product clarification from 2026-10-21 is project = Git repository, containing many independently identifiable apps, websites or prototypes. Units are not Git branches: several units may coexist on a branch, and one unit may have alternative branches. Concurrent work by multiple users within a project is required. See `docs/PRODUCT.md` for the agreed requirements.
-
-The implementation described below still uses a repository/ref workspace and a repository-level preview recipe. It does not yet persist the full unit model. Future design must connect unit identity, source/preview configuration and activity to isolated editable working copies, and coordinate changes to shared repository files. A project-wide editing lock or merely adding unit names to the existing branch list would not satisfy the intended workflow. The storage layout, branching policy and exact edit-lock scope have not been selected.
+The 10 November model supersedes the earlier repo-as-project naming: Project is a named container, Build is a stable named target, and repository connections are separate. Branches and saved versions belong inside a build. The additive implementation and legacy preservation rules are described above; the repository/ref engine below remains the execution/storage adapter.
 
 ### Account implementation
 

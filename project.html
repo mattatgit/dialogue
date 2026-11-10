@@ -7,8 +7,7 @@
   <link rel="stylesheet" href="css/dialogue.css">
   <link rel="stylesheet" href="css/local-functional.css">
   <link rel="stylesheet" href="css/review-shared.css">
-  <link rel="stylesheet" href="css/create-prototype.css">
-<link rel="stylesheet" href="css/accounts.css"><script defer src="js/account.js"></script></head>
+<link rel="stylesheet" href="css/build-flow.css"><link rel="stylesheet" href="css/accounts.css"><script defer src="js/account.js"></script></head>
 <body class="updated-ui">
   <div class="app-shell">
     <aside class="sidebar">
@@ -20,35 +19,5 @@
       </nav>
       <a class="profile-link" data-account-profile href="settings.html"><span class="profile-inner"><span class="avatar">D</span><span class="profile-copy"><strong>Local workspace</strong><span>This device</span></span></span></a>
     </aside>
-    <main class="main">
-      <header class="page-head">
-        <h1 class="page-title breadcrumbs"><a class="crumb-link" href="projects.html">Projects</a><svg class="crumb-arrow" viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 10H15.25M10.75 5.5L15.25 10L10.75 14.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span class="crumb-current" data-project-title>Project</span></h1>
-        <div class="project-head-actions"><a class="pill outline" href="#" target="_blank" rel="noopener" data-project-link hidden>Open repository</a><button class="review-button primary project-create-button" type="button" data-create-open>Create</button></div>
-      </header>
-      <div class="page-surface project-surface">
-        <p class="ref-note" data-ref-note role="status">Fetching branches…</p>
-        <section class="project-prototype-empty" data-ref-empty hidden aria-label="No preview yet"><img src="assets/prototype-empty.png" width="180" height="180" alt=""><p data-ref-empty-message>No preview yet. Open a branch below, or Create to request a prototype.</p></section>
-        <div class="ref-groups" data-ref-groups></div>
-      </div>
-    </main>
-  </div>
-  <div class="modal-layer create-prototype-layer" data-create-layer aria-hidden="true">
-    <section class="modal create-prototype-modal" role="dialog" aria-modal="true" aria-labelledby="create-prototype-title">
-      <button class="create-prototype-close" type="button" aria-label="Close create prototype" data-create-close><img src="assets/share-modal-close.svg" alt=""></button>
-      <h2 id="create-prototype-title">Create a prototype</h2>
-      <form data-create-form novalidate>
-        <div class="create-prototype-section"><label class="create-prototype-label" for="create-prototype-prompt">Describe what you want to create</label><div id="create-prototype-prompt" class="create-prompt-editor" contenteditable="true" role="textbox" aria-multiline="true" data-create-prompt data-placeholder="Make a fantastical machine" data-empty="true" spellcheck="true"></div><textarea class="sr-only" name="prompt" data-create-prompt-value tabindex="-1" aria-hidden="true"></textarea></div>
-        <div class="create-prototype-section create-design-section"><label class="create-prototype-label" for="create-figma-link">Add a design file</label>
-          <div class="create-design-field"><input id="create-figma-link" type="url" inputmode="url" autocomplete="off" placeholder="Paste a Figma link here if you have one" data-create-figma-input>
-            <div class="create-figma-chip" data-create-figma-chip hidden><img class="create-figma-icon" src="assets/figma-icon.svg" alt=""><span data-create-figma-label>Figma design</span><button type="button" class="create-chip-remove" data-create-figma-remove aria-label="Remove Figma design"><img src="assets/create-chip-close.svg" alt=""></button></div>
-            <input type="hidden" name="figmaUrl" data-create-figma-value>
-          </div>
-        </div>
-        <p class="create-prototype-status" data-create-status role="status" aria-live="polite" hidden></p>
-        <div class="create-prototype-actions"><button class="create-prototype-action create-prototype-cancel" type="button" data-create-cancel>Cancel</button><button class="create-prototype-action create-prototype-submit" type="submit" data-create-submit disabled>Create prototype</button></div>
-      </form>
-    </section>
-  </div>
-  <script src="js/dialogue.js"></script><script src="js/connect-panel.js"></script><script src="js/project-refs.js"></script><script src="js/create-prototype.js"></script>
-</body>
-</html>
+    <main class="main"><header class="page-head"><h1 class="page-title"><a href="projects.html">Projects</a> → <span data-project-name>Project</span></h1><div class="flow-actions"><a class="pill outline" data-import-build href="import.html">Import build</a><a class="pill" href="#new-project">Create build</a></div></header><div class="page-surface flow-surface"><p data-flow-note role="status"></p><section class="grid build-grid" data-build-grid aria-label="Builds"></section><div class="flow-empty" data-build-empty hidden><h2>No builds yet</h2><p>Create a build from a prompt or import one from a repository.</p></div><section class="flow-panel" data-sources-panel hidden><h2>Connected sources</h2><div data-sources></div></section><section class="flow-panel" data-import-history hidden><h2>Imports</h2><div data-import-list></div></section></div></main></div><div class="modal-layer" id="new-project"><form class="modal flow-modal" data-build-create><a href="#" class="modal-close" aria-label="Close">×</a><h2>Create build</h2><label>Build name<input class="form-field" name="name" maxlength="160" required></label><label>Target<select class="form-field" name="target"><option>Web</option><option>macOS</option><option>iOS</option><option>NixOS</option></select></label><label>What would you like to create?<textarea class="form-field" name="prompt" maxlength="12000" required></textarea></label><label>Design reference (optional)<input class="form-field" name="figmaUrl" type="url" placeholder="https://www.figma.com/design/…"></label><label>Files (optional)<input name="files" type="file" multiple></label><p class="flow-help">Web builds run here. Other targets retain your brief but cannot execute on this host. Work starts locally; no remote repository or push is created.</p><p data-create-error role="alert"></p><button class="apply">Create build</button></form></div><script src="js/dialogue.js"></script><script src="js/connect-panel.js"></script><script type="module" src="js/build-gallery.js"></script>
+</body></html>

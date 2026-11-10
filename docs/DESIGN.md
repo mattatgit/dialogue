@@ -8,6 +8,10 @@ Primary design file:
 
 Figma remains the source of truth for intended UI where a design exists.
 
+## Project/build flow review (2026-11-10)
+
+Matt requested a rough working flow using existing Dialogue components before design polish. Projects has Create project / Import project; each project's gallery has one card per stable named build plus Create build / Import build. Branches/versions live inside the build. Both import entries use the same assessment/discussion, editable proposal, confirmation, progress/results and recovery surface. The current `projects.html`, `project.html`, `build.html` and `import.html` layouts are temporary functional UI, not a new visual source of truth. Retain existing fonts/icons/components and the designed conversation sidebar. Clearly label unavailable targets and distinguish configured previews from intended UI verification. Do not fabricate live-presence badges from worktree state. See the [approved handoff](ARCHITECTURE.md).
+
 ## Conversation sidebar (2026-11-04)
 
 Matt approved [Commenting, `261:4651`](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=261-4651) as the replacement for the Activity rail and visible OMP console. It is implemented on `codex/conversation-sidebar`, based on the validated isolation branch. The main message frame is `261:4652`, attachment-menu frame `266:5518`, and historical-preview frame `266:5902`.

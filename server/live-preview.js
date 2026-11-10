@@ -110,7 +110,7 @@ class LivePreviews {
     }
     entry.recipe = parsed.recipe;
     const runner = this.createRunner({
-      dir: entry.dir, attribution:{ project:entry.slug, workspace:entry.id, phase:'live-preview' },
+      dir: entry.dir, attribution:{ project:entry.projectId || entry.slug, build:entry.buildId, workspace:entry.id, phase:'live-preview' },
       runtime: this.runtime,
       recipe: parsed.recipe,
       stampDir: path.join(this.stampsRoot, entry.slug, encodeURIComponent(entry.ref))

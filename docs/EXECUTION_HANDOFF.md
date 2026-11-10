@@ -1,6 +1,6 @@
 # Hosted Deui execution: accepted application and Setup handoff — 9 November 2026
 
-Application owner: Dialogue Build. Host/settings, evidence retention, staged tests and rollback: Setup & install. **Accepted application: `e801b0daa593eef8b559048948487dc91553d155`**, branch `codex/managed-execution`, [PR #12](https://github.com/mattatgit/dialogue/pull/12), stacked on #11. Documentation-only commits after this SHA do not change tested application code. **Not deployed:** current live release stays `a516d7a0eab6dc897f699759d5d288c102245e2d`. Existing production data, provider profiles and project refs remain untouched. Setup owns any subsequent activation.
+Application owner: Dialogue Build. Host/settings, evidence retention, staged tests and rollback: Setup & install. **Accepted application: `e801b0daa593eef8b559048948487dc91553d155`**, branch `codex/managed-execution`, [PR #12](https://github.com/mattatgit/dialogue/pull/12), stacked on #11. Documentation-only commits after this SHA do not change tested application code. **Subsequent Setup outcome:** this exact e801b0d application was deployed9 November16:28 Melbourne after the native, backup/restore and rollback gates. It remains live as confirmed10 November. The newer project/build slice has a separate [handoff](BUILD_IMPORT_HANDOFF.md). Existing production data, provider profiles and project refs remain untouched. Setup owns any subsequent activation.
 
 ## Accepted settings and capacity
 

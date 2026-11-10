@@ -100,11 +100,12 @@ function workspaceDir(workspacesRoot, slug, ref) {
 // --- repository operations -------------------------------------------------
 
 class ProjectRepo {
-  constructor({ slug, url, pushUrl = null, sshCommand = null, reposRoot, workspacesRoot }) {
+  constructor({ slug, url, pushUrl = null, sshCommand = null, reposRoot, workspacesRoot, recipePath = RECIPE_PATH }) {
     this.slug = slug;
     this.url = url;
     this.pushUrl = pushUrl;
     this.sshCommand = sshCommand;
+    this.recipePath = recipePath;
     this.bareDir = path.join(reposRoot, `${slug}.git`);
     this.workspacesRoot = workspacesRoot;
     this.fetchedAt = 0;
@@ -112,10 +113,10 @@ class ProjectRepo {
   }
 
   git(args, options) {
-    return run(['-C', this.bareDir, ...args], options);
+    return run(['-C', this.bareDir, ...args], { timeout: 30000, ...options });
   }
 
-  async ensure() {
+  async ensure({ signal } = {}) {
     // git reports worktree paths with symlinks resolved (e.g. systemd's
     // /var/lib/x -> private/x); compare against the same canonical form.
     await fsp.mkdir(this.workspacesRoot, { recursive: true });
@@ -125,16 +126,17 @@ class ProjectRepo {
       await fsp.mkdir(path.dirname(this.bareDir), { recursive: true });
       // An SSH clone URL needs the deploy key from the very first contact.
       const sshConfig = this.sshCommand ? ['-c', `core.sshCommand=${this.sshCommand}`] : [];
-      await run([...sshConfig, 'clone', '--bare', '--quiet', this.url, this.bareDir], { timeout: 120000 });
+      await run([...sshConfig, 'clone', '--bare', '--quiet', this.url, this.bareDir], { timeout: 120000, signal });
       // Bare clones do not create a remote-tracking layout by default; make
       // origin/<branch> exist so worktrees can track it.
       await this.git(['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*']);
       if (this.sshCommand) await this.git(['config', 'core.sshCommand', this.sshCommand]);
-      await this.git(['fetch', '--quiet', '--prune', 'origin']);
+      await this.git(['fetch', '--quiet', '--prune', 'origin'], { signal });
     }
     // Fetch over HTTPS, push over SSH with the project's deploy key. Set on
     // every start so existing mirrors pick the settings up; worktrees share
     // the bare repo's config.
+    await this.git(['config', 'remote.origin.url', this.url]);
     if (this.pushUrl) await this.git(['config', 'remote.origin.pushurl', this.pushUrl]);
     else await this.git(['config', '--unset-all', 'remote.origin.pushurl']).catch(() => {});
     if (this.sshCommand) await this.git(['config', 'core.sshCommand', this.sshCommand]);
@@ -153,7 +155,7 @@ class ProjectRepo {
   // pipeline commits there before anything is pushed.
   async readRecipe(dir = null) {
     if (dir) {
-      const text = await readProjectFile(dir, path.join(dir, RECIPE_PATH)).then(bytes => bytes.toString('utf8')).catch(error => {
+      const text = await readProjectFile(dir, path.join(dir, this.recipePath)).then(bytes => bytes.toString('utf8')).catch(error => {
         if (error.code === 'ENOENT') return null;
         throw error;
       });
@@ -162,9 +164,11 @@ class ProjectRepo {
     const name = await this.defaultBranchName();
     const local = await this.localDefault();
     for (const ref of [local, `refs/remotes/origin/${name}`].filter(Boolean)) {
-      const text = await this.git(['show', `${ref}:${RECIPE_PATH}`], { maxBuffer: 65536 }).catch(() => null);
+      const text = await this.git(['show', `${ref}:${this.recipePath}`], { maxBuffer: 65536 }).catch(() => null);
       if (text !== null) return { text, source: 'default' };
     }
+    const fallback = await this.fallbackRecipe?.();
+    if (fallback) return { text: fallback, source: 'build' };
     return null;
   }
 
@@ -208,10 +212,10 @@ class ProjectRepo {
   // Commit just the recipe file in `dir`. Returns the new sha, or null when
   // the file matches HEAD.
   async commitRecipe(dir, message) {
-    await run(['-C', dir, 'add', '--', RECIPE_PATH]);
-    const unchanged = await run(['-C', dir, 'diff', '--cached', '--quiet', 'HEAD', '--', RECIPE_PATH]).then(() => true, () => false);
+    await run(['-C', dir, 'add', '--', this.recipePath]);
+    const unchanged = await run(['-C', dir, 'diff', '--cached', '--quiet', 'HEAD', '--', this.recipePath]).then(() => true, () => false);
     if (unchanged) return null;
-    await run(['-C', dir, 'commit', '--quiet', '--no-verify', '-m', message, '--', RECIPE_PATH]);
+    await run(['-C', dir, 'commit', '--quiet', '--no-verify', '-m', message, '--', this.recipePath]);
     return (await run(['-C', dir, 'rev-parse', 'HEAD'])).trim();
   }
 
@@ -246,8 +250,8 @@ class ProjectRepo {
     await fsp.rm(this.bareDir, { recursive: true, force: true });
   }
 
-  async fetch() {
-    await this.git(['fetch', '--quiet', '--prune', '--prune-tags', 'origin']);
+  async fetch({ signal } = {}) {
+    await this.git(['fetch', '--quiet', '--prune', '--prune-tags', 'origin'], { signal });
     this.fetchedAt = Date.now();
   }
 
@@ -275,6 +279,9 @@ class ProjectRepo {
     const parsed = parseRefs(out.replace(/^refs\/remotes\/origin\//gm, 'refs/heads/'));
     parsed.branches = parsed.branches.filter((branch) => branch.name !== 'HEAD');
     parsed.tags = parsed.tags.filter((tag) => !tag.name.startsWith('dialogue/'));
+    for (const tree of await this.openWorkspaces()) if (tree.branch && !parsed.branches.some(b => b.name === tree.branch)) {
+      parsed.branches.push({ name: tree.branch, sha: tree.head, subject: 'Local branch · not published', committedAt: '' });
+    }
     return parsed;
   }
 
@@ -351,6 +358,21 @@ class ProjectRepo {
     }
     const tree = (await this.openWorkspaces()).find((item) => item.dir === dir);
     return this.describeWorkspace(ref, tree);
+  }
+
+  // New builds own a separate mirror/working copy. Never force-reset an
+  // existing branch, including a partially prepared/imported checkout.
+  async ensureBranchFrom(ref, sha) {
+    if (!isValidRefName(ref) || !/^[0-9a-f]{40}$/.test(sha)) throw new GitError('Invalid branch or source revision.');
+    const existing = await this.findWorkspace(ref); if (existing) return existing;
+    const local = await this.localBranchSha(ref);
+    if (local && local !== sha) throw new GitError('The destination branch has different commits. Choose another branch; no work was overwritten.');
+    const dir = workspaceDir(this.workspacesRoot, this.slug, ref);
+    await fsp.mkdir(path.dirname(dir), { recursive: true });
+    await run(['-C', this.bareDir, 'worktree', 'add', '--quiet', ...(local ? [] : ['-b', ref]), dir, ...(local ? [ref] : [sha])]);
+    const tracked = await this.git(['rev-parse', '--verify', `refs/remotes/origin/${ref}`]).then(() => true, () => false);
+    if (tracked) await run(['-C', dir, 'branch', `--set-upstream-to=origin/${ref}`]);
+    return this.findWorkspace(ref);
   }
 
   async removeWorkspace(ref) {

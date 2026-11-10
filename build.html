@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dialogue — Build</title>
+  <link rel="stylesheet" href="css/dialogue.css">
+  <link rel="stylesheet" href="css/local-functional.css">
+  <link rel="stylesheet" href="css/review-shared.css">
+<link rel="stylesheet" href="css/build-flow.css"><link rel="stylesheet" href="css/accounts.css"><script defer src="js/account.js"></script></head>
+<body class="updated-ui">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><a href="projects.html" aria-label="Dialogue projects"><svg class="icon" aria-hidden="true"><use href="assets/review-icons.svg#mark"></use></svg></a></div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a class="side-link active" aria-current="page" href="projects.html"><span class="side-nav-icon side-nav-projects" aria-hidden="true"></span> <span>Projects</span></a>
+        <a class="side-link" href="design-systems.html"><span class="side-nav-icon side-nav-design-systems" aria-hidden="true"></span> <span>Design systems</span></a>
+        <a class="side-link" href="settings.html"><span class="side-nav-icon side-nav-settings" aria-hidden="true"></span> <span>Settings</span></a>
+      </nav>
+      <a class="profile-link" data-account-profile href="settings.html"><span class="profile-inner"><span class="avatar">D</span><span class="profile-copy"><strong>Local workspace</strong><span>This device</span></span></span></a>
+    </aside>
+    <main class="main"><header class="page-head"><h1 class="page-title"><a data-project-link href="projects.html">Project</a> → <span data-build-name>Build</span></h1></header><div class="page-surface flow-surface"><p data-flow-note role="status"></p><section class="flow-panel"><p data-build-source></p><p data-build-scope class="flow-help"></p><p data-build-state role="status"></p><div class="flow-actions"><button class="pill outline" data-build-resume hidden>Resume preparation</button><button class="pill outline" data-build-cancel hidden>Cancel</button><a class="pill outline" data-build-import hidden>Assessment and approved plan</a></div></section><section class="flow-panel" data-branch-panel><h2>Branches</h2><p class="flow-help">Branches and saved versions stay inside this build.</p><form class="flow-actions" data-open-branch><label class="grow">Branch or tag<select class="form-field" name="ref" data-branch-select></select></label><button class="pill">Open working copy</button></form><form class="flow-actions" data-new-branch><label class="grow">New branch name<input class="form-field" name="ref" maxlength="200" placeholder="feature/alternative" required></label><button class="pill outline">Create branch</button></form></section><section class="flow-panel" data-build-plan hidden><h2>Approved approach</h2><div data-build-plan-content></div></section></div></main></div><script src="js/dialogue.js"></script><script src="js/connect-panel.js"></script><script type="module" src="js/build-detail.js"></script>
+</body></html>

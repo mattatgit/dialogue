@@ -29,18 +29,17 @@ The product should be designer-first: a designer should be able to review, comme
 
 ## Project structure and collaboration
 
-Matt clarified the intended product model on 2026-10-21:
+Matt approved the refined model on 2026-11-10, superseding the earlier repo-as-project terminology:
 
-- A project corresponds to one Git repository.
-- A project can contain many apps, websites and prototypes, including prototypes of individual areas of an app or operating system. These are separate units within the project; "unit" is a planning term until the UI terminology is agreed.
-- A unit's identity is independent of Git branches. Different branches may represent alternative work on one unit, while different units may coexist in the same repository and branch.
-- Multiple people must be able to work within the same project concurrently, including on different units. Project-wide exclusive editing would not meet this requirement.
-- Exclusive editing belongs to the working copy being changed. The exact ownership and handoff behavior still needs design; simultaneous editing of the same working copy is not required for the first release.
-- Show who is working on an app, website or prototype using a user badge/avatar, replacing the generic **Open** badge. The indicator must come from authenticated editing/presence state, not from a persisted Git worktree or the author of the latest commit. Current editing and historical attribution (for example, "Last edited by Saori") are distinct states; closing or abandoning an editing session must not leave a false active-user badge.
+- A **Project** is a stable named organisational container and can start empty, with no repository.
+- A **Build** is the stable named thing created/imported/reviewed: Web, macOS, iOS or NixOS. Web covers UI shells, websites and full web applications. One gallery card represents one build.
+- Source connections are separate. A project can use several repositories; several builds can share a repository or use different roots within it.
+- Branches, working copies, saved versions and history belong inside a build. A new branch/version does not create another build card; conversation remains build/branch scoped.
+- Multiple people can work within a project. Separate copies and per-copy ownership protect concurrent work; there is no project-wide editing lock. Git still publishes whole repository branches, including shared paths. Two builds never share pending files or silently publish each other's edits.
+- Create project / Import project and Create build / Import build are distinct entry points. Both imports share read-only source assessment, discussion/editable proposals, explicit source-bound confirmation, managed preparation and actual UI verification. Source connected, preview configured and intended UI verified are distinct results.
+- User badges should eventually show actual authenticated editing/presence, not the generic Open/worktree flag or last commit author. Current editing and historical attribution are distinct. Full live-presence design is separate from this first slice.
 
-The accounts branch now implements invitation-only passkey/email-code accounts and one shared workspace with owner/editor membership. Development has explicitly local quick sign-in identities; all normal permission checks remain in place. See `docs/ACCOUNTS.md`. Named units and live presence remain unimplemented.
-
-Each unit needs its own identity, preview configuration, design context and relevant activity/history within the shared repository. The current branch-first implementation does not yet provide this full model. Independent work on units that share repository files needs an explicit isolation and conflict-handling design; separate names or folders alone do not prevent agents from changing shared files. Shared workspace membership and per-person AI profiles are implemented on the accounts branch. Private-project visibility remains undecided.
+Invitation-only passkey/email-code accounts and one owner/editor shared workspace are implemented, with explicitly local development identities and normal permission checks. Stable project/build identity and guided imports are implemented as a rough first slice for Matt's review. Hosted execution supports Web; native targets remain represented but unavailable. See [architecture](ARCHITECTURE.md), [Build/import handoff](BUILD_IMPORT_HANDOFF.md) and [accounts](ACCOUNTS.md).
 
 ## Core product flow
 

@@ -74,6 +74,9 @@ async function main() {
     const policy = { kind: 'agent', home, sessionDir, attachmentDir, replyFile, readOnlyWorkspace: true };
     await runtime.run(process.execPath, ['-e', `const f=require('fs'),a=require('assert/strict');a.throws(()=>f.writeFileSync('worker-file','forbidden'));a.equal(f.readFileSync(${JSON.stringify(attachment)},'utf8'),'retained design notes');a.throws(()=>f.writeFileSync(${JSON.stringify(attachment)},'forbidden'));f.writeFileSync(${JSON.stringify(path.join(sessionDir, 'canary'))},'own session');f.writeFileSync(${JSON.stringify(replyFile)},'{}');`], { cwd: dir, env: {}, timeout: 15000 }, policy);
     console.log('PASS: selected conversation session/reply are writable; checkout and branch attachments can be read-only');
+    const readOnlyCwd = path.join(root, 'workspaces', '.read-only', 'check'); await fs.mkdir(readOnlyCwd, { recursive: true });
+    await runtime.run(process.execPath, ['-e', `const f=require('fs'),a=require('assert/strict');a.equal(process.cwd(),${JSON.stringify(readOnlyCwd)});a.equal(f.readFileSync(${JSON.stringify(path.join(dir,'safe-text'))},'utf8'),'safe');a.throws(()=>f.writeFileSync(${JSON.stringify(path.join(dir,'safe-text'))},'forbidden'));a.throws(()=>f.writeFileSync('project-script','forbidden'));a.throws(()=>f.readFileSync(${JSON.stringify(privateFile)}));`], { cwd: readOnlyCwd, env: {}, timeout: 15000 }, { ...policy, sourceRoot: dir });
+    console.log('PASS: read-only agent starts outside project configuration; selected source is mounted separately and cannot be changed');
     const modelCalls = [];
     provider = http.createServer((req, res) => {
       let raw = ''; req.on('data', chunk => { raw += chunk; }); req.on('end', () => {
