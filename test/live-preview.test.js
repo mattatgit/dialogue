@@ -43,3 +43,17 @@ test('isolated previews stop at the final viewer while shared viewers retain the
   await live.filesChanged('o-app/main');assert.equal(live.pool.get('o-app/main'),undefined,'conversation-only changes do not restart a hidden preview');
   const again=await live.open('o-app/main',context,()=>{});await ready(live.pool.get('o-app/main'));assert.equal(live.pool.get('o-app/main').state,'ready');again();
 });
+
+test('verification release and close await the same cleanup before a replacement can own the preview', async t => {
+  const {Runner}=require('../server/runner.js');
+  const dir=await fsp.mkdtemp(path.join(os.tmpdir(),'dialogue-live-handoff-'));await fsp.writeFile(path.join(dir,'index.html'),'verified');
+  const runtime={isolated:true,previewOwners:new Map()},repo={readRecipe:async()=>({text:'{"version":1,"kind":"static"}'})};
+  const live=new LivePreviews({proxy:new PreviewProxy(),previews:{available:false},stampsRoot:dir,internalPort:1,runtime,createRunner:options=>new Runner(options)});
+  let unblock;const cleanup=new Promise(r=>unblock=r);t.after(async()=>{unblock();await live.shutdown();await fsp.rm(dir,{recursive:true,force:true});});
+  const id='build-one/main',context={slug:'build-one',ref:'main',dir,repo,isDefault:false,head:async()=>null};
+  const verification=await live.open(id,context,()=>{});const old=live.entries.get(id).runner;await old.starting;old.logWrite=cleanup;
+  verification();let closed=false;const closing=live.close(id).then(()=>closed=true);
+  await new Promise(r=>setImmediate(r));assert.equal(closed,false,'close must await cleanup already started by the last viewer release');
+  const viewer=await live.open(id,context,()=>{}),next=live.entries.get(id).runner;await new Promise(r=>setImmediate(r));assert.equal(runtime.previewOwners.get(dir),old,'ownership remains with the closing runner');
+  unblock();await closing;await next.starting;assert.equal(next.state,'ready');assert.equal(runtime.previewOwners.get(dir),next);viewer();await live.shutdown();assert.equal(runtime.previewOwners.size,0);assert.equal(live.pool.closing.size,0);
+});

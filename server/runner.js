@@ -282,6 +282,7 @@ class RunnerPool {
   constructor({ idleMs = 10 * 60 * 1000 } = {}) {
     this.idleMs = idleMs;
     this.entries = new Map(); // key -> { runner, viewers, timer }
+    this.closing = new Map(); // key -> complete cleanup; survives entry removal
   }
 
   get(key) {
@@ -293,8 +294,8 @@ class RunnerPool {
     const previous = this.entries.get(key);
     if (previous) {
       clearTimeout(previous.timer);
-      runner.previousStopped = previous.runner.stop();
     }
+    runner.previousStopped = previous ? this.stop(key) : this.closing.get(key);
     const viewers = previous?.viewers || 0;
     const entry = { runner, viewers, timer: null };
     this.entries.set(key, entry);
@@ -318,16 +319,18 @@ class RunnerPool {
     entry.timer = setTimeout(() => this.stop(key).catch(() => {}), this.idleMs);
   }
 
-  async stop(key) {
+  stop(key) {
     const entry = this.entries.get(key);
-    if (!entry) return;
+    if (!entry) return this.closing.get(key) || Promise.resolve();
     clearTimeout(entry.timer);
     this.entries.delete(key);
-    await entry.runner.stop();
+    const stopping = entry.runner.stop().finally(() => { if (this.closing.get(key) === stopping) this.closing.delete(key); });
+    this.closing.set(key, stopping);
+    return stopping;
   }
 
   async stopAll() {
-    await Promise.all([...this.entries.keys()].map((key) => this.stop(key)));
+    await Promise.all([...this.entries.keys()].map(key => this.stop(key)).concat([...this.closing.values()]));
   }
 }
 

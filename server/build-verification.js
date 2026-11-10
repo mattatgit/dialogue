@@ -24,7 +24,7 @@ async function verifyBuild({ workers, live, proxy, port, previews, dataRoot, che
       await browser.navigate(`http://${proxy.tokenFor(workspace.id)}.preview.localhost:${port}${parsed.recipe.entry}`);
       await until(async () => { check(run); return browser.evaluate(`Boolean([...document.querySelectorAll('button,a,[role="button"]')].find(e => e.textContent.trim() === ${JSON.stringify(verification.clickText)}))`); });
       await browser.evaluate(`(() => { const e = [...document.querySelectorAll('button,a,[role="button"]')].find(e => e.textContent.trim() === ${JSON.stringify(verification.clickText)}); if (!e) throw Error('Interaction control disappeared'); e.click(); })()`);
-      await until(async () => { check(run); return browser.evaluate(`document.body.innerText.includes(${JSON.stringify(verification.expectedText)})`); });
+      await until(async () => { check(run); return browser.evaluate(`Boolean(document.body?.innerText.includes(${JSON.stringify(verification.expectedText)}))`); });
       await browser.screenshot(path.join(dir, 'verified.png'));
       return { previewConfigured: true, uiVerified: true, verification: { ...verification, sourceSha: workspace.head.sha, draftTree: await repo.draftTree(workspace), branch: workspace.ref, checkedAt: new Date().toISOString() }, verificationOutstanding: null };
     } finally { await browser.close().catch(() => {}); run.verificationAbort = null; }
