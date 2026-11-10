@@ -189,6 +189,9 @@ test('targeted Figma frame data is staged outside the checkout and read by the c
     assert.equal(calls.length, 1);
     assert.equal(calls[0].endpoint, 'https://api.figma.com/v1/files/AbC123/nodes?ids=10%3A24');
     assert.equal(calls[0].token, 'server-only-token');
+    const retained = ctx.manager.list(ctx.workspace.id).at(-1).figmaSnapshot;
+    assert.deepEqual(JSON.parse(await fsp.readFile(retained,'utf8')), call.design);
+    assert.equal((await fsp.stat(retained)).mode & 0o777, 0o400);
     await assert.rejects(fsp.access(call.snapshotPath), { code: 'ENOENT' });
   } finally {
     await ctx.manager.shutdown();

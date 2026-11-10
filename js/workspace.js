@@ -173,6 +173,9 @@
       document.title = `Dialogue — ${workspace.project?.name || 'Project'} · ${workspace.ref}`;
       if (projectNode) projectNode.textContent = workspace.project?.name || 'Project';
       if (projectLink) projectLink.href = workspace.project?.slug ? `project.html?slug=${encodeURIComponent(workspace.project.slug)}` : 'projects.html';
+      const buildLink = document.querySelector('[data-build-link]');
+      if (buildLink && workspace.build) { buildLink.hidden = false; buildLink.textContent = workspace.build.name; buildLink.href = `build.html?id=${workspace.build.id}`; document.querySelector('[data-build-arrow]').hidden = false; }
+      const save = document.querySelector('[data-save-version]'); if (save && workspace.build?.publication === 'local only') save.title = 'Save a local version. No remote repository is connected.';
 
       previewUrl = workspace.previewUrl || '';
       setupStatus = workspace.project?.previewSetup?.status || '';

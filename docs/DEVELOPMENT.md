@@ -131,6 +131,12 @@ Runtime data — bare mirrors, worktrees, preview setup trees and logs, install 
 
 See `docs/LOCAL_BUILD.md`.
 
+## Project/build flow development (10 November)
+
+The new Projects → Project build gallery → Build branches → Workspace pages use the catalog API. `import.html` serves both import entry points. These are rough functional layouts using existing components for Matt's review; do not treat them as finished Figma designs. Use isolated development data and the labelled development sign-in buttons; never copy production or another checkout's linked Git data. A source is not a build identity, and another branch/version must not add gallery cards.
+
+Run the complete `npm test` suite. `scripts/check-build-import.js` adds actual pinned OMP, Deui, managed preview and Chrome interaction checks against disposable local source and a scripted local provider. `scripts/check-workers.js` adds the separate read-only source/empty agent CWD native gate. Target Linux acceptance, backup scope and rollback are specified in [BUILD_IMPORT_HANDOFF.md](BUILD_IMPORT_HANDOFF.md); macOS direct mode is not capacity acceptance.
+
 ## Relevant files
 
 - `server.js` — http routing, static files, preview-origin dispatch, SSE, WebSocket proxy, setup/preview routes

@@ -1,0 +1,33 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path');
+const {randomUUID}=require('node:crypto');const{buildServer}=require('./helpers/build-server.js');const{sh}=require('./helpers/git-fixture.js');
+test('authenticated catalog creates an empty project and prompt/file build locally, with idempotent retries and a real local Version', {timeout:30000},async t=>{
+ const f=await buildServer(t);assert.equal((await f.request('/api/catalog/projects',undefined,{Cookie:''})).status,401);assert.equal((await f.request('/api/catalog/projects',{name:'Denied'},{Origin:'https://wrong.example'})).status,403);
+ const operationId=randomUUID(),p=(await f.request('/api/catalog/projects',{name:'Snow review',operationId})).json.project;assert.equal((await f.request('/api/catalog/projects',{name:'Snow review',operationId})).json.project.id,p.id);
+ assert.equal((await f.request(`/api/catalog/projects/${p.id}`)).json.builds.length,0);
+ const input={operationId:randomUUID(),name:'Web draft',target:'Web',prompt:'Create a disposable page',attachments:[{name:'brief.txt',data:Buffer.from('Keep cobalt').toString('base64')}]};
+ const b=(await f.request(`/api/catalog/projects/${p.id}/builds`,input)).json.build;assert.ok(b.id);assert.equal((await f.request(`/api/catalog/projects/${p.id}/builds`,input)).json.build.id,b.id);
+ const settled=await f.until(async()=>{const d=(await f.request(`/api/catalog/builds/${b.id}`)).json;return ['configured','failed'].includes(d.build.state)&&d;});assert.equal(settled.build.state,'configured',settled.build.error);assert.equal(settled.build.publication,'local only');assert.equal(settled.build.uiVerified,false);
+ const opened=await f.request(`/api/catalog/builds/${b.id}/open`,{});assert.equal(opened.status,201);const id=opened.json.workspaceId;
+ const workspace=(await f.request('/api/workspaces/'+id)).json.workspace;assert.equal(workspace.build.id,b.id);assert.equal(workspace.project.name,'Snow review');
+ const saved=await f.request('/api/workspaces/'+id+'/versions',{});assert.equal(saved.status,201,JSON.stringify(saved.json));assert.equal(saved.json.version.label,'V1');
+ assert.match(sh(path.join(f.data,'local-origins',b.id+'.git'),'tag','--list'),/dialogue\/main\/V1/);
+ const native=(await f.request(`/api/catalog/projects/${p.id}/builds`,{name:'Phone',target:'iOS',prompt:'Use the same idea'})).json.build;assert.equal(native.state,'unsupported');
+ assert.equal((await f.request(`/api/catalog/builds/${native.id}/open`,{})).status,409);
+});
+test('both import entry points share read-only assessment, confirmation and recovery while branches stay inside builds', {timeout:30000},async t=>{
+ const f=await buildServer(t),input={operationId:randomUUID(),url:'https://github.com/acceptance/fixture'};
+ const a=(await f.request('/api/catalog/imports',input)).json.attempt;assert.ok(a.id);assert.equal((await f.request('/api/catalog/imports',input)).json.attempt.id,a.id);
+ let d=await f.until(async()=>{const d=(await f.request('/api/catalog/imports/'+a.id)).json;return !['connecting','inspecting'].includes(d.attempt.state)&&d;});assert.equal(d.attempt.state,'awaiting-confirmation',d.attempt.error);
+ assert.equal((await f.request('/api/catalog/projects')).json.projects.length,0,'assessment creates no product project/build');assert.equal(sh(f.originRepo,'status','--porcelain'),'');
+ assert.equal((await f.request('/api/catalog/imports/'+a.id+'/confirm',{revision:'stale'})).status,409);
+ assert.equal((await f.request('/api/catalog/imports/'+a.id+'/confirm',{revision:d.attempt.revision})).status,202);
+ d=await f.until(async()=>{const d=(await f.request('/api/catalog/imports/'+a.id)).json;return ['configured','ready','failed'].includes(d.attempt.state)&&d;});assert.equal(d.attempt.state,'configured',d.attempt.error);const b=d.builds[0];
+ const branch=await f.request(`/api/catalog/builds/${b.id}/branch`,{ref:'feature/alternative'});assert.equal(branch.status,201,JSON.stringify(branch.json));
+ const gallery=(await f.request(`/api/catalog/projects/${d.attempt.projectId}`)).json;assert.equal(gallery.builds.length,1);assert.equal(sh(f.originRepo,'branch','--list','feature/alternative'),'','a local branch was not pushed');
+ const second=(await f.request('/api/catalog/imports',{projectId:d.attempt.projectId,sourceId:d.attempt.sourceId})).json.attempt;
+ const assessed=await f.until(async()=>{const d=(await f.request('/api/catalog/imports/'+second.id)).json;return d.attempt.state==='awaiting-confirmation'&&d;});assert.equal(assessed.attempt.scope,'build');
+ assert.equal((await f.request('/api/workspaces/'+assessed.attempt.workspaceId+'/requests',{feedback:'Edit before confirmation'})).status,404);
+ await f.request('/api/catalog/imports/'+second.id+'/cancel',{});assert.equal((await f.request('/api/catalog/imports/'+second.id)).json.attempt.state,'cancelled');
+ await f.request('/api/catalog/imports/'+second.id+'/resume',{});await f.until(async()=>{const d=(await f.request('/api/catalog/imports/'+second.id)).json;return d.attempt.state==='awaiting-confirmation';});
+ assert.equal((await f.request(`/api/catalog/projects/${d.attempt.projectId}`)).json.builds.length,1,'retry did not duplicate a build');
+});

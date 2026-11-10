@@ -59,8 +59,8 @@ function withNames(projects) {
   }
   return projects.map((project) => ({
     ...project,
-    name: counts.get(project.repo.repo.toLowerCase()) > 1 ? `${project.repo.owner}/${project.repo.repo}` : project.repo.repo,
-    webUrl: webUrlFor(project.repo)
+    name: project.name || (counts.get(project.repo.repo.toLowerCase()) > 1 ? `${project.repo.owner}/${project.repo.repo}` : project.repo.repo),
+    webUrl: project.local ? null : webUrlFor(project.repo)
   }));
 }
 
@@ -90,26 +90,45 @@ class ProjectStore {
   constructor(dbPath) {
     this.dbPath = dbPath;
     this.writing = Promise.resolve();
+    this.mutations = Promise.resolve();
   }
 
   async load() {
     let raw = null;
     try {
       raw = JSON.parse(await fsp.readFile(this.dbPath, 'utf8'));
-    } catch {
-      // missing or unreadable: start empty
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw new ProjectError(500, 'Project storage could not be read. Existing data was not replaced.');
     }
+    if (raw && (raw.schemaVersion > SCHEMA_VERSION || !Array.isArray(raw.projects))) throw new ProjectError(500, 'Unsupported project storage. Existing data was not replaced.');
     const data = migrate(raw);
     if (!raw || raw.schemaVersion !== SCHEMA_VERSION) await this.save(data);
     return data;
   }
 
   save(data) {
-    this.writing = this.writing.then(() => fsp.writeFile(this.dbPath, `${JSON.stringify(data, null, 2)}\n`));
+    this.writing = this.writing.catch(() => {}).then(async () => {
+      const temp = `${this.dbPath}.${require('node:crypto').randomUUID()}.tmp`;
+      try { await fsp.writeFile(temp, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600, flag: 'wx' }); await fsp.rename(temp, this.dbPath); }
+      finally { await fsp.rm(temp, { force: true }); }
+    });
     return this.writing;
   }
 
+  mutate(fn) {
+    const task = this.mutations.catch(() => {}).then(async () => { const data = await this.load(); const result = fn(data); await this.save(data); return result; });
+    this.mutations = task; return task;
+  }
+
+  // Trusted catalog adapter only. Repository URLs still enter through the
+  // catalog's validated source connection, never arbitrary client paths.
+  async insert(record) {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(record.slug)) throw new ProjectError(400, 'Invalid storage identity.');
+    return this.mutate(data => { const existing = data.projects.find(p => p.slug === record.slug); if (existing) return existing; data.projects.push(record); return record; });
+  }
+
   async list() {
+    await this.mutations.catch(() => {});
     return withNames((await this.load()).projects);
   }
 
@@ -122,35 +141,20 @@ class ProjectStore {
   // Returns the stored (nameless) record; caller decorates via list()/find().
   async add(url) {
     const project = projectFromUrl(url);
-    const data = await this.load();
-    if (data.projects.some((item) => item.slug === project.slug)) throw new ProjectError(409, 'This repository has already been added.');
-    data.projects.push(project);
-    await this.save(data);
-    return project;
+    return this.mutate(data => { if (data.projects.some((item) => item.slug === project.slug)) throw new ProjectError(409, 'This repository has already been added.'); data.projects.push(project); return project; });
   }
 
   async setPreviewSetup(slug, patch) {
-    const data = await this.load();
-    const project = data.projects.find((item) => item.slug === slug);
-    if (!project) throw new ProjectError(404, 'Project not found.');
-    project.previewSetup = { ...queuedSetup(), ...project.previewSetup, ...patch };
-    await this.save(data);
-    return project.previewSetup;
+    return this.mutate(data => { const project = data.projects.find((item) => item.slug === slug); if (!project) throw new ProjectError(404, 'Project not found.'); project.previewSetup = { ...queuedSetup(), ...project.previewSetup, ...patch }; return project.previewSetup; });
   }
 
   async remove(slug) {
-    const data = await this.load();
-    const index = data.projects.findIndex((item) => item.slug === slug);
-    if (index < 0) throw new ProjectError(404, 'Project not found.');
-    const [removed] = data.projects.splice(index, 1);
-    await this.save(data);
-    return removed;
+    return this.mutate(data => { const index = data.projects.findIndex((item) => item.slug === slug); if (index < 0) throw new ProjectError(404, 'Project not found.'); return data.projects.splice(index, 1)[0]; });
   }
 
   // Add every seed entry not present yet. Seeds: [{ url }].
   async seed(entries) {
-    const data = await this.load();
-    let changed = false;
+    return this.mutate(data => {
     for (const entry of entries) {
       let project;
       try {
@@ -161,9 +165,8 @@ class ProjectStore {
       }
       if (data.projects.some((item) => item.slug === project.slug)) continue;
       data.projects.push(project);
-      changed = true;
     }
-    if (changed) await this.save(data);
+    });
   }
 }
 

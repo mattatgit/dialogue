@@ -194,6 +194,11 @@ class Workers {
       argv.push('--bind', cache, home);
     } else argv.push('--dir', home);
     argv.push(policy.readOnlyWorkspace ? '--ro-bind' : '--bind', workspaceRoot, workspaceRoot);
+    if (policy.sourceRoot) {
+      const source = this.canonical(policy.sourceRoot);
+      if (kind !== 'agent' || !policy.readOnlyWorkspace || !within(source, path.join(this.dataRoot, 'workspaces'))) throw new WorkerError('Invalid read-only source root.', 500);
+      argv.push('--ro-bind', source, source);
+    }
     if (policy.runnerFile) {
       const file = this.canonical(policy.runnerFile);
       if (kind !== 'agent' || !within(file, path.join(this.dataRoot, 'requests', '.runner'))) throw new WorkerError('Invalid managed runner mailbox.',500);
@@ -242,7 +247,7 @@ class Workers {
       argv.push('--bind', real, real);
     }
     const env = options.env || {};
-    const allowed = /^(?:LANG|LC_ALL|TERM|COLORTERM|TZ|CI|FORCE_COLOR|PORT|HOST|BROWSER|DIALOGUE_(?:OMP_ARGS|APP|WORKSPACE|ACTIVITY_FILE|REPLY_FILE|RUNNER_FILE|WORKSPACE_DIR|SESSION|TMUX|TMUX_SOCKET|OMP))$/;
+    const allowed = /^(?:LANG|LC_ALL|TERM|COLORTERM|TZ|CI|FORCE_COLOR|PORT|HOST|BROWSER|DIALOGUE_(?:OMP_ARGS|APP|WORKSPACE|ACTIVITY_FILE|REPLY_FILE|RUNNER_FILE|INSPECTION_ROOT|READ_ATTACHMENTS|READ_DESIGN|WORKSPACE_DIR|SESSION|TMUX|TMUX_SOCKET|OMP))$/;
     for (const [key, value] of Object.entries(env)) if (allowed.test(key)) argv.push('--setenv', key, String(value));
     const safePath = (process.env.PATH || '/usr/local/bin:/usr/bin:/bin').split(path.delimiter).filter(dir => roots.some(root => within(path.resolve(dir), root))).join(path.delimiter);
     const baseEnv = { PATH: safePath, HOME: home, TMPDIR: '/tmp', XDG_CACHE_HOME: `${home}/.cache`, XDG_CONFIG_HOME: `${home}/.config`,
@@ -298,7 +303,7 @@ class Workers {
       if (filterFd !== undefined) { fs.closeSync(filterFd); filterFd = undefined; fsp.rm(path.dirname(filterPath), { recursive: true, force: true }).catch(() => {}); }
       this.children.add(child);
       child.workerKind = kind;
-      const record = { id: unit, kind, pid: child.pid, startedAt: new Date().toISOString(), memoryMiB: this.config.profiles[kind].memory, budgetMiB: this.config.budget, sliceMiB: this.config.sliceMiB, workspace: policy.workspaceRoot || options.cwd, attribution: Object.fromEntries(Object.entries(policy.attribution || {}).filter(([k,v]) => ['project','request','workspace','phase'].includes(k) && typeof v === 'string').map(([k,v]) => [k,v.slice(0,256)])), concurrent: [...this.children].map(c => c.workerKind), measured: false };
+      const record = { id: unit, kind, pid: child.pid, startedAt: new Date().toISOString(), memoryMiB: this.config.profiles[kind].memory, budgetMiB: this.config.budget, sliceMiB: this.config.sliceMiB, workspace: policy.sourceRoot || policy.workspaceRoot || options.cwd, executionCwd: options.cwd, attribution: Object.fromEntries(Object.entries(policy.attribution || {}).filter(([k,v]) => ['project','build','import','request','workspace','phase'].includes(k) && typeof v === 'string').map(([k,v]) => [k,v.slice(0,256)])), concurrent: [...this.children].map(c => c.workerKind), measured: false };
       child.workerRecord = record;
       const recordFile = path.join(recordDir, unit + '.json');
       const save = () => fsp.writeFile(recordFile, JSON.stringify(record) + '\n', { mode: 0o600 });

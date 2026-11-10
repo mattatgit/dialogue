@@ -24,6 +24,9 @@ const { AgentAuthError } = require('./server/agent-auth.js');
 const { WorkspaceRequests, RequestError } = require('./server/requests.js');
 const { parseRecipe } = require('./server/recipe.js');
 const { FigmaError } = require('./server/figma.js');
+const { Catalog, CatalogError, sourceView } = require('./server/catalog.js');
+const { GuidedImports } = require('./server/guided-import.js');
+const { catalogHttp } = require('./server/catalog-http.js');
 
 // npm start does not use direnv. Inherited variables take precedence over
 // optional local configuration; keep the Figma credential out of every child
@@ -122,6 +125,10 @@ const fixFailures = new Map(); // slug -> setup error handed to "Fix with agent"
 // --- data -------------------------------------------------------------------
 
 const projects = new ProjectStore(DB_PATH);
+const catalog = new Catalog(path.join(DATA_ROOT, 'catalog.json'), projects);
+const guided = new GuidedImports({ catalog, projects, repoFor, requests, dataRoot: DATA_ROOT,
+  reserve: (workspace, user) => accounts.claimEditor(workspace.id, { user }), validatePreview: validateBuildPreview });
+const handleCatalog = catalogHttp({ catalog, guided, projects, repoFor, preview: withPreview, identity: () => identityContext.getStore(), readJson: readJsonBody, sendJson });
 function agentAgentsForRequest() { return agentAuth.current(); }
 function trackConnection(identity, stream) {
   const entry = { identity, stream };
@@ -222,12 +229,18 @@ async function ensureData() {
     }
     if (Array.isArray(entries)) await projects.seed(entries);
   }
+  await catalog.load();
+  await catalog.recover();
 }
 
 async function findProject(slug) {
   try {
     return await projects.find(slug);
   } catch (error) {
+    if (error instanceof ProjectError && error.status === 404) {
+      const build = (await catalog.snapshot()).builds.find(b => b.storageSlug === slug);
+      if (build && !build.legacy) return guided.engineRecord(build);
+    }
     if (error instanceof ProjectError) throw new HttpError(error.status, error.message);
     throw error;
   }
@@ -246,28 +259,35 @@ class CloneError extends HttpError {
   }
 }
 
-async function repoFor(project) {
+async function repoFor(project, { signal } = {}) {
+  const source = (await catalog.snapshot()).sources.find(s => s.keySlug === (project.keySlug || project.slug));
+  if (source && source.url !== project.repo.url) project = { ...project, repo: { ...project.repo, url: source.url } };
   let repo = repos.get(project.slug);
+  if (repo && repo.url !== project.repo.url) { repos.delete(project.slug); repo = null; }
   if (!repo) {
     repo = new git.ProjectRepo({
       slug: project.slug,
       url: project.repo.url,
-      pushUrl: pushUrl(project.repo.url),
+      pushUrl: project.local ? project.repo.url : pushUrl(project.repo.url),
       reposRoot: REPOS_ROOT,
-      workspacesRoot: WORKSPACES_ROOT
+      workspacesRoot: WORKSPACES_ROOT,
+      recipePath: project.recipePath
     });
+    if (project.buildId) repo.fallbackRecipe = async () => (await catalog.snapshot()).builds.find(b => b.id === project.buildId)?.previewRecipe || null;
     repo.ready = (async () => {
       // Key generation is local and cheap; a failed host-key scan (offline)
       // must not block browsing, so it only disables pushing for now.
       try {
-        const key = await deployKeys.ensure(project.slug, project.repo.url);
+        const key = !project.local && await deployKeys.ensure(project.keySlug || project.slug, project.repo.url);
+        if (key) {
         repo.sshCommand = key.sshCommand;
         repo.publicKey = key.publicKey;
+        }
       } catch (error) {
         console.error(`Deploy key for ${project.slug} unavailable: ${error.message}`);
         repo.pushUrl = null;
       }
-      await repo.ensure();
+      await repo.ensure({ signal });
     })();
     repos.set(project.slug, repo);
   }
@@ -357,15 +377,19 @@ async function publicWorkspace(project, repo, workspace, headers) {
   const origin = proxy.urlFor(grantId, { headers: PREVIEW_PORT ? { ...headers, host: `localhost:${PREVIEW_PORT}` } : headers });
   const editor = accounts.editor(workspace.id);
   const canEdit = !editor || editor.id === identity.user.id;
+  const data = await catalog.snapshot();
+  const build = data.builds.find(b => b.storageSlug === project.slug);
+  const container = build && catalog.project(data, build.projectId);
   return {
     id: workspace.id,
-    project: { slug: project.slug, name: project.name, previewSetup: project.previewSetup },
+    project: { slug: container?.legacySlug || container?.id || project.slug, name: container?.name || project.name, previewSetup: project.previewSetup },
+    ...(build ? { build: { id: build.id, name: build.name, target: build.target, root: build.root, recipePath: build.recipePath, publication: build.publication }, sourceUrl: sourceView(data.sources.find(s => s.id === build.sourceId))?.url || null } : {}),
     ref: workspace.ref,
     kind: workspace.kind,
     head: workspace.head,
     dirty: workspace.dirty,
     ahead: workspace.ahead,
-    terminal: workspace.kind === 'branch' && canEdit,
+    terminal: workspace.kind === 'branch' && canEdit && !['preparing','validating'].includes(build?.state),
     editingOwner: editor || null,
     viewerUrl: `workspace.html?id=${encodeURIComponent(workspace.id)}`,
     previewUrl: `${origin.replace(/\/$/, '')}${entry}`,
@@ -377,10 +401,32 @@ async function resolveWorkspace(id) {
   const parsed = git.parseWorkspaceId(id);
   if (!parsed) throw new HttpError(404, 'Workspace not found.');
   const project = await findProject(parsed.slug);
+  if (project.catalogRole === 'inspection') throw new HttpError(404, 'Import inspection is read-only. Continue from the import assessment.');
   const repo = await repoFor(project);
   const workspace = await repo.findWorkspace(parsed.ref);
   if (!workspace) throw new HttpError(404, 'Workspace not found.');
-  return { project, repo, workspace };
+  const build = (await catalog.snapshot()).builds.find(b => b.storageSlug === project.slug);
+  return { project, repo, workspace: build ? await guided.decorate(workspace, build) : workspace };
+}
+
+async function requireBuildIdle(slug) {
+  const build = (await catalog.snapshot()).builds.find(b => b.storageSlug === slug);
+  if (['preparing','validating'].includes(build?.state)) throw new HttpError(409, 'Wait for preparation, or cancel it from the import/build page before using this working copy.');
+}
+
+// Verification describes a particular draft, never every future edit.
+requests.on('request', (id, record) => {
+  if (!(record.status === 'completed' && record.snapshotSha) && !(record.status === 'failed' && record.intent !== 'discuss')) return;
+  catalog.mutate(data => {
+    const build = data.builds.find(b => id.startsWith(b.storageSlug + '/'));
+    if (build?.uiVerified && !['preparing','validating'].includes(build.state)) Object.assign(build, { uiVerified: false, state: 'configured', verificationOutstanding: 'The draft changed after its last UI check. Verify the current preview before relying on it.' });
+  }).catch(error => console.error('Build verification status:', error));
+});
+
+// Uses exactly the ordinary managed runner. Browser checks happen after the
+// agent reservation is released and are charged to the browser worker class.
+async function validateBuildPreview(...args) {
+  return require('./server/build-verification.js').verifyBuild({ workers, live, proxy, port: PORT, previews, dataRoot: DATA_ROOT, check: run => guided.check(run) }, ...args);
 }
 
 // --- http helpers -------------------------------------------------------------
@@ -503,6 +549,8 @@ async function serveEvents(req, res, id) {
   const isDefault = workspace.kind === 'branch' && workspace.ref === (await repo.defaultBranchName());
   const release = await live.open(id, {
     slug: project.slug,
+    projectId: workspace.projectId,
+    buildId: workspace.buildId,
     ref: workspace.ref,
     dir: workspace.dir,
     repo,
@@ -595,13 +643,15 @@ async function handleAgentApi(req, res, pathname) {
 
 async function handleApi(req, res, url) {
   const pathname = url.pathname;
+  if (await handleCatalog(req, res, url)) return true;
   if (!['GET', 'HEAD'].includes(req.method)) {
     const match = req.method === 'DELETE'
       ? /^\/api\/workspaces\/(.+)$/.exec(pathname)
       : /^\/api\/workspaces\/(.+)\/(?:requests|requests\/stop|versions|fix-preview|preview\/restart|editing)$/.exec(pathname);
     if (match) {
       const id = match[1].includes('/') ? match[1] : decodeURIComponent(match[1]);
-      await resolveWorkspace(id);
+      const { project } = await resolveWorkspace(id);
+      await requireBuildIdle(project.slug);
       accounts.claimEditor(id, identityContext.getStore());
     }
     if (req.method === 'DELETE' && /^\/api\/projects\/[^/]+$/.test(pathname)) accounts.requireOwner(identityContext.getStore());
@@ -668,6 +718,7 @@ async function handleApi(req, res, url) {
   }
   if (req.method === 'DELETE' && match) {
     const project = await findProject(decodeURIComponent(match[1]));
+    if (project.catalogRole === 'build') throw new HttpError(409, 'Build removal is not available in this first slice. Source and local work were retained.');
     await discardRepo(project);
     await projects.remove(project.slug);
     sendJson(res, 200, { removed: project.slug });
@@ -720,6 +771,7 @@ async function handleApi(req, res, url) {
   if (match) {
     const project = await findProject(decodeURIComponent(match[1]));
     if (req.method === 'POST' && match[2] === 'retry') {
+      if (project.catalogRole === 'build') throw new HttpError(409, 'Resume preparation from this build’s import plan.');
       if (project.previewSetup?.status === 'running') throw new HttpError(409, 'Preview setup is already running.');
       if ([...requests.active.keys(),...requests.saving.keys()].some(id=>id.startsWith(project.slug+'/'))) throw new HttpError(409,'Wait for active project requests or saves before retrying setup.');
       await projects.setPreviewSetup(project.slug, { status: 'queued', attempt: 0, error: null, finishedAt: null, requestedBy: identityContext.getStore().user.id });
@@ -747,6 +799,7 @@ async function handleApi(req, res, url) {
   match = /^\/api\/projects\/([^/]+)\/workspaces$/.exec(pathname);
   if (req.method === 'POST' && match) {
     const project = await findProject(decodeURIComponent(match[1]));
+    await requireBuildIdle(project.slug);
     const body = await readJsonBody(req);
     const ref = typeof body.ref === 'string' ? body.ref.trim() : '';
     if (!git.isValidRefName(ref)) throw new HttpError(400, 'Choose a valid branch, tag or commit.');
@@ -899,7 +952,7 @@ async function handleApi(req, res, url) {
       .replaceAll('{{setupPromptPath}}', SETUP_PROMPT_PATH)
       .replace(/\s+/g, ' ')
       .trim();
-    await requests.start(workspace, repo, { feedback: prompt }, identityContext.getStore().user);
+    await requests.start(workspace, repo, { feedback: `${prompt}\nThis build's recipe is ${repo.recipePath}; preserve other builds' recipes.` }, identityContext.getStore().user);
     sendJson(res, 202, { accepted: true });
     return true;
   }
@@ -979,7 +1032,7 @@ async function requestHandler(req, res) {
     if (!/^\/(?:assets|css|js)\//.test(url.pathname) && !['/', '/index.html'].includes(url.pathname) && !identity) { res.writeHead(302, { Location: `/?next=${encodeURIComponent(url.pathname + url.search)}` }); res.end(); return; }
     await serveAppFile(res, url.pathname);
   } catch (error) {
-    const known = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError || error instanceof AccountError || error instanceof WorkerError;
+    const known = error instanceof HttpError || error instanceof FigmaError || error instanceof RequestError || error instanceof AccountError || error instanceof WorkerError || error instanceof CatalogError || error instanceof ProjectError;
     const status = known ? error.status : 500;
     const message = known ? error.message : 'Unexpected local server error.';
     if (!res.headersSent) {
@@ -1071,6 +1124,7 @@ async function shutdown() {
   agentAuth.shutdown();
   terminals.shutdown();
   server.close();
+  await guided.shutdown().catch(error => console.error(error));
   await requests.shutdown().catch((error) => console.error(error));
   // Preview servers run in their own process groups: stop them explicitly.
   await live.shutdown().catch(() => {});

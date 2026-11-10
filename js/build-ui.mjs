@@ -1,0 +1,14 @@
+export const el = (tag, text = '', className = '') => { const n = document.createElement(tag); n.textContent = text; if (className) n.className = className; return n; };
+export async function api(url, body, method = body === undefined ? 'GET' : 'POST') {
+ const r = await fetch(url, { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+ const data = await r.json().catch(() => ({})); if (!r.ok) { const error = new Error(data.error || 'That did not work.'); error.setup = data.setup; throw error; } return data;
+}
+export const note = message => { const n = document.querySelector('[data-flow-note]'); if (n) { n.textContent = message; n.classList.toggle('flow-error', Boolean(message)); } };
+export const stateLabel = state => ({ 'awaiting-confirmation': 'Review and confirm the plan', inspecting: 'Inspecting source (read only)', connecting: 'Connecting source', preparing: 'Preparing the agreed build', validating: 'Checking the preview and intended UI', 'needs-input': 'Input needed', configured: 'Preview configured · UI verification outstanding', ready: 'Intended UI interaction verified', unsupported: 'Target execution unavailable', failed: 'Preparation failed · work retained', cancelled: 'Cancelled · work retained', queued: 'Waiting for execution capacity' }[state] || 'Source connected');
+export async function files(input) {
+ const selected = [...(input?.files || [])]; if (selected.length > 4 || selected.reduce((n,f) => n+f.size,0) > 3*1024*1024) throw Error('Attach up to four files, 3 MB total.');
+ return Promise.all(selected.map(f => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve({ name: f.name, data: reader.result.split(',')[1] }); reader.onerror = reject; reader.readAsDataURL(f); })));
+}
+export function importRows(container, attempts) { container.replaceChildren(...attempts.map(a => { const row = el('div', '', 'flow-row'); row.append(el('span', `${stateLabel(a.state)} · ${new Date(a.createdAt).toLocaleString()}`)); const link = el('a', 'Open import', 'pill outline'); link.href = `import.html?attempt=${encodeURIComponent(a.id)}`; row.append(link); return row; })); container.closest('[data-import-history]').hidden = !attempts.length; }
+export const disabled = (control, value) => { control.dataset.flowDisabled = String(Boolean(value)); control.disabled = Boolean(value); };
+export async function submit(form, work, errorNode) { const buttons = [...form.querySelectorAll('button')], prior = buttons.map(b => b.disabled); buttons.forEach(b => b.disabled = true); try { await work(); } catch (e) { if (errorNode) errorNode.textContent = e.message; else note(e.message); } finally { buttons.forEach((b,i) => b.disabled = b.dataset.flowDisabled === undefined ? prior[i] : b.dataset.flowDisabled === 'true'); } }
