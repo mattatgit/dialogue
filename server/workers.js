@@ -254,6 +254,15 @@ class Workers {
       PI_CODING_AGENT_DIR: `${home}/.omp/agent`, OMP_PROFILE: 'default', PI_PROFILE: 'default',
       GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0',
       DIALOGUE_ACTIVITY_DIRECT: '1', NODE_OPTIONS: `--max-old-space-size=${Math.max(64,Math.floor(profile.memory * .6))}`, PWD: cwd };
+    if (kind === 'preview') {
+      // npm, the Node dev server and Go/esbuild share ONE kernel ceiling.
+      // An old-space cap alone leaves young generations and Go unaccounted for.
+      // These are GC/concurrency hints, not independent memory reservations.
+      baseEnv.NODE_OPTIONS = `--max-old-space-size=${Math.max(64,Math.floor(profile.memory / 3))} --max-semi-space-size=4`;
+      baseEnv.GOMEMLIMIT = `${Math.max(32,Math.floor(profile.memory / 6))}MiB`;
+      baseEnv.GOGC = '50';
+      baseEnv.GOMAXPROCS = '1';
+    }
     // Native OMP embeds Bun/JSC, not V8. Fixed low-memory GC hints complement
     // (never replace) the kernel ceiling, and cannot be supplied by a project.
     baseEnv.BUN_OPTIONS = '--smol';
