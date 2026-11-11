@@ -8,6 +8,10 @@ Primary design file:
 
 Figma remains the source of truth for intended UI where a design exists.
 
+## Shared sidebar stability (2026-11-12)
+
+Main navigation uses `review-shared.css` across Settings and gallery pages. Keep the same brand area/logo, nav padding/rows/icon masks and account/avatar/name/role/chevron geometry at desktop and compact widths; page-specific Settings styles apply only to its main content and section submenu. The sidebar correction already tested in the newer local build is carried as a focused hosted patch without its unrelated import-modal work. `test/sidebar-browser.test.js` checks actual cross-page navigation and Settings scrolling so future page overrides cannot reintroduce jumping.
+
 ## Settings V2 (2026-11-11)
 
 Implemented from [Settings V2, `272:5040`](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=272-5040), main frame `289:5803`, with the supplied connected/disconnected provider, button and avatar component states. Use the existing Inter Tight webfont. The desktop content column is504px at x288/y128 on the1440px frame, with40px group gaps and48px rows. Exact Figma exports are in `assets/settings-v2/`; retain their intrinsic SVG sizes. Provider icons are32px, the connected dot8px, model/profile arrows24px, navigation glyphs16/16.5px in32px slots. The model arrow uses the design's vertical flip. The default128px avatar uses the exported Aristotle image; actual user photos remain dynamic.

@@ -129,7 +129,7 @@
         if (user.avatarUrl) { const image=document.createElement('img');image.src=user.avatarUrl;image.alt='';avatar.append(image); }
         else avatar.textContent=user.name.split(/\s+/).slice(0,2).map(word=>word[0]).join('').toUpperCase();
         profile.querySelector('strong').textContent=user.name;
-        profile.querySelector('.profile-copy>span').textContent=document.body.classList.contains('settings-v2') ? (session.workspace.role==='owner'?'Owner':'Editor') : session.workspace.name;
+        profile.querySelector('.profile-copy>span').textContent=session.workspace.role==='owner'?'Owner':'Editor';
       }
       window.dispatchEvent(new CustomEvent('dialogue:profile',{detail:user}));
     };
