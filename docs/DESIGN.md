@@ -8,6 +8,14 @@ Primary design file:
 
 Figma remains the source of truth for intended UI where a design exists.
 
+## Settings V2 (2026-11-11)
+
+Implemented from [Settings V2, `272:5040`](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=272-5040), main frame `289:5803`, with the supplied connected/disconnected provider, button and avatar component states. Use the existing Inter Tight webfont. The desktop content column is504px at x288/y128 on the1440px frame, with40px group gaps and48px rows. Exact Figma exports are in `assets/settings-v2/`; retain their intrinsic SVG sizes. Provider icons are32px, the connected dot8px, model/profile arrows24px, navigation glyphs16/16.5px in32px slots. The model arrow uses the design's vertical flip. The default128px avatar uses the exported Aristotle image; actual user photos remain dynamic.
+
+Matt clarified: Username means display name (no unique handle); autosave profile/grid edits; email stays read-only; one LLM service per member at a time, green means connected. Preserve per-person provider/account boundaries. Avatar supports file picker and drag/drop; centre-crop locally to a256px PNG and persist through the normal account API. Sidebar, member cards and conversation use the current profile. Grid remains browser-local. The sidebar submenu scrolls to Account, Members, LLM connection and Grid and tracks the visible section. The workspace's existing Settings#agent-model link still focuses the model picker.
+
+Disconnected rows reveal Connect on hover or keyboard focus; touch shows it directly. Connected model/Disconnect hover and press colors follow Figma. Temporary matching controls retain passkey management, owner invitations/removal, working-copy release, extra providers/connection details and local development switching in small expandable menus. Sign out is in the sidebar profile menu. These supporting menus may be polished later; no existing authorization is bypassed.
+
 ## Project/build flow review (2026-11-10)
 
 Matt requested a rough working flow using existing Dialogue components before design polish. Projects has Create project / Import project; each project's gallery has one card per stable named build plus Create build / Import build. Branches/versions live inside the build. Both import entries use the same assessment/discussion, editable proposal, confirmation, progress/results and recovery surface. The current `projects.html`, `project.html`, `build.html` and `import.html` layouts are temporary functional UI, not a new visual source of truth. Retain existing fonts/icons/components and the designed conversation sidebar. Clearly label unavailable targets and distinguish configured previews from intended UI verification. Do not fabricate live-presence badges from worktree state. See the [approved handoff](ARCHITECTURE.md).

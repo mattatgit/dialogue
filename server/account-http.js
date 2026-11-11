@@ -45,6 +45,22 @@ function accountHttp({ accounts, readJson, sendJson, onRevoke = () => {}, onRele
       accounts.logout(identity); await onRevoke(identity.user.id, identity.session.hash);
       res.setHeader('Set-Cookie', accounts.cookie('', true)); sendJson(res, 200, { signedOut: true }); return true;
     }
+    const avatarRoute = /^\/api\/account\/avatars\/([\w-]+)\.png$/.exec(route);
+    if (avatarRoute && req.method === 'GET') {
+      const row=accounts.member(avatarRoute[1]) && accounts.db.prepare('SELECT png,hash FROM avatars WHERE user_id=?').get(avatarRoute[1]);
+      if (!row) throw new AccountError(404, 'This avatar is unavailable.');
+      res.writeHead(200, { 'Content-Type':'image/png', 'Content-Length':row.png.length, 'Cache-Control':'private, no-cache', 'X-Content-Type-Options':'nosniff', 'Cross-Origin-Resource-Policy':'same-origin', ETag:'"'+row.hash+'"' });
+      res.end(Buffer.from(row.png)); return true;
+    }
+    if (route === '/api/account/avatar' && req.method === 'PUT') {
+      const png=require('./avatar.js').avatarPNG((await readJson(req, 400000)).png);
+      const hash=require('node:crypto').createHash('sha256').update(png).digest('hex');
+      accounts.db.prepare('INSERT OR REPLACE INTO avatars VALUES (?,?,?)').run(identity.user.id,png,hash);
+      sendJson(res,200,{saved:true,avatarUrl:accounts.avatarUrl(identity.user.id)});return true;
+    }
+    if (route === '/api/account/avatar' && req.method === 'DELETE') {
+      accounts.db.prepare('DELETE FROM avatars WHERE user_id=?').run(identity.user.id);sendJson(res,200,{saved:true,avatarUrl:null});return true;
+    }
     if (route === '/api/account/profile' && req.method === 'PATCH') {
       const name = String((await body()).name || '').trim();
       if (!name || name.length > 80 || /[\u0000-\u001f]/.test(name)) throw new AccountError(400, 'Choose a name of 1–80 characters.');
@@ -52,7 +68,7 @@ function accountHttp({ accounts, readJson, sendJson, onRevoke = () => {}, onRele
       sendJson(res, 200, { saved: true }); return true;
     }
     if (route === '/api/account/members' && req.method === 'GET') {
-      sendJson(res, 200, { members: accounts.members() }); return true;
+      sendJson(res, 200, { members: accounts.members().map(user => accounts.publicUser(user)) }); return true;
     }
     if (route === '/api/account/members' && req.method === 'POST') {
       accounts.requireOwner(identity);

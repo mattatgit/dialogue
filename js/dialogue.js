@@ -59,12 +59,14 @@
         size.value = grid.size;
         opacity.value = grid.opacity;
         label.textContent = grid.color;
+        const swatch=gridForm.querySelector('[data-grid-swatch]');if(swatch)swatch.style.backgroundColor=grid.color;
       };
       gridForm.addEventListener('submit', (event) => event.preventDefault());
       gridForm.addEventListener('change', () => {
         if (!gridForm.reportValidity()) return;
         const grid = writeGrid({ ...readGrid(), color: color.value, size: Number(size.value), opacity: Number(opacity.value) });
         label.textContent = grid.color;
+        const swatch=gridForm.querySelector('[data-grid-swatch]');if(swatch)swatch.style.backgroundColor=grid.color;
         status.textContent = preferencesPersisted() ? 'Grid preferences saved in this browser.' : 'Browser storage is unavailable. Changes apply only in this session.';
       });
       window.addEventListener('storage', paint);

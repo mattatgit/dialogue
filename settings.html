@@ -1,26 +1,46 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dialogue — Settings</title><link rel="stylesheet" href="css/dialogue.css"><link rel="stylesheet" href="css/local-functional.css"><link rel="stylesheet" href="css/review-shared.css"><link rel="stylesheet" href="css/accounts.css"><script defer src="js/account.js"></script></head>
-<body class="updated-ui">
-  <div class="app-shell"><aside class="sidebar">
-    <div class="brand"><a href="projects.html" aria-label="Dialogue projects"><svg class="icon" aria-hidden="true"><use href="assets/review-icons.svg#mark"></use></svg></a></div>
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dialogue — Settings</title>
+  <link rel="stylesheet" href="css/dialogue.css"><link rel="stylesheet" href="css/local-functional.css"><link rel="stylesheet" href="css/review-shared.css"><link rel="stylesheet" href="css/accounts.css"><link rel="stylesheet" href="css/settings.css">
+  <script defer src="js/account.js"></script>
+</head>
+<body class="updated-ui settings-v2">
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><a href="projects.html" aria-label="Dialogue projects"><img src="assets/settings-v2/logo.svg" alt="" class="icon"></a></div>
     <nav class="side-nav" aria-label="Main navigation">
-      <a class="side-link" href="projects.html"><span class="side-nav-icon side-nav-projects" aria-hidden="true"></span> <span>Projects</span></a>
-      <a class="side-link" href="design-systems.html"><span class="side-nav-icon side-nav-design-systems" aria-hidden="true"></span> <span>Design systems</span></a>
-      <a class="side-link active" aria-current="page" href="settings.html"><span class="side-nav-icon side-nav-settings" aria-hidden="true"></span> <span>Settings</span></a>
+      <a class="side-link" href="projects.html"><span class="side-nav-icon side-nav-projects" aria-hidden="true"></span><span>Projects</span></a>
+      <a class="side-link" href="design-systems.html"><span class="side-nav-icon side-nav-design-systems" aria-hidden="true"></span><span>Design systems</span></a>
+      <a class="side-link active" aria-current="page" href="settings.html"><span class="side-nav-icon side-nav-settings" aria-hidden="true"></span><span>Settings</span></a>
     </nav>
-    <a class="profile-link" data-account-profile href="settings.html"><span class="profile-inner"><span class="avatar">D</span><span class="profile-copy"><strong>Local workspace</strong><span>This device</span></span></span></a>
+    <nav class="settings-subnav" aria-label="Settings sections"><a class="is-active" href="#account" aria-current="location">Account</a><a href="#members">Members</a><a href="#llm-connection">LLM connection</a><a href="#grid">Grid</a></nav>
+    <div class="settings-profile-menu" data-profile-menu hidden><a href="#account">Account settings</a><button type="button" data-sign-out>Sign out</button></div>
+    <button class="profile-link" data-account-profile data-profile-button type="button" aria-expanded="false" aria-label="Open account menu"><span class="profile-inner"><span class="avatar">D</span><span class="profile-copy"><strong>Member</strong><span>Editor</span></span><img class="profile-chevron" src="assets/settings-v2/profile-chevron.svg" alt=""></span></button>
   </aside>
-  <main class="main"><header class="page-head"><h1 class="page-title">Settings</h1></header><div class="page-surface">
-    <section class="account-settings" data-account-settings></section><p class="account-status" role="status" aria-live="polite" data-account-status></p><section class="settings-group agent-section"><h2>AI model</h2><div data-agent-settings></div></section>
-    <form class="settings-group grid-settings" data-grid-settings><h2>Grid</h2>
-      <label class="settings-row"><span>Grid colour</span><span class="grid-color-field"><input type="color" name="gridColor" value="#bae6ff" aria-label="Grid colour"><output data-grid-color-label>#BAE6FF</output></span></label>
-      <label class="settings-row"><span>Grid point size</span><span class="grid-size-field"><input name="gridSize" type="number" min="2" max="64" step="1" required value="8" aria-label="Grid point size"><span aria-hidden="true">pt</span></span></label>
-      <label class="settings-row"><span>Grid opacity</span><select name="gridOpacity" aria-label="Grid opacity"><option value="0">0%</option><option value="10">10%</option><option value="20">20%</option><option value="30">30%</option><option value="40">40%</option><option value="50" selected>50%</option><option value="60">60%</option><option value="70">70%</option><option value="80">80%</option><option value="90">90%</option><option value="100">100%</option></select></label>
-      <p class="settings-note" data-settings-status role="status">Grid preferences are saved in this browser.</p>
-    </form>
-    <section class="settings-group planned-settings"><h2>Notifications<span class="planned-label">Planned</span></h2><div class="settings-row"><span>Prototype updates</span><button class="placeholder-toggle" type="button" disabled aria-label="Prototype update notifications are planned" title="Not available yet"></button></div></section>
-    <section class="settings-group planned-settings"><h2>Security and access<span class="planned-label">Planned</span></h2><div class="settings-row"><span>Users and teams</span><button class="placeholder-toggle" type="button" disabled aria-label="Users and teams settings are planned" title="Not available yet"></button></div></section>
-  </div></main></div>
-  <script src="js/dialogue.js"></script><script src="js/agent-connect.js"></script>
+  <main class="main">
+    <header class="page-head"><h1 class="page-title">Settings</h1></header>
+    <div class="page-surface"><div class="settings-content">
+      <section class="settings-section" id="account" aria-labelledby="account-title">
+        <h2 id="account-title">Account and authentication</h2><span class="settings-save-state" data-profile-save role="status" aria-live="polite"></span>
+        <div class="settings-account-fields">
+          <div class="settings-identity-fields"><label for="account-name">Username</label><input id="account-name" name="name" maxlength="80" autocomplete="name" placeholder="Add a username" required aria-describedby="name-feedback"><span id="name-feedback" class="settings-field-feedback" role="status"></span><label for="account-email">Email address</label><input id="account-email" type="email" readonly autocomplete="email" aria-label="Email address, read only"></div>
+          <div class="settings-avatar-field"><label for="avatar-file">Avatar</label><button class="settings-avatar" type="button" data-avatar-upload aria-label="Upload an avatar"><img src="assets/settings-v2/avatar-default.png" alt="Your avatar" data-avatar-image><span>Drag and drop<br>an avatar here or<br>click to upload</span></button><input class="sr-only" id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp" tabindex="-1"><button class="settings-text-button avatar-remove" type="button" data-avatar-remove hidden>Remove avatar</button></div>
+        </div>
+        <div class="settings-row-card settings-passkey-row"><span data-passkey-count>No passkeys registered</span><div class="settings-row-actions"><details class="settings-manage" data-key-manager hidden><summary>Manage</summary><div class="settings-popover" data-passkey-list></div></details><button class="settings-text-button" type="button" data-add-passkey>Add a passkey</button></div></div>
+        <p class="settings-error" data-account-status role="status" aria-live="polite"></p>
+      </section>
+      <section class="settings-section" id="members" aria-labelledby="members-title"><h2 id="members-title">Workspace members</h2><details class="settings-manage section-manager"><summary>Manage</summary><div class="settings-popover"><div data-member-tools></div><div data-working-copies></div><div data-local-accounts></div></div></details><div class="settings-rows" data-settings-members></div></section>
+      <section class="settings-section" id="llm-connection" aria-labelledby="llm-title"><h2 id="llm-title">LLM connection</h2><details class="settings-manage section-manager" data-other-services><summary>More</summary><div class="settings-popover provider-popover"><div class="settings-rows" data-other-provider-list></div><details class="settings-connection-details"><summary>Connection details</summary><div><button class="settings-text-button" type="button" data-check-connection>Check connection</button><pre data-connection-detail></pre><p>Disconnecting stops Dialogue using this service. Existing credentials in your model runtime are kept.</p></div></details></div></details><div class="settings-rows" data-settings-providers></div><p class="settings-error" data-connection-status role="status" aria-live="polite"></p></section>
+      <section class="settings-section" id="grid" aria-labelledby="grid-title"><h2 id="grid-title">Grid</h2><form class="settings-rows" data-grid-settings>
+        <label class="settings-row-card"><span>Grid colour</span><span class="settings-grid-color"><output data-grid-color-label>#BAE6FF</output><span class="settings-grid-swatch" data-grid-swatch></span><input type="color" name="gridColor" value="#bae6ff" aria-label="Grid colour"></span></label>
+        <label class="settings-row-card"><span>Grid point size</span><input class="settings-number" name="gridSize" type="number" min="2" max="64" step="1" required value="8" aria-label="Grid point size"></label>
+        <label class="settings-row-card"><span>Grid opacity %</span><input class="settings-number" name="gridOpacity" type="number" min="0" max="100" step="1" required value="50" aria-label="Grid opacity percentage"></label>
+        <p class="settings-grid-feedback" data-settings-status role="status" aria-live="polite"></p>
+      </form></section>
+    </div></div>
+  </main>
+</div>
+<script src="js/dialogue.js"></script><script src="js/agent-connect.js"></script><script type="module" src="js/settings.js"></script>
 </body></html>

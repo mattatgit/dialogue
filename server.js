@@ -512,7 +512,7 @@ async function serveEvents(req, res, id) {
   const { project, repo, workspace } = await resolveWorkspace(id);
   const roots = await repo.watchRoots(workspace);
   const onRequest = (workspaceId, request) => {
-    if (workspaceId === id && !res.writableEnded && !res.destroyed) res.write(`event: request\ndata: ${JSON.stringify(request)}\n\n`);
+    if (workspaceId === id && !res.writableEnded && !res.destroyed) res.write(`event: request\ndata: ${JSON.stringify(publicRequest(request))}\n\n`);
   };
   requests.on('request', onRequest);
   res.on('close', () => requests.off('request', onRequest));
@@ -587,15 +587,24 @@ function sendEventStream(res) {
 
 // --- agent sign-in ------------------------------------------------------------------
 
+function publicRequest(record) {
+  const user=record.actor?.id && accounts.user(record.actor.id);
+  return user ? {...record,actor:{...record.actor,name:user.name,avatarUrl:accounts.member(user.id) ? accounts.avatarUrl(user.id) : null}} : record;
+}
+
 async function handleAgentApi(req, res, pathname) {
   const agentAuth = agentAgentsForRequest();
+  if (['PUT','POST','DELETE'].includes(req.method) && ['/api/agent/model','/api/agent/login','/api/agent/connection'].includes(pathname)) {
+    const userId=identityContext.getStore().user.id;
+    for (const id of [...requests.active.keys(),...requests.saving.keys()]) if (accounts.editor(id)?.id===userId || requests.list(id).some(r=>r.status==='running'&&r.actor?.id===userId)) throw new HttpError(409,'Finish or stop your current request before changing the LLM connection.');
+  }
   if (req.method === 'GET' && pathname === '/api/agent') {
-    sendJson(res, 200, { status: agentAuth.status(), model: agentAuth.model, defaultModel: agentAuth.defaultModel });
+    sendJson(res, 200, { status: agentAuth.status(), model: agentAuth.model, defaultModel: agentAuth.defaultModel, disconnected: agentAuth.disconnected });
     return true;
   }
   if (req.method === 'POST' && pathname === '/api/agent/check') {
     const status = await agentAuth.check({ force: true });
-    sendJson(res, 200, { status, model: agentAuth.model, defaultModel: agentAuth.defaultModel });
+    sendJson(res, 200, { status, model: agentAuth.model, defaultModel: agentAuth.defaultModel, disconnected: agentAuth.disconnected });
     return true;
   }
   if (req.method === 'GET' && pathname === '/api/agent/providers') {
@@ -609,8 +618,11 @@ async function handleAgentApi(req, res, pathname) {
   if (req.method === 'PUT' && pathname === '/api/agent/model') {
     const body = await readJsonBody(req);
     const status = await agentAuth.setModel(body.model);
-    sendJson(res, 200, { status, model: agentAuth.model, defaultModel: agentAuth.defaultModel });
+    sendJson(res, 200, { status, model: agentAuth.model, defaultModel: agentAuth.defaultModel, disconnected: agentAuth.disconnected });
     return true;
+  }
+  if (req.method === 'DELETE' && pathname === '/api/agent/connection') {
+    sendJson(res,200,{status:await agentAuth.disconnect(),model:agentAuth.model,disconnected:true});return true;
   }
   if (req.method === 'POST' && pathname === '/api/agent/login') {
     const body = await readJsonBody(req);
@@ -835,7 +847,7 @@ async function handleApi(req, res, url) {
     }));
     const attributedVersions = await repo.attributeVersions(versions, records);
     const attributedDraft = await repo.attributeDraft(draft, versions, records, workspace);
-    sendJson(res, 200, { draft: attributedDraft, edits: requests.edits(workspace.id), versions: attributedVersions, requests: records,
+    sendJson(res, 200, { draft: attributedDraft, edits: requests.edits(workspace.id), versions: attributedVersions, requests: records.map(publicRequest),
       terminalActivity: await readActivity(activityPath(ACTIVITY_ROOT, workspace.id)) });
     return true;
   }
@@ -898,7 +910,7 @@ async function handleApi(req, res, url) {
   }
   if (match && req.method === 'GET') {
     await resolveWorkspace(requestId);
-    sendJson(res, 200, { requests: requests.list(requestId) });
+    sendJson(res, 200, { requests: requests.list(requestId).map(publicRequest) });
     return true;
   }
   if (match && req.method === 'POST') {
