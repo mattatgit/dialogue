@@ -51,3 +51,12 @@
 @media(max-width:760px){.updated-ui .sidebar{width:72px}.updated-ui .side-nav{padding:0 8px}.updated-ui .side-link{width:56px;justify-content:center}.updated-ui .side-link>span:not(.side-nav-icon){display:none}.updated-ui .profile-link{width:72px;padding:8px 16px}.updated-ui .profile-copy,.updated-ui .chev{display:none}.updated-ui .main{margin-left:72px}.updated-ui .page-surface{padding:24px}.updated-ui .brand{padding-left:20px}.updated-ui .grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.updated-ui .project-card,.updated-ui .proto-tile{width:100%}.updated-ui .page-head{padding-right:16px}}
 @media(max-width:440px){.updated-ui .project-head-actions .pill{display:none}.updated-ui .page-title.breadcrumbs{font-size:13px}.updated-ui .page-surface{padding:20px}}
 @media(prefers-reduced-motion:reduce){.review-view *,.updated-ui *{transition:none!important;animation:none!important;scroll-behavior:auto!important}.review-view button:hover,.updated-ui button:hover,.updated-ui .pill:hover{transform:none!important}}
+
+/* Shared sidebar geometry, including the Settings account button. */
+.updated-ui .profile-link{height:88px;padding:16px 24px;border:0;background:transparent;text-align:left;justify-content:flex-start;border-radius:0;transform:none}
+.updated-ui .profile-inner{width:100%;min-width:0;padding:8px 0;gap:12px}
+.updated-ui .avatar{width:40px;height:40px;flex:none}
+.updated-ui .profile-copy{flex:1;min-width:0;width:auto}
+.updated-ui .profile-copy strong,.updated-ui .profile-copy>span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.updated-ui .profile-chevron{width:24px;height:24px;flex:none}
+@media(max-width:760px){.updated-ui .profile-link{width:72px;padding:16px;height:88px}.updated-ui .profile-inner{width:40px;padding:0}.updated-ui .profile-copy,.updated-ui .profile-chevron{display:none}}
