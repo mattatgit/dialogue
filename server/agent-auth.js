@@ -252,9 +252,13 @@ class AgentAuth extends EventEmitter {
     this.settingsPath = path.join(dataRoot, 'agent.json');
     this.defaultModel = configDefaultModel(this.configPath);
     this.model = this.defaultModel;
+    this.disconnected = false;
+    this.explicitConnection = false;
+    this.changes = Promise.resolve();
     try {
       const saved = JSON.parse(fs.readFileSync(this.settingsPath, 'utf8'));
-      if (isModelId(saved.model)) this.model = saved.model;
+      if (isModelId(saved.model)) { this.model = saved.model; this.explicitConnection = true; }
+      this.disconnected = saved.disconnected === true;
     } catch {
       // no saved selection: use the config default
     }
@@ -338,6 +342,7 @@ class AgentAuth extends EventEmitter {
   }
 
   async probe() {
+    if (this.disconnected) return { ready:false, reason:'not-connected', detail:'Connect an LLM service to continue.', model:this.model, checkedAt:new Date().toISOString() };
     let model = this.model;
     const checkedAt = () => new Date().toISOString();
     if (!model) return { ready: false, reason: 'unknown', detail: 'No model is configured.', model: null, checkedAt: checkedAt() };
@@ -345,6 +350,7 @@ class AgentAuth extends EventEmitter {
       const provider = model.split('/')[0];
       const presence = await this.runOmp(['token', provider], { cwd, timeoutMs: PROBE_TIMEOUT_MS });
       if (presence.code !== 0) {
+        if (this.explicitConnection) return { ready:false, reason:'not-connected', detail:`Connect ${provider} again, or choose another service.`, model, checkedAt:checkedAt() };
         // A sign-in may have happened in omp outside Dialogue. Only switch
         // when one other provider has available models; never guess between accounts.
         let available = [];
@@ -373,18 +379,38 @@ class AgentAuth extends EventEmitter {
   }
 
   async saveModel(model) {
-    if (model === this.model) return;
+    if (model === this.model && !this.disconnected && this.explicitConnection) return;
+    await this.writeSettings({model});
     this.model = model;
-    await fsp.mkdir(this.dataRoot, { recursive: true });
-    await fsp.writeFile(this.settingsPath, `${JSON.stringify({ model }, null, 2)}\n`);
+    this.disconnected = false;
+    this.explicitConnection = true;
     this.last = null;
     this.emit('model', model);
   }
 
+  async writeSettings(value) {
+    await fsp.mkdir(this.dataRoot,{recursive:true});
+    const file=this.settingsPath+'.'+require('node:crypto').randomUUID()+'.tmp';
+    try { await fsp.writeFile(file,JSON.stringify(value)+'\n',{mode:0o600,flag:'wx'});await fsp.rename(file,this.settingsPath); }
+    finally { await fsp.rm(file,{force:true}); }
+  }
+  change(task) {
+    const next=(this.changes || Promise.resolve()).catch(()=>{}).then(task);
+    this.changes=next; return next;
+  }
   async setModel(model) {
     if (!isModelId(model)) throw new AgentAuthError(400, 'Choose a model as provider/model-id.');
-    await this.saveModel(model);
-    return this.check({ force: true });
+    return this.change(async()=>{await this.inflight?.catch(()=>{});await this.saveModel(model);return this.check({force:true});});
+  }
+  async disconnect() {
+    this.cancelLogin();
+    return this.change(async()=>{
+      await this.inflight?.catch(()=>{});
+      await this.writeSettings({model:this.model,disconnected:true});
+      this.disconnected=true;
+      this.last={ready:false,reason:'not-connected',detail:'Connect an LLM service to continue.',model:this.model,checkedAt:new Date().toISOString()};
+      this.emit('model',this.model);return this.last;
+    });
   }
 
   // A short-lived rpc child for catalog questions. The bootstrap provider
@@ -505,16 +531,11 @@ class AgentAuth extends EventEmitter {
     // login worker before starting a fresh credential/model probe.
     rpc.close(); await rpc.exited; await rpc.child.workerFinished;
     if (session.ended) return;
-    if (provider !== session.providerId) {
-      const presence = await this.withEmptyCwd((cwd) => this.runOmp(['token', provider], { cwd, timeoutMs: RPC_CALL_TIMEOUT_MS }));
-      const picked = presence.code === 0 ? null : AgentAuth.pickModel(available, session.providerId);
-      if (picked) {
-        session.push('progress', { message: `Using ${picked}. You can change this in Settings.` });
-        session.push('done', { status: await this.setModel(picked) });
-        return;
-      }
-    }
-    session.push('done', { status: await this.check({ force: true }) });
+    const picked = provider === session.providerId ? this.model : AgentAuth.pickModel(available, session.providerId);
+    if (!picked) throw new AgentAuthError(409, 'Signed in, but this service has no available model. Choose another service or retry.');
+    // Selecting the newly connected service is deliberate. Other credentials
+    // may belong to a local OMP installation and are never deleted here.
+    session.push('done', { status: await this.setModel(picked) });
   }
 
   loginSession(id) {

@@ -144,6 +144,28 @@ test('native Bun GC settings are fixed per worker ceiling and cannot inherit pro
   }
 });
 
+test('preview Node and Go hints share the existing scope without inheriting project runtime options', async t => {
+  const f = await fixture(t);
+  for (const [memory,nodeHeap,goHeap] of [[256,85,42],[768,256,128]]) {
+    f.config.profiles.preview.memory=memory;
+    const plan=f.runtime.plan(process.execPath,[],{cwd:f.dir,env:{NODE_OPTIONS:'--require=/private',GOMEMLIMIT:'16GiB',GOGC:'off',GOMAXPROCS:'99'}},{kind:'preview'},'dialogue-preview-test.scope');
+    const env=new Map();for(let i=0;i<plan.args.length;i++)if(plan.args[i]==='--setenv')env.set(plan.args[i+1],plan.args[i+2]);
+    assert.equal(env.get('NODE_OPTIONS'),`--max-old-space-size=${nodeHeap} --max-semi-space-size=4`);
+    assert.equal(env.get('GOMEMLIMIT'),`${goHeap}MiB`);assert.equal(env.get('GOGC'),'50');assert.equal(env.get('GOMAXPROCS'),'1');
+    assert.ok(plan.args.includes(`--property=MemoryMax=${memory}M`));assert.ok(plan.args.includes('--property=CPUQuota=50%'));assert.ok(plan.args.includes('--property=MemorySwapMax=0'));
+    assert.ok(!plan.args.includes('--require=/private'));assert.ok(!plan.args.includes('16GiB'));
+    const {stdout}=await require('node:util').promisify(require('node:child_process').execFile)(process.execPath,['-e',"console.log(require('node:v8').getHeapStatistics().heap_size_limit)"],{env:{NODE_OPTIONS:env.get('NODE_OPTIONS')}});
+    assert.ok(Number(stdout)<=(nodeHeap+16)*1024*1024,'real Node accepts the old/young-generation bounds');
+  }
+  assert.equal(f.config.budget,2048);assert.equal(f.config.sliceMiB,2304);
+  for(const kind of ['agent','provider','install','browser','control']) {
+    const plan=f.runtime.plan(process.execPath,[],{cwd:f.dir,env:{GOMEMLIMIT:'16GiB',GOGC:'off',GOMAXPROCS:'99'}},{kind,home:f.home},'dialogue-other-test.scope');
+    const env=new Map();for(let i=0;i<plan.args.length;i++)if(plan.args[i]==='--setenv')env.set(plan.args[i+1],plan.args[i+2]);
+    assert.equal(env.get('NODE_OPTIONS'),`--max-old-space-size=${Math.max(64,Math.floor(f.config.profiles[kind].memory*.6))}`);
+    for(const key of ['GOMEMLIMIT','GOGC','GOMAXPROCS'])assert.equal(env.has(key),false,'preview hints do not change other worker classes');
+  }
+});
+
 test('worker failures distinguish signals, timeouts and exit codes without losing cleanup', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dialogue-worker-errors-'));
   const runtime = new Workers({ dataRoot: dir, appRoot: dir, config: workerConfig({ DIALOGUE_MODE: 'test' }) });

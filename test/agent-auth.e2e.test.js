@@ -253,6 +253,16 @@ test('a designer signs in to a model provider from the web UI and the agent beco
   const rejected = await api(base, 'POST', '/api/agent/check');
   assert.equal(rejected.body.status.ready, false);
   assert.equal(rejected.body.status.reason, 'rejected', rejected.body.status.detail);
+
+  // Disconnect is a Dialogue selection, not deletion of the native profile.
+  provider.state.mode = 'ok';
+  assert.equal((await api(base, 'DELETE', '/api/agent/connection')).status, 200);
+  const callsBefore = provider.state.requests.length;
+  assert.equal((await api(base, 'POST', '/api/agent/check')).body.status.ready, false);
+  assert.equal(provider.state.requests.length, callsBefore, 'a disconnected Dialogue must not probe or use the provider');
+  assert.equal((await api(base, 'GET', '/api/agent/providers')).body.providers.find(p => p.id === 'fake-cloud').authenticated, true);
+  const reconnect = await api(base, 'PUT', '/api/agent/model', { model: 'fake-cloud/fake-model' });
+  assert.equal(reconnect.body.status.ready, true, JSON.stringify(reconnect.body));
 });
 
 // No replacement OAuth implementation: drive OMP 18.2.10's actual built-in

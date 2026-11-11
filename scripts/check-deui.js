@@ -36,7 +36,13 @@ async function main(){
   const setup=new PreviewSetup({projects,repoFor:async()=>repo,agent,previews:renderer,runtime,setupRoot:path.join(root,'setup'),maxAttempts:1,screenshot:async(target,files)=>{await renderer.capture(`http://${target.host}:${target.port}/`,files)}});
   await setup.runSetup('check-deui');assert.equal(project.previewSetup.status,'ready',project.previewSetup.error);assert.equal(project.previewSetup.uiVerified,false);mark('native setup agent wrote recipe; managed install/preview/screenshot completed, not yet UI verified');
   runner=new Runner({dir:workspace.dir,recipe,stampDir:path.join(root,'stamps','live'),runtime,attribution:{project:'check-deui',workspace:workspace.id,phase:'steady-preview'}});await runner.start();
-  const ui=async(label='WATER LEVEL',shot='ui')=>{const dir=await runtime.directory('browser');browser=await previewBrowser(runtime,dir,{project:'check-deui',phase:shot});await browser.navigate(`http://${runner.target.host}:${runner.target.port}/`);await until(()=>browser.evaluate(`document.body?.innerText.includes(${JSON.stringify(label)})`));await browser.evaluate(`(()=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Show');if(!button)throw Error('Show charts control missing');button.click()})()`);await until(()=>browser.evaluate('document.body?.innerText.includes("PRESSURE") && !document.body?.innerText.includes("WATER LEVEL")'));await browser.screenshot(path.join(root,shot+'.png'));await browser.close();browser=null;};
+  const ui=async(label='WATER LEVEL',shot='ui',viewed=runner)=>{
+   const dir=await runtime.directory('browser');browser=await previewBrowser(runtime,dir,{project:'check-deui',phase:shot});
+   const evaluate=expression=>{if(viewed.state==='crashed')throw viewed.error || Error('The managed preview crashed.');return browser.evaluate(expression);};
+   await browser.navigate(`http://${viewed.target.host}:${viewed.target.port}/`);await until(()=>evaluate(`document.body?.innerText.includes(${JSON.stringify(label)})`));
+   await evaluate(`(()=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Show');if(!button)throw Error('Show charts control missing');button.click()})()`);
+   await until(()=>evaluate('document.body?.innerText.includes("PRESSURE") && !document.body?.innerText.includes("WATER LEVEL")'));await browser.screenshot(path.join(root,shot+'.png'));await browser.close();browser=null;
+  };
   await ui();mark('actual Deui UI rendered; Show opened pressure/flow charts');
   const options={root:path.join(root,'requests'),workspacesRoot:path.join(root,'workspaces'),agent,runtime,configPath:path.join(APP,'omp/config.yml')};
   const wire=()=>{manager.previewStatus=()=>({state:runner.state});manager.previewPause=()=>runner.stop();manager.previewOperation=async(_workspace,operation)=>{assert.equal([...runtime.children].filter(c=>c.workerKind==='agent').length,0,'runner operation must not hold an agent reservation');if(operation!=='stop')await runner.start();return {state:runner.state};};manager.previewReleased=async()=>{if(runner.state!=='ready')await runner.start();};};
@@ -47,8 +53,17 @@ async function main(){
   const version=await manager.saveVersion(workspace,repo);assert.ok(version);assert.match(await git(origin,['tag','--list']),/dialogue\/main\/V1/);mark('actual Save a version published numbered tag only to disposable local origin');
   await runner.stop();await runner.start();await ui('ACCEPTANCE WATER LEVEL','restarted-ui');mark('managed preview restart retained edited UI');
   await git(origin,['branch','acceptance-other','main']);await repo.fetch();const other=await repo.ensureWorkspace('acceptance-other');
-  secondRunner=new Runner({dir:other.dir,recipe,stampDir:path.join(root,'stamps','other'),runtime,attribution:{project:'check-deui',workspace:other.id,phase:'second-viewer'}});await secondRunner.start();
-  const originalRunner=runner;runner=secondRunner;await ui('ACCEPTANCE WATER LEVEL','second-member-ui');runner=originalRunner;mark('two independent managed Deui previews remained running after actual UI interaction');
+  secondRunner=new Runner({dir:other.dir,recipe,stampDir:path.join(root,'stamps','other'),runtime,attribution:{project:'check-deui',workspace:other.id,phase:'second-viewer'}});
+  report.coldSecondPreview=[];
+  for(let attempt=1;attempt<=3;attempt++){
+   if(attempt>1){await secondRunner.stop();await fs.rm(path.join(other.dir,'node_modules','.vite'),{recursive:true,force:true});}
+   secondRunner.attribution.phase=attempt===1?'second-viewer':`second-viewer-cold-${attempt}`;
+   const check={attempt,startedAt:new Date().toISOString(),cache:'fresh install or cleared Vite optimizer cache; OS file cache retained'};report.coldSecondPreview.push(check);
+   await secondRunner.start();check.worker=secondRunner.child?.workerRecord?.id;
+   await ui('ACCEPTANCE WATER LEVEL',attempt===1?'second-member-ui':`second-member-ui-cold-${attempt}`,secondRunner);
+   assert.equal(runner.state,'ready','the other member preview stays available during repeated cold loads');check.passed=true;check.finishedAt=new Date().toISOString();
+  }
+  mark('two independent managed Deui previews remained running after actual UI interaction');
   phase='overlap';step=0;home=await member('one');
   let first=await manager.start(workspace,repo,{feedback:'Discuss only: preserve cobalt while the other member views Deui.',intent:'discuss'},{id:'one',name:'Member one'});
   await until(()=>Promise.resolve([...runtime.children].some(c=>c.workerKind==='agent' && c.workerRecord?.attribution.request===first.id)),30000);

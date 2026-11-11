@@ -337,6 +337,7 @@
     });
 
     return {
+      connect: startLogin,
       refresh: refreshStatus,
       check: async () => {
         showStatus(null);
@@ -357,17 +358,21 @@
   // --- modal ------------------------------------------------------------------------
   let layer = null;
   let modalFlow = null;
+  let afterClose = null;
+  let closeTimer;
 
   const close = () => {
     if (!layer || layer.hidden) return;
     modalFlow?.destroy();
     modalFlow = null;
+    const notify=afterClose;afterClose=null;notify?.();
     layer.classList.remove('is-open');
-    window.setTimeout(() => { layer.hidden = true; }, 160);
+    closeTimer=window.setTimeout(() => { layer.hidden = true; }, 160);
   };
 
   // options: { intro, onReady }
   const show = (options = {}) => {
+    clearTimeout(closeTimer);
     if (!layer) {
       layer = el('div', 'share-modal-layer setup-modal-layer');
       layer.hidden = true;
@@ -392,6 +397,9 @@
         options.onReady?.(state);
       }
     });
+    afterClose=options.onClose || null;
+    layer.classList.toggle('agent-direct-provider',Boolean(options.provider));
+    if(options.provider) modalFlow.connect(options.provider);
     layer.hidden = false;
     requestAnimationFrame(() => layer.classList.add('is-open'));
   };

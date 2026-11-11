@@ -55,6 +55,7 @@ class Accounts {
       CREATE TABLE IF NOT EXISTS challenges (id TEXT PRIMARY KEY, kind TEXT NOT NULL, user_id TEXT REFERENCES users(id), session_hash TEXT, value TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS passkeys (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), public_key BLOB NOT NULL, counter INTEGER NOT NULL, transports TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, starts_at INTEGER NOT NULL, count INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS avatars (user_id TEXT PRIMARY KEY REFERENCES users(id), png BLOB NOT NULL, hash TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS editors (workspace_id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id));`);
     this.db.prepare('INSERT OR IGNORE INTO metadata VALUES (?,?)').run('pepper', token());
     this.pepper = this.db.prepare('SELECT value FROM metadata WHERE key=?').get('pepper').value;
@@ -82,6 +83,8 @@ class Accounts {
     this.db.prepare('DELETE FROM limits WHERE starts_at < ?').run(now - DAY);
   }
   user(id) { return this.db.prepare('SELECT id,email,name,verified FROM users WHERE id=?').get(id); }
+  avatarUrl(id) { const row=this.db.prepare('SELECT hash FROM avatars WHERE user_id=?').get(id); return row ? `/api/account/avatars/${id}.png?v=${row.hash}` : null; }
+  publicUser(user) { return user && { ...user, avatarUrl:this.avatarUrl(user.id) }; }
   member(id) {
     return this.db.prepare('SELECT u.id,u.email,u.name,u.verified,m.role,m.workspace_id,w.name AS workspace_name,m.expires_at AS invitation_expires FROM users u JOIN members m ON m.user_id=u.id JOIN workspaces w ON w.id=m.workspace_id WHERE u.id=?').get(id);
   }
@@ -136,7 +139,7 @@ class Accounts {
     const session = this.db.prepare('SELECT * FROM sessions WHERE hash=? AND expires_at>?').get(hash, this.clock());
     const member = session && this.member(session.user_id);
     if (!member?.verified) return null;
-    return { user: { id: member.id, email: member.email, name: member.name }, workspace: { id: member.workspace_id, name: member.workspace_name, role: member.role }, session };
+    return { user: this.publicUser({ id: member.id, email: member.email, name: member.name }), workspace: { id: member.workspace_id, name: member.workspace_name, role: member.role }, session };
   }
   requireIdentity(req) {
     const identity = this.identity(req);

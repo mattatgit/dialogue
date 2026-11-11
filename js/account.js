@@ -110,7 +110,8 @@
       host.append(title, choices);
     }
   };
-  api('/api/auth/session').then(async session => {
+  window.DialogueAccount = { api, passkey };
+  window.DialogueAccountReady = api('/api/auth/session').then(async session => {
     if (signInPage) {
       if (session.user && new URLSearchParams(location.search).get('reauth') !== '1') { location.replace(next()); return; }
       if (session.user) document.querySelector('#signin-email').value = session.user.email;
@@ -121,11 +122,20 @@
       return;
     }
     if (!session.user) { location.replace(`/?next=${encodeURIComponent(location.pathname + location.search)}`); return; }
-    for (const profile of document.querySelectorAll('[data-account-profile]')) {
-      profile.querySelector('.avatar').textContent = session.user.name.split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase();
-      profile.querySelector('strong').textContent = session.user.name;
-      profile.querySelector('.profile-copy>span').textContent = session.workspace.name;
-    }
+    const updateProfile = user => {
+      session.user=user;
+      for (const profile of document.querySelectorAll('[data-account-profile]')) {
+        const avatar=profile.querySelector('.avatar');avatar.replaceChildren();
+        if (user.avatarUrl) { const image=document.createElement('img');image.src=user.avatarUrl;image.alt='';avatar.append(image); }
+        else avatar.textContent=user.name.split(/\s+/).slice(0,2).map(word=>word[0]).join('').toUpperCase();
+        profile.querySelector('strong').textContent=user.name;
+        profile.querySelector('.profile-copy>span').textContent=document.body.classList.contains('settings-v2') ? (session.workspace.role==='owner'?'Owner':'Editor') : session.workspace.name;
+      }
+      window.dispatchEvent(new CustomEvent('dialogue:profile',{detail:user}));
+    };
+    window.DialogueAccount.updateProfile=updateProfile;
+    updateProfile(session.user);
     await renderSettings(session);
-  }).catch(error => tell(error.message, true));
+    return session;
+  }).catch(error => { tell(error.message,true);return null; });
 })();
