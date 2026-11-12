@@ -9,9 +9,9 @@ test('rough UI supports empty project, prompt/file build, and the shared Import 
  const click=selector=>browser.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
  const submit=selector=>browser.evaluate(`document.querySelector(${JSON.stringify(selector)}).requestSubmit()`);
  const wait=expression=>until(()=>browser.evaluate(expression),15000);
- await browser.navigate(f.origin+'/projects.html');await wait(`document.readyState==='complete' && document.querySelector('[data-project-create]') && document.body.innerText.includes('Create project')`);
+ await browser.navigate(f.origin+'/projects.html');await wait(`document.readyState==='complete' && document.querySelector('[data-project-create]') && document.querySelector('[data-empty-kind=projects]')?.hidden===false`);
  await click('a[href="#new-project"]');await fill('[data-project-create] [name="name"]','Flow review');await submit('[data-project-create]');
- await wait(`document.querySelector('[data-build-empty]')?.hidden===false`);assert.match(await browser.evaluate('document.body.innerText'),/No builds yet/);
+ await wait(`document.querySelector('[data-build-empty]')?.hidden===false`);assert.match(await browser.evaluate('document.body.innerText'),/This project doesn’t have any builds yet/);
  await click('a[href="#new-project"]');await fill('[data-build-create] [name="name"]','First Web');await fill('[data-build-create] [name="prompt"]','Create a disposable fixture page');await submit('[data-build-create]');
  await wait(`document.querySelector('[data-build-state]')?.textContent.includes('Preview configured')`);
  assert.match(await browser.evaluate('document.body.innerText'),/Local source · no remote repository/);

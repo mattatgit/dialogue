@@ -8,6 +8,12 @@ Primary design file:
 
 Figma remains the source of truth for intended UI where a design exists.
 
+## Gallery empty states (2026-11-12)
+
+Implemented from [Empty states, `290:5134`](https://www.figma.com/design/YXlBjYhWIS1sfu8cffH5un/Dialogue?node-id=290-5134): Projects `290:5189`, Builds `290:5144`, Design systems `290:5165`. The three illustrations are original Figma PNG image fills, not SVGs. Their unchanged 1254×1254 exports live in `assets/empty-states/`; do not redraw or replace them. Projects and Design systems display at176px; Builds at180px. Captions use Inter Tight Medium16px/22px, `#9EA39E`, with the designed desktop centering/spacing and compact-width wrapping. Keep the current shared navigation and real member identity.
+
+`js/empty-states.mjs` enhances the existing galleries without changing their catalog/loading controllers: only confirmed empty results reveal the illustration; loading/errors never claim an empty project. Populated galleries retain their normal headings/actions. Empty Projects and Design systems retain accessible, visually hidden headings; the empty build gallery keeps the project breadcrumb. The72×32px header Create button and artwork/caption use the existing create form. Import remains available from that form and from the build caption, including the current modal flow and project context. Design-system import remains explicitly unavailable/disabled; this visual update does not implement it. Browser acceptance uses disposable accounts/projects and checks original asset hashes, rendered geometry, Create/Import behavior, populated-state restoration, error handling and compact layout.
+
 ## Shared sidebar stability (2026-11-12)
 
 Main navigation uses `review-shared.css` across Settings and gallery pages. Keep the same brand area/logo, nav padding/rows/icon masks and account/avatar/name/role/chevron geometry at desktop and compact widths; page-specific Settings styles apply only to its main content and section submenu. The sidebar correction already tested in the newer local build is carried as a focused hosted patch without its unrelated import-modal work. `test/sidebar-browser.test.js` checks actual cross-page navigation and Settings scrolling so future page overrides cannot reintroduce jumping.
